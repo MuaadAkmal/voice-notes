@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import Database from 'better-sqlite3';
 import { NoteStore } from '../../src/main/store/note-store';
+import { MIGRATIONS } from '../../src/main/store/migrations';
 
 const T0 = new Date(2026, 9, 24, 14, 32).getTime();
 let root: string;
@@ -107,4 +109,58 @@ it('reopen keeps data and does not re-run migrations', async () => {
   store.close();
   store = NoteStore.open(root, () => clock);
   expect(store.list()).toHaveLength(1);
+});
+
+it('new notes start in Inbox', async () => {
+  expect((await store.create(audio())).folderId).toBeNull();
+});
+
+it('moveNotes into a folder and back to Inbox', async () => {
+  const n = await store.create(audio());
+  const f = store.folders.create('Spanish', null);
+  clock += 10;
+  store.moveNotes([n.id], f.id);
+  expect(store.get(n.id)).toMatchObject({ folderId: f.id, updatedAt: T0 + 10 });
+  store.moveNotes([n.id], null);
+  expect(store.get(n.id)?.folderId).toBeNull();
+});
+
+it('moveNotes to an unknown folder throws', async () => {
+  const n = await store.create(audio());
+  expect(() => store.moveNotes([n.id], randomUUID())).toThrow('Folder not found');
+});
+
+it('moveNotes ignores unknown note ids', async () => {
+  const n = await store.create(audio());
+  const f = store.folders.create('Spanish', null);
+  expect(() => store.moveNotes([randomUUID(), n.id], f.id)).not.toThrow();
+  expect(store.get(n.id)?.folderId).toBe(f.id);
+});
+
+it('deleteMany removes files and rows', async () => {
+  const a = await store.create(audio());
+  const b = await store.create(audio());
+  const keep = await store.create(audio());
+  await store.deleteMany([a.id, b.id]);
+  expect(store.list().map((n) => n.id)).toEqual([keep.id]);
+  expect(fs.existsSync(store.absolutePath(a))).toBe(false);
+  expect(fs.existsSync(store.absolutePath(b))).toBe(false);
+});
+
+it('migrates a v1 database', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-v1-'));
+  fs.mkdirSync(path.join(dir, 'recordings'));
+  const db = new Database(path.join(dir, 'voice-notes.sqlite'));
+  db.exec(MIGRATIONS[0]);
+  db.pragma('user_version = 1');
+  const id = randomUUID();
+  fs.writeFileSync(path.join(dir, 'recordings', `${id}.webm`), 'x');
+  db.prepare(
+    `INSERT INTO notes VALUES (?, 'old', ?, 1000, 1, 'audio/webm;codecs=opus', 'ok', 1, 1, NULL)`,
+  ).run(id, `recordings/${id}.webm`);
+  db.close();
+  const upgraded = NoteStore.open(dir);
+  expect(upgraded.list()).toEqual([expect.objectContaining({ id, title: 'old', folderId: null })]);
+  expect(upgraded.folders.list()).toEqual([]);
+  upgraded.close();
 });

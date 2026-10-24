@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import type { Note } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
@@ -93,6 +93,16 @@ export class NoteStore {
     if (!note) return;
     await fs.promises.rm(this.absolutePath(note), { force: true });
     this.db.delete(notes).where(eq(notes.id, id)).run();
+  }
+
+  /** folderId null = Inbox. Unknown note ids are ignored. */
+  moveNotes(ids: string[], folderId: string | null): void {
+    if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
+    this.db.update(notes).set({ folderId, updatedAt: this.now() }).where(inArray(notes.id, ids)).run();
+  }
+
+  async deleteMany(ids: string[]): Promise<void> {
+    for (const id of ids) await this.delete(id);
   }
 
   async reconcile(): Promise<{ missing: number; adopted: number; tmpRemoved: number }> {

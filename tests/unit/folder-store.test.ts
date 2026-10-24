@@ -9,11 +9,7 @@ import type { FolderStore } from '../../src/main/store/folder-store';
 let store: NoteStore;
 let folders: FolderStore;
 const audio = () => ({ bytes: Buffer.from('abc'), durationMs: 1500, mimeType: 'audio/webm;codecs=opus' });
-// Placeholder until Task 2 adds NoteStore.moveNotes.
-const place = (noteId: string, folderId: string | null) =>
-  (store as unknown as { sqlite: { prepare(s: string): { run(...a: unknown[]): void } } }).sqlite
-    .prepare('UPDATE notes SET folder_id = ? WHERE id = ?')
-    .run(folderId, noteId);
+const place = (noteId: string, folderId: string | null) => store.moveNotes([noteId], folderId);
 const names = () => folders.list().map((f) => f.name).sort();
 
 beforeEach(() => {
