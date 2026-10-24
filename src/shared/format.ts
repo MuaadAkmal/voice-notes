@@ -39,3 +39,9 @@ export function groupByDay(notes: Note[], now: number): { label: string; notes: 
   }
   return groups;
 }
+
+/** Electron wraps rejected invokes as "Error invoking remote method '<ch>': Error: <msg>"; keep just <msg>. */
+export function cleanIpcError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.replace(/^Error invoking remote method '[^']*': /, '').replace(/^Error: /, '');
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayGroupLabel, defaultTitle, formatDuration } from '../../src/shared/format';
+import { cleanIpcError, dayGroupLabel, defaultTitle, formatDuration } from '../../src/shared/format';
 
 describe('formatDuration', () => {
   it('shows a dash for unknown duration', () => expect(formatDuration(0)).toBe('—'));
@@ -19,4 +19,14 @@ describe('dayGroupLabel', () => {
   it('labels yesterday', () => expect(dayGroupLabel(new Date(2026, 9, 23, 23).getTime(), now)).toBe('Yesterday'));
   it('labels older dates', () =>
     expect(dayGroupLabel(new Date(2026, 9, 20).getTime(), now)).toBe('Tue, 20 Oct 2026'));
+});
+
+describe('cleanIpcError', () => {
+  it('strips the electron invoke prefix', () => {
+    const e = new Error(
+      "Error invoking remote method 'folders:create': Error: A folder named \"x\" already exists here",
+    );
+    expect(cleanIpcError(e)).toBe('A folder named "x" already exists here');
+  });
+  it('handles plain values', () => expect(cleanIpcError('boom')).toBe('boom'));
 });
