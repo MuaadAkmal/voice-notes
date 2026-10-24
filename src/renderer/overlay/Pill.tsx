@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayState, RecordingSource } from '../../shared/channels';
-import { levelFromRms, rmsOf } from '../../shared/audio-level';
+import { isSilent, levelFromRms, rmsOf } from '../../shared/audio-level';
 
-const BARS = 40;
-const BAR_W = 3;
+const BARS = 28;
+const BAR_W = 2.5;
 const GAP = 1.5;
 const WAVE_W = BARS * (BAR_W + GAP) - GAP;
-const WAVE_H = 24;
+const WAVE_H = 20;
 const SAMPLE_MS = 50;
+const SILENT_AFTER_MS = 3000;
 const SOURCE_COLOR: Record<RecordingSource, string> = { mic: '#f87171', system: '#38bdf8', both: '#a78bfa' };
 
 /** Scrolling voice-memo waveform: one loudness sample every 50 ms, newest bar on the right. */
-function Waveform({ analyser, source }: { analyser: AnalyserNode | null; source: RecordingSource }) {
+type WaveformProps = { analyser: AnalyserNode | null; source: RecordingSource; onSilentChange: (silent: boolean) => void };
+
+function Waveform({ analyser, source, onSilentChange }: WaveformProps) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -25,11 +28,22 @@ function Waveform({ analyser, source }: { analyser: AnalyserNode | null; source:
 
     const history = new Array<number>(BARS).fill(0);
     const samples = analyser ? new Float32Array(analyser.fftSize) : null;
+    let quietSince = performance.now();
+    let reportedSilent = false;
     const sample = setInterval(() => {
       if (!analyser || !samples) return;
       analyser.getFloatTimeDomainData(samples);
+      const rms = rmsOf(samples);
       history.shift();
-      history.push(levelFromRms(rmsOf(samples)));
+      history.push(levelFromRms(rms));
+      // "No sound" once the input has stayed below the silence threshold for SILENT_AFTER_MS.
+      const now = performance.now();
+      if (!isSilent(rms)) quietSince = now;
+      const silent = now - quietSince >= SILENT_AFTER_MS;
+      if (silent !== reportedSilent) {
+        reportedSilent = silent;
+        onSilentChange(silent);
+      }
     }, SAMPLE_MS);
 
     let raf = 0;
@@ -50,7 +64,7 @@ function Waveform({ analyser, source }: { analyser: AnalyserNode | null; source:
       clearInterval(sample);
       cancelAnimationFrame(raf);
     };
-  }, [analyser, source]);
+  }, [analyser, source, onSilentChange]);
 
   return <canvas ref={canvas} style={{ width: WAVE_W, height: WAVE_H }} aria-hidden />;
 }
@@ -71,6 +85,16 @@ function Timer({ startedAt }: { startedAt: number }) {
 const MIC_PATH = 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm-7 9a7 7 0 0 0 14 0M12 19v2';
 const SPEAKER_PATH = 'M4 9v6h4l5 4V5L8 9H4Zm12.5-.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12';
 
+/** Hands-free (latched) recording: a small lock instead of a text label, to keep the pill narrow. */
+function HandsFreeGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-white/50" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-label="Hands-free">
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  );
+}
+
 /** Which input this clip captures: mic, system audio, or both. */
 function SourceGlyph({ source }: { source: RecordingSource }) {
   const paths = source === 'mic' ? [MIC_PATH] : source === 'system' ? [SPEAKER_PATH] : [MIC_PATH, SPEAKER_PATH];
@@ -87,6 +111,12 @@ function SourceGlyph({ source }: { source: RecordingSource }) {
 
 export function Pill({ state, analyser }: { state: OverlayState; analyser: AnalyserNode | null }) {
   const api = window.overlayApi;
+  const [silent, setSilent] = useState(false);
+  const recording = state.kind === 'recording';
+  // Each recording starts out assumed audible.
+  useEffect(() => {
+    if (!recording) setSilent(false);
+  }, [recording]);
   const hover = {
     onMouseEnter: () => api.setPointerOver(true),
     onMouseLeave: () => api.setPointerOver(false),
@@ -107,14 +137,23 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
       );
     case 'recording':
       return (
-        <div {...hover} onClick={() => api.click()} className={`${shell} h-10 cursor-pointer gap-3 px-4`}>
+        <div {...hover} onClick={() => api.click()} className={`${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
           <SourceGlyph source={state.source} />
-          <Waveform analyser={analyser} source={state.source} />
+          {/* "No sound" takes the waveform's slot so the pill never grows. */}
+          <div className="relative" style={{ width: WAVE_W, height: WAVE_H }}>
+            <Waveform analyser={analyser} source={state.source} onSilentChange={setSilent} />
+            {silent && (
+              <span
+                title="No sound — check mic/source"
+                className="absolute inset-0 flex items-center justify-center rounded bg-neutral-900/90 text-[11px] font-medium text-amber-400"
+              >
+                No sound
+              </span>
+            )}
+          </div>
           <Timer startedAt={state.startedAt} />
-          <span className="whitespace-nowrap text-[10px] uppercase tracking-wide text-white/50">
-            {state.mode === 'hold' ? 'Hold' : 'Hands-free'}
-          </span>
+          {state.mode === 'handsfree' && <HandsFreeGlyph />}
         </div>
       );
     case 'saved':

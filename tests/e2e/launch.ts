@@ -20,10 +20,16 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-export async function launch(): Promise<TestApp> {
+/** fakeAudioFile: feed this WAV to Chromium's fake mic instead of its default beeps. */
+export async function launch(opts: { fakeAudioFile?: string } = {}): Promise<TestApp> {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
   const app = await electron.launch({
-    args: ['.', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    args: [
+      '.',
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream',
+      ...(opts.fakeAudioFile ? [`--use-file-for-fake-audio-capture=${path.resolve(opts.fakeAudioFile)}`] : []),
+    ],
     // Playwright emulates prefers-color-scheme: light by default; let nativeTheme decide, as in the real app.
     colorScheme: null,
     env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData },

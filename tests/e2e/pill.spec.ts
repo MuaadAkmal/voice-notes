@@ -17,6 +17,17 @@ test.afterEach(async () => {
   await t.close();
 });
 
+test('shows "No sound" when the input is silent, and still saves', async () => {
+  t = await launch({ fakeAudioFile: 'tests/e2e/fixtures/silence.wav' });
+  const pill = await overlay(t);
+  await t.hooks((h) => h.gesture.toggle());
+  await expect(pill.getByText('No sound', { exact: true })).toBeVisible({ timeout: 6000 });
+  await expect(pill.getByTitle('No sound — check mic/source')).toBeVisible();
+  await pill.screenshot({ path: '.superpowers/shots/pill-nosound.png' });
+  await t.hooks((h) => h.gesture.toggle());
+  await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
+});
+
 test('waveform is drawn in the source colour while recording', async () => {
   t = await launch();
   const pill = await overlay(t);
