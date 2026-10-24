@@ -47,6 +47,16 @@ test('records a note via gesture and manages it from the dashboard', async () =>
   expect(fs.existsSync(file)).toBe(false);
 });
 
+test('records system audio when the source is set to system', async () => {
+  await dashboard.evaluate(() => window.dashboardApi.setSettings({ recordingSource: 'system' }));
+  await t.record(1500);
+  await expect.poll(() => hooks((h) => h.store.list().length)).toBe(1);
+  const note = (await hooks((h) => h.store.list()))[0];
+  expect(note.source).toBe('system');
+  expect(fs.statSync(await hooks((h) => h.store.absolutePath(h.store.list()[0]))).size).toBeGreaterThan(0);
+  await expect(dashboard.getByLabel('Includes system audio')).toBeVisible();
+});
+
 test('cancel does not create a note', async () => {
   await hooks((h) => h.gesture.toggle());
   await dashboard.waitForTimeout(500);

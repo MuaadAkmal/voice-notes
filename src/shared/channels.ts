@@ -40,7 +40,7 @@ export type RecordingMode = 'hold' | 'handsfree';
 
 export type OverlayState =
   | { kind: 'idle'; visible: boolean }
-  | { kind: 'recording'; mode: RecordingMode; startedAt: number }
+  | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource }
   | { kind: 'saved'; micOnly?: true } // micOnly: 'both' was requested but system audio failed
   | { kind: 'error'; message: string; retry: boolean };
 

@@ -74,7 +74,7 @@ afterEach(() => vi.useRealTimers());
 it('start → overlay.start with device id and recording state (mode hold)', () => {
   c.handleGesture('start');
   expect(calls).toEqual(['start:mic-1:mic']);
-  expect(lastState()).toEqual({ kind: 'recording', mode: 'hold', startedAt: 1_000_000 });
+  expect(lastState()).toEqual({ kind: 'recording', mode: 'hold', startedAt: 1_000_000, source: 'mic' });
   expect(c.state).toBe('recording');
 });
 
@@ -82,7 +82,7 @@ it('handsfree switches mode, keeps startedAt', () => {
   c.handleGesture('start');
   vi.advanceTimersByTime(300);
   c.handleGesture('handsfree');
-  expect(lastState()).toEqual({ kind: 'recording', mode: 'handsfree', startedAt: 1_000_000 });
+  expect(lastState()).toEqual({ kind: 'recording', mode: 'handsfree', startedAt: 1_000_000, source: 'mic' });
 });
 
 it('stop then audio ≥300ms saves, shows saved, then idle after 1000ms', async () => {
@@ -195,6 +195,7 @@ it('start passes the recording source to the overlay', () => {
   source = 'system';
   c.handleGesture('start');
   expect(calls).toEqual(['start:mic-1:system']);
+  expect(lastState()).toMatchObject({ kind: 'recording', source: 'system' });
 });
 
 it('saved flash notes a mic-only fallback', async () => {

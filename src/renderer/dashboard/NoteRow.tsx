@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Volume2 } from 'lucide-react';
 import type { Note } from '../../shared/channels';
 import { formatDuration } from '../../shared/format';
 import {
@@ -105,6 +105,11 @@ export function NoteRow(props: Props) {
           </button>
         )}
         <div className="mt-1.5 flex items-center gap-3">
+          {note.source !== 'mic' && (
+            <span title={note.source === 'both' ? 'Mic + system audio' : 'System audio'} className="text-muted-foreground">
+              <Volume2 className="size-3.5" aria-label="Includes system audio" />
+            </span>
+          )}
           {folderLabel && (
             <span className="max-w-48 truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
               {folderLabel}

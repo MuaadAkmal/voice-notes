@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, nativeTheme, session } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, session } from 'electron';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
@@ -51,12 +51,29 @@ async function boot(): Promise<void> {
 
   const overlay = createOverlayWindow();
   // Only the overlay records; the dashboard just plays files through note://.
+  const CAPTURE_PERMISSIONS = new Set(['media', 'display-capture']);
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
-    callback(permission === 'media' && wc === overlay.webContents),
+    callback(CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents),
   );
   session.defaultSession.setPermissionCheckHandler(
-    (wc, permission) => permission === 'media' && wc === overlay.webContents,
+    (wc, permission) => CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents,
   );
+  // System audio: answer the overlay's getDisplayMedia with Windows loopback ('what you hear').
+  // The screen source is required by the API; the overlay drops the video track immediately.
+  session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (request.frame !== overlay.webContents.mainFrame) {
+      log.warn('[capture] display media refused for', request.frame?.url);
+      callback({});
+      return;
+    }
+    desktopCapturer
+      .getSources({ types: ['screen'] })
+      .then(([screen]) => callback(screen ? { video: screen, audio: 'loopback' } : {}))
+      .catch((err) => {
+        log.error('[capture] getSources failed', err);
+        callback({});
+      });
+  });
 
   const send = (channel: string, payload?: unknown) => {
     if (!overlay.isDestroyed()) overlay.webContents.send(channel, payload);
@@ -105,6 +122,8 @@ async function boot(): Promise<void> {
   const tray = createTray({
     openDashboard: showDashboard,
     isPaused: () => settings.hotkeyPaused,
+    getSource: () => settings.recordingSource,
+    setSource: (recordingSource) => updateSettings({ recordingSource }),
     togglePause: () => updateSettings({ hotkeyPaused: !settings.hotkeyPaused }).hotkeyPaused,
     quit: () => {
       isQuitting = true;
@@ -115,6 +134,7 @@ async function boot(): Promise<void> {
   function updateSettings(patch: Partial<Settings>): Settings {
     Object.assign(settings, saveSettings(settingsFile, patch));
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
+    if (patch.recordingSource) tray.refresh();
     if (patch.hotkeyPaused !== undefined) {
       hotkey.setPaused(settings.hotkeyPaused);
       tray.refresh();

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import type { AudioDevice, Settings, Theme } from '../../shared/channels';
+import type { AudioDevice, RecordingSource, Settings, Theme } from '../../shared/channels';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -11,6 +11,11 @@ const THEMES: { value: Theme; label: string; Icon: typeof Monitor }[] = [
   { value: 'system', label: 'System', Icon: Monitor },
   { value: 'light', label: 'Light', Icon: Sun },
   { value: 'dark', label: 'Dark', Icon: Moon },
+];
+const SOURCES: { value: RecordingSource; label: string }[] = [
+  { value: 'mic', label: 'Microphone' },
+  { value: 'system', label: 'System audio' },
+  { value: 'both', label: 'Mic + system audio' },
 ];
 // Radix Select can't hold an empty value; this stands for "System default" (micDeviceId null).
 const DEFAULT_MIC = 'default';
@@ -73,6 +78,24 @@ export function SettingsPage() {
               </button>
             ))}
           </div>
+        </Row>
+
+        <Row
+          title="Record from"
+          hint="System audio captures whatever your PC is playing (the film's line), with headphones too. Some streaming sites with DRM, like Netflix in Chrome or Edge, may record silence."
+        >
+          <Select value={settings.recordingSource} onValueChange={(v) => update({ recordingSource: v as RecordingSource })}>
+            <SelectTrigger className="w-64" aria-label="Record from">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SOURCES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Row>
 
         <Row title="Microphone">

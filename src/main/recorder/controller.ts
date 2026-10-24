@@ -72,12 +72,12 @@ export class RecorderController {
         this.startedAt = Date.now();
         this.requestedSource = this.opts.getSource();
         this.overlay.start(this.opts.getDeviceId(), this.requestedSource);
-        this.overlay.setState({ kind: 'recording', mode: 'hold', startedAt: this.startedAt });
+        this.overlay.setState({ kind: 'recording', mode: 'hold', startedAt: this.startedAt, source: this.requestedSource });
         this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
         break;
       case 'handsfree':
         if (this._state !== 'recording') return;
-        this.overlay.setState({ kind: 'recording', mode: 'handsfree', startedAt: this.startedAt });
+        this.overlay.setState({ kind: 'recording', mode: 'handsfree', startedAt: this.startedAt, source: this.requestedSource });
         break;
       case 'stop':
         if (this._state !== 'recording') return;
