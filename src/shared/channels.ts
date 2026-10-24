@@ -29,6 +29,8 @@ export type OverlayState =
   | { kind: 'saved' }
   | { kind: 'error'; message: string; retry: boolean };
 
+export type AudioDevice = { deviceId: string; label: string };
+
 export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string };
 
 export const Ch = {
@@ -43,6 +45,7 @@ export const Ch = {
   OverlayPointer: 'overlay:pointer', // { over: boolean }
   OverlayClick: 'overlay:click',
   OverlayRetry: 'overlay:retry',
+  OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
   NotesRename: 'notes:rename',
@@ -52,6 +55,7 @@ export const Ch = {
   SettingsSet: 'settings:set',
   HotkeyCapture: 'hotkey:capture',
   OpenRecordingsFolder: 'app:open-recordings-folder',
+  DevicesList: 'devices:list',
   // main → dashboard
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',

@@ -1,3 +1,5 @@
+import type { Note } from './channels';
+
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export function formatDuration(ms: number): string {
@@ -25,4 +27,15 @@ export function dayGroupLabel(ts: number, now: number): string {
   if (day === yesterday.getTime()) return 'Yesterday';
   const part = (opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', opts).format(ts);
   return `${part({ weekday: 'short' })}, ${part({ day: 'numeric' })} ${part({ month: 'short' })} ${part({ year: 'numeric' })}`;
+}
+
+export function groupByDay(notes: Note[], now: number): { label: string; notes: Note[] }[] {
+  const groups: { label: string; notes: Note[] }[] = [];
+  for (const note of notes) {
+    const label = dayGroupLabel(note.createdAt, now);
+    const last = groups[groups.length - 1];
+    if (last?.label === label) last.notes.push(note);
+    else groups.push({ label, notes: [note] });
+  }
+  return groups;
 }

@@ -10,6 +10,20 @@ function Overlay() {
   const analyser = useRecorder();
 
   useEffect(() => window.overlayApi.onState(setState), []);
+  // Device ids are origin-scoped, so the overlay (which records) is the one that lists them.
+  useEffect(() => {
+    const report = async () => {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      window.overlayApi.sendDevices(
+        devices
+          .filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications')
+          .map((d) => ({ deviceId: d.deviceId, label: d.label || 'Microphone' })),
+      );
+    };
+    report();
+    navigator.mediaDevices.addEventListener('devicechange', report);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', report);
+  }, []);
   // The element under the cursor is replaced on every state change; make the window click-through
   // again until the new pill reports mouseenter, so a vanished pill can't leave a dead click zone.
   useEffect(() => window.overlayApi.setPointerOver(false), [state.kind]);

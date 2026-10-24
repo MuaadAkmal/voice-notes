@@ -24,3 +24,6 @@ export const IdSchema = z.uuid();
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
 export const ErrorSchema = z.object({ message: z.string().max(200) });
+export const DevicesSchema = z
+  .array(z.object({ deviceId: z.string().max(512), label: z.string().max(300) }))
+  .max(64);

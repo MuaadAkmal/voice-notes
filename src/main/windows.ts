@@ -76,6 +76,8 @@ export function createDashboardWindow(): BrowserWindow {
     minWidth: 720,
     minHeight: 480,
     title: 'Voice Notes',
+    autoHideMenuBar: true,
+    backgroundColor: '#fafaf9',
     webPreferences: secureWebPreferences('dashboard.cjs'),
   });
   loadRenderer(win, DASHBOARD_VITE_DEV_SERVER_URL, DASHBOARD_VITE_NAME);

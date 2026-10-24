@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { type AudioPayload, Ch, type OverlayState } from '../shared/channels';
+import { type AudioDevice, type AudioPayload, Ch, type OverlayState } from '../shared/channels';
 
 const on = <T>(channel: string, cb: (payload: T) => void) => {
   ipcRenderer.on(channel, (_e, payload: T) => cb(payload));
@@ -15,6 +15,7 @@ const overlayApi = {
   setPointerOver: (over: boolean) => ipcRenderer.send(Ch.OverlayPointer, { over }),
   click: () => ipcRenderer.send(Ch.OverlayClick),
   retry: () => ipcRenderer.send(Ch.OverlayRetry),
+  sendDevices: (devices: AudioDevice[]) => ipcRenderer.send(Ch.OverlayDevices, devices),
 };
 
 export type OverlayApi = typeof overlayApi;
