@@ -1,7 +1,7 @@
 import { BrowserWindow, nativeTheme, screen } from 'electron';
 import path from 'node:path';
 
-const OVERLAY_WIDTH = 360;
+const OVERLAY_WIDTH = 440; // fits waveform + timer + label + discard ×
 const OVERLAY_HEIGHT = 80;
 const OVERLAY_MARGIN = 16;
 const TITLEBAR_HEIGHT = 40; // keep in sync with the dashboard's h-10 drag strip

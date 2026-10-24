@@ -16,7 +16,7 @@ type Clip = { stream: MediaStream; source: RecordingSource; analyser: AnalyserNo
 
 function makeAnalyser(ctx: AudioContext): AnalyserNode {
   const node = ctx.createAnalyser();
-  node.fftSize = 64;
+  node.fftSize = 1024; // time-domain window for the loudness waveform
   return node;
 }
 

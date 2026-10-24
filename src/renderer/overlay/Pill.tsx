@@ -1,43 +1,59 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayState, RecordingSource } from '../../shared/channels';
+import { levelFromRms, rmsOf } from '../../shared/audio-level';
 
-const BARS = 24;
+const BARS = 40;
+const BAR_W = 3;
+const GAP = 1.5;
+const WAVE_W = BARS * (BAR_W + GAP) - GAP;
+const WAVE_H = 24;
+const SAMPLE_MS = 50;
+const SOURCE_COLOR: Record<RecordingSource, string> = { mic: '#f87171', system: '#38bdf8', both: '#a78bfa' };
 
-function Waveform({ analyser }: { analyser: AnalyserNode | null }) {
-  const bars = useRef<(HTMLSpanElement | null)[]>([]);
+/** Scrolling voice-memo waveform: one loudness sample every 50 ms, newest bar on the right. */
+function Waveform({ analyser, source }: { analyser: AnalyserNode | null; source: RecordingSource }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (!analyser) return;
-    const data = new Uint8Array(analyser.frequencyBinCount);
+    const el = canvas.current;
+    const ctx = el?.getContext('2d');
+    if (!el || !ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    el.width = WAVE_W * dpr;
+    el.height = WAVE_H * dpr;
+    ctx.scale(dpr, dpr);
+
+    const history = new Array<number>(BARS).fill(0);
+    const samples = analyser ? new Float32Array(analyser.fftSize) : null;
+    const sample = setInterval(() => {
+      if (!analyser || !samples) return;
+      analyser.getFloatTimeDomainData(samples);
+      history.shift();
+      history.push(levelFromRms(rmsOf(samples)));
+    }, SAMPLE_MS);
+
     let raf = 0;
-    const tick = () => {
-      analyser.getByteFrequencyData(data);
-      bars.current.forEach((el, i) => {
-        if (!el) return;
-        const v = data[Math.floor((i / BARS) * data.length)] / 255;
-        el.style.transform = `scaleY(${Math.max(0.12, v)})`;
+    const draw = () => {
+      ctx.clearRect(0, 0, WAVE_W, WAVE_H);
+      ctx.fillStyle = SOURCE_COLOR[source];
+      history.forEach((level, i) => {
+        const h = Math.max(2, level * WAVE_H);
+        ctx.globalAlpha = 0.25 + 0.75 * (i / (BARS - 1)); // older bars fade out
+        ctx.beginPath();
+        ctx.roundRect(i * (BAR_W + GAP), (WAVE_H - h) / 2, BAR_W, h, BAR_W / 2);
+        ctx.fill();
       });
-      raf = requestAnimationFrame(tick);
+      raf = requestAnimationFrame(draw);
     };
-    tick();
-    return () => cancelAnimationFrame(raf);
-  }, [analyser]);
+    draw();
+    return () => {
+      clearInterval(sample);
+      cancelAnimationFrame(raf);
+    };
+  }, [analyser, source]);
 
-  return (
-    <div className="flex h-5 items-center gap-[2px]">
-      {Array.from({ length: BARS }, (_, i) => (
-        <span
-          key={i}
-          ref={(el) => {
-            bars.current[i] = el;
-          }}
-          className="h-full w-[3px] origin-center scale-y-[0.12] rounded-full bg-white/90 transition-transform duration-75"
-        />
-      ))}
-    </div>
-  );
+  return <canvas ref={canvas} style={{ width: WAVE_W, height: WAVE_H }} aria-hidden />;
 }
-
 function Timer({ startedAt }: { startedAt: number }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -94,9 +110,9 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
         <div {...hover} onClick={() => api.click()} className={`${shell} h-10 cursor-pointer gap-3 px-4`}>
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
           <SourceGlyph source={state.source} />
-          <Waveform analyser={analyser} />
+          <Waveform analyser={analyser} source={state.source} />
           <Timer startedAt={state.startedAt} />
-          <span className="text-[10px] uppercase tracking-wide text-white/50">
+          <span className="whitespace-nowrap text-[10px] uppercase tracking-wide text-white/50">
             {state.mode === 'hold' ? 'Hold' : 'Hands-free'}
           </span>
         </div>
