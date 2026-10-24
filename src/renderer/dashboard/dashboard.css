@@ -1,1 +1,29 @@
 @import "tailwindcss";
+
+/* Window dragging for the hidden title bar; interactive children must opt out. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-drag button,
+.app-drag input,
+.app-drag a {
+  -webkit-app-region: no-drag;
+}
+
+/* Thin, unobtrusive scrollbars to match the frameless window. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(120 113 108 / 0.35);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(120 113 108 / 0.6);
+}

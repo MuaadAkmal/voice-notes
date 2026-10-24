@@ -4,6 +4,7 @@ import path from 'node:path';
 const OVERLAY_WIDTH = 360;
 const OVERLAY_HEIGHT = 80;
 const OVERLAY_MARGIN = 16;
+const TITLEBAR_HEIGHT = 40; // keep in sync with the dashboard's h-10 drag strip
 
 const secureWebPreferences = (preload: string) => ({
   preload: path.join(__dirname, preload),
@@ -78,6 +79,9 @@ export function createDashboardWindow(): BrowserWindow {
     title: 'Voice Notes',
     autoHideMenuBar: true,
     backgroundColor: '#fafaf9',
+    // Frameless look like Wispr Flow, but keep native caption buttons (and Windows 11 snap layouts).
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#fafaf9', symbolColor: '#44403c', height: TITLEBAR_HEIGHT },
     webPreferences: secureWebPreferences('dashboard.cjs'),
   });
   loadRenderer(win, DASHBOARD_VITE_DEV_SERVER_URL, DASHBOARD_VITE_NAME);

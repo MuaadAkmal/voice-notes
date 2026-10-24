@@ -17,32 +17,37 @@ export function App() {
   const [page, setPage] = useState<Page>('notes');
 
   return (
-    <div className="flex h-screen bg-stone-50 text-stone-900 antialiased">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200 bg-stone-100/70 px-3 py-5">
-        <div className="mb-6 flex items-center gap-2 px-2">
-          <span className="grid h-7 w-7 place-items-center rounded-full bg-stone-900">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+    <div className="flex h-screen flex-col bg-stone-50 text-stone-900 antialiased">
+      {/* Draggable strip replacing the native title bar; caption buttons are drawn over its right end. */}
+      <div className="app-drag flex h-10 shrink-0">
+        <div className="flex w-56 items-center gap-2 border-r border-stone-200 bg-stone-100/70 px-5">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-stone-900">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
           </span>
-          <span className="text-[15px] font-semibold tracking-tight">Voice Notes</span>
+          <span className="text-[13px] font-semibold tracking-tight">Voice Notes</span>
         </div>
-        <nav className="flex flex-col gap-0.5">
-          {NAV.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setPage(item.id)}
-              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
-                page === item.id ? 'bg-white font-medium shadow-sm ring-1 ring-stone-200' : 'text-stone-600 hover:bg-stone-200/60'
-              }`}
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
-                <path d={item.icon} strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-      <main className="flex-1 overflow-y-auto">{page === 'notes' ? <NotesPage /> : <SettingsPage />}</main>
+      </div>
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200 bg-stone-100/70 px-3 pb-5 pt-3">
+          <nav className="flex flex-col gap-0.5">
+            {NAV.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setPage(item.id)}
+                className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
+                  page === item.id ? 'bg-white font-medium shadow-sm ring-1 ring-stone-200' : 'text-stone-600 hover:bg-stone-200/60'
+                }`}
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+                  <path d={item.icon} strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+        <main className="flex-1 overflow-y-auto">{page === 'notes' ? <NotesPage /> : <SettingsPage />}</main>
+      </div>
     </div>
   );
 }
