@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { OverlayState } from '../../shared/channels';
 import { Pill } from './Pill';
+import { useDrag } from './useDrag';
 import { useRecorder } from './useRecorder';
 import './overlay.css';
 
 function Overlay() {
   const [state, setState] = useState<OverlayState>({ kind: 'idle', visible: true });
   const analyser = useRecorder();
+  const drag = useDrag();
 
   useEffect(() => window.overlayApi.onState(setState), []);
   // Device ids are origin-scoped, so the overlay (which records) is the one that lists them.
@@ -30,7 +32,9 @@ function Overlay() {
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">
-      <Pill state={state} analyser={analyser} />
+      <div {...drag} className="touch-none" data-testid="pill">
+        <Pill state={state} analyser={analyser} />
+      </div>
     </div>
   );
 }

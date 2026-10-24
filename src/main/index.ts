@@ -11,7 +11,7 @@ import { RecorderController } from './recorder/controller';
 import { loadSettings, saveSettings } from './settings';
 import { NoteStore } from './store/note-store';
 import { createTray } from './tray';
-import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow } from './windows';
+import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
@@ -49,7 +49,7 @@ async function boot(): Promise<void> {
   log.info('[store] reconcile', await store.reconcile());
   registerNoteProtocol(store);
 
-  const overlay = createOverlayWindow();
+  const overlay = createOverlayWindow(() => settings.pillPosition);
   // Only the overlay records; the dashboard just plays files through note://.
   const CAPTURE_PERMISSIONS = new Set(['media', 'display-capture']);
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
@@ -113,18 +113,27 @@ async function boot(): Promise<void> {
   });
 
   let devices: AudioDevice[] = [];
-  registerOverlayIpc({ overlay, gesture, controller, onDevices: (d) => (devices = d) });
+  registerOverlayIpc({
+    overlay,
+    gesture,
+    controller,
+    onDevices: (d) => (devices = d),
+    onDragEnd: () => updateSettings({ pillPosition: pillPositionOf(overlay) }),
+  });
 
   const hotkey = new HotkeyService(gesture);
   hotkey.setCombo(settings.hotkey);
   hotkey.setPaused(settings.hotkeyPaused);
-  hotkey.start();
+  // Under test the gesture is driven through __voiceNotes; a global hook would also react to whatever
+  // the person at the keyboard is doing and scramble the run.
+  if (process.env.VOICE_NOTES_TEST !== '1') hotkey.start();
 
   const tray = createTray({
     openDashboard: showDashboard,
     isPaused: () => settings.hotkeyPaused,
     getSource: () => settings.recordingSource,
     setSource: (recordingSource) => updateSettings({ recordingSource }),
+    resetPill: () => updateSettings({ pillPosition: null }),
     togglePause: () => updateSettings({ hotkeyPaused: !settings.hotkeyPaused }).hotkeyPaused,
     quit: () => {
       isQuitting = true;
@@ -136,6 +145,8 @@ async function boot(): Promise<void> {
     Object.assign(settings, saveSettings(settingsFile, patch));
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.recordingSource) tray.refresh();
+    // Reset (null) or a move from elsewhere: put the window where the setting says.
+    if ('pillPosition' in patch) positionOverlay(overlay, settings.pillPosition);
     if (patch.hotkeyPaused !== undefined) {
       hotkey.setPaused(settings.hotkeyPaused);
       tray.refresh();

@@ -133,6 +133,12 @@ export function SettingsPage() {
           />
         </Row>
 
+        <Row title="Pill position" hint="Drag the pill anywhere on screen; it remembers the spot.">
+          <Button variant="outline" size="sm" disabled={!settings.pillPosition} onClick={() => update({ pillPosition: null })}>
+            Reset pill position
+          </Button>
+        </Row>
+
         <Row title="Recordings folder">
           <Button variant="outline" size="sm" onClick={() => api.openRecordingsFolder()}>
             Open folder

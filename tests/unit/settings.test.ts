@@ -49,6 +49,14 @@ it('recordingSource defaults to mic and rejects unknown values', () => {
   expect(loadSettings(file).recordingSource).toBe('both');
 });
 
+it('pillPosition defaults to null and rejects malformed values', () => {
+  expect(DEFAULT_SETTINGS.pillPosition).toBeNull();
+  fs.writeFileSync(file, JSON.stringify({ pillPosition: { displayId: 'x', x: 1 } }));
+  expect(loadSettings(file).pillPosition).toBeNull();
+  fs.writeFileSync(file, JSON.stringify({ pillPosition: { displayId: 2, x: 10, y: 20 } }));
+  expect(loadSettings(file).pillPosition).toEqual({ displayId: 2, x: 10, y: 20 });
+});
+
 it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);

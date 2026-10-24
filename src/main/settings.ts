@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeyPaused: false,
   theme: 'system',
   recordingSource: 'mic',
+  pillPosition: null,
 };
 
 function readRaw(file: string): Record<string, unknown> {

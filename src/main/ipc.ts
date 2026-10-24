@@ -6,6 +6,7 @@ import {
   AudioPayloadSchema,
   Ch,
   DevicesSchema,
+  DragSchema,
   CreateFolderSchema,
   ErrorSchema,
   IdListSchema,
@@ -28,6 +29,7 @@ type OverlayDeps = {
   gesture: HotkeyGesture;
   controller: RecorderController;
   onDevices: (devices: AudioDevice[]) => void;
+  onDragEnd: () => void;
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -43,7 +45,15 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
   };
 }
 
-export function registerOverlayIpc({ overlay, gesture, controller, onDevices }: OverlayDeps): void {
+export function registerOverlayIpc({ overlay, gesture, controller, onDevices, onDragEnd }: OverlayDeps): void {
+  ipcMain.on(
+    Ch.OverlayDrag,
+    from(overlay, DragSchema, ({ dx, dy }) => {
+      const [x, y] = overlay.getPosition();
+      overlay.setPosition(x + dx, y + dy);
+    }),
+  );
+  ipcMain.on(Ch.OverlayDragEnd, (e) => e.sender === overlay.webContents && onDragEnd());
   ipcMain.on(Ch.OverlayDevices, from(overlay, DevicesSchema, onDevices));
   ipcMain.on(
     Ch.RecorderAudio,

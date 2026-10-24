@@ -31,7 +31,11 @@ export type Settings = {
   hotkeyPaused: boolean;
   theme: Theme;
   recordingSource: RecordingSource;
+  pillPosition: PillPosition | null; // null = bottom-centre of the primary display
 };
+
+/** Overlay window top-left, relative to that display's work area. */
+export type PillPosition = { displayId: number; x: number; y: number };
 
 export type Theme = 'system' | 'light' | 'dark';
 export type RecordingSource = 'mic' | 'system' | 'both';
@@ -63,6 +67,8 @@ export const Ch = {
   OverlayPointer: 'overlay:pointer', // { over: boolean }
   OverlayClick: 'overlay:click',
   OverlayRetry: 'overlay:retry',
+  OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
+  OverlayDragEnd: 'overlay:drag-end',
   OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',

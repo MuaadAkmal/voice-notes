@@ -10,6 +10,7 @@ type TrayActions = {
   isPaused(): boolean;
   getSource(): RecordingSource;
   setSource(source: RecordingSource): void;
+  resetPill(): void;
   quit(): void;
 };
 
@@ -43,6 +44,7 @@ export function createTray(actions: TrayActions): { tray: Tray; refresh: () => v
             click: () => actions.setSource(value),
           })),
         },
+        { label: 'Reset pill position', click: actions.resetPill },
         { type: 'separator' },
         { label: 'Quit Voice Notes', click: actions.quit },
       ]),

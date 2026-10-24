@@ -16,6 +16,8 @@ const overlayApi = {
   click: () => ipcRenderer.send(Ch.OverlayClick),
   retry: () => ipcRenderer.send(Ch.OverlayRetry),
   sendDevices: (devices: AudioDevice[]) => ipcRenderer.send(Ch.OverlayDevices, devices),
+  drag: (dx: number, dy: number) => ipcRenderer.send(Ch.OverlayDrag, { dx, dy }),
+  dragEnd: () => ipcRenderer.send(Ch.OverlayDragEnd),
 };
 
 export type OverlayApi = typeof overlayApi;

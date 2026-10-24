@@ -1,9 +1,10 @@
 import { BrowserWindow, nativeTheme, screen } from 'electron';
 import path from 'node:path';
+import type { PillPosition } from '../shared/channels';
+import { resolveOverlayBounds } from './overlay-position';
 
 const OVERLAY_WIDTH = 320; // compact pill: glyph + waveform + timer (+ discard ×)
 const OVERLAY_HEIGHT = 80;
-const OVERLAY_MARGIN = 16;
 const TITLEBAR_HEIGHT = 40; // keep in sync with the dashboard's h-10 drag strip
 // Caption-button strip colours; `color` matches the dashboard background in each theme.
 const TITLEBAR = {
@@ -35,18 +36,22 @@ function loadRenderer(win: BrowserWindow, devUrl: string | undefined, name: stri
   }
 }
 
-export function positionOverlay(win: BrowserWindow): void {
-  const { workArea } = screen.getPrimaryDisplay();
-  win.setBounds({
-    x: Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2),
-    y: workArea.y + workArea.height - OVERLAY_HEIGHT - OVERLAY_MARGIN,
-    width: OVERLAY_WIDTH,
-    height: OVERLAY_HEIGHT,
-  });
+export function positionOverlay(win: BrowserWindow, saved: PillPosition | null): void {
+  const displays = screen.getAllDisplays().map((d) => ({ id: d.id, workArea: d.workArea }));
+  win.setBounds(
+    resolveOverlayBounds(saved, displays, screen.getPrimaryDisplay().id, { width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT }),
+  );
+}
+
+/** The user dragged the pill here: express it relative to the display it ended up on. */
+export function pillPositionOf(win: BrowserWindow): PillPosition {
+  const b = win.getBounds();
+  const display = screen.getDisplayMatching(b);
+  return { displayId: display.id, x: b.x - display.workArea.x, y: b.y - display.workArea.y };
 }
 
 /** Transparent, click-through, always-on-top strip that never takes focus (same technique as Wispr Flow). */
-export function createOverlayWindow(): BrowserWindow {
+export function createOverlayWindow(getSaved: () => PillPosition | null): BrowserWindow {
   const win = new BrowserWindow({
     width: OVERLAY_WIDTH,
     height: OVERLAY_HEIGHT,
@@ -67,10 +72,10 @@ export function createOverlayWindow(): BrowserWindow {
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
-  positionOverlay(win);
+  positionOverlay(win, getSaved());
   win.once('ready-to-show', () => win.showInactive());
 
-  const reposition = () => !win.isDestroyed() && positionOverlay(win);
+  const reposition = () => !win.isDestroyed() && positionOverlay(win, getSaved());
   screen.on('display-metrics-changed', reposition);
   screen.on('display-added', reposition);
   screen.on('display-removed', reposition);

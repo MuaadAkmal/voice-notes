@@ -28,6 +28,41 @@ test('shows "No sound" when the input is silent, and still saves', async () => {
   await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
 });
 
+test('dragging the pill moves the window and remembers it, without recording', async () => {
+  t = await launch();
+  const pill = await overlay(t);
+  const boundsOf = () =>
+    t.app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/overlay/'))!.getBounds(),
+    );
+  const before = await boundsOf();
+  const box = (await pill.getByTestId('pill').boundingBox())!;
+  await pill.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await pill.mouse.down();
+  await pill.mouse.move(box.x + box.width / 2 - 40, box.y + box.height / 2 - 30, { steps: 8 });
+  await pill.mouse.up();
+  await expect.poll(async () => (await boundsOf()).x).toBeLessThan(before.x);
+  const saved = await t.dashboard.evaluate(() => window.dashboardApi.getSettings().then((s) => s.pillPosition));
+  expect(saved).not.toBeNull();
+  await pill.waitForTimeout(500);
+  expect(await t.hooks((h) => h.store.list().length)).toBe(0);
+  expect(await t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('idle');
+
+  // Reset puts it back at bottom-centre.
+  await t.dashboard.evaluate(() => window.dashboardApi.setSettings({ pillPosition: null }));
+  await expect.poll(async () => (await boundsOf()).x).toBe(before.x);
+});
+
+test('a plain click on the pill still toggles hands-free recording', async () => {
+  t = await launch();
+  const pill = await overlay(t);
+  await pill.getByTestId('pill').click();
+  await expect.poll(() => t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('recording');
+  await pill.waitForTimeout(800);
+  await pill.getByTestId('pill').click();
+  await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
+});
+
 test('waveform is drawn in the source colour while recording', async () => {
   t = await launch();
   const pill = await overlay(t);
