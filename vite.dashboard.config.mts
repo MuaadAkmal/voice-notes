@@ -8,5 +8,6 @@ export default defineConfig({
   root: 'src/renderer/dashboard',
   // With a custom root, Vite would emit under the root; Forge loads from .vite/renderer/<name>.
   build: { outDir: path.resolve('.vite/renderer/dashboard'), emptyOutDir: true },
+  resolve: { alias: { '@': path.resolve('src/renderer/dashboard') } },
   plugins: [react(), tailwindcss(), cspPlugin()],
 });

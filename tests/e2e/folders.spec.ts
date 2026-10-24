@@ -69,7 +69,7 @@ test('folders: nesting, duplicate-name toast, multi-select drag, cycle refused',
   await page.getByRole('button', { name: 'New folder' }).click();
   await page.getByPlaceholder('Folder name').fill('spanish');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('status')).toHaveText('A folder named "spanish" already exists here');
+  await expect(page.locator('[data-sonner-toast]')).toHaveText('A folder named "spanish" already exists here');
   await page.keyboard.press('Escape');
 
   // Shift-select two notes and drag them together into Films.

@@ -13,7 +13,10 @@
     "noImplicitAny": true,
     "sourceMap": true,
     "resolveJsonModule": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/renderer/dashboard/*"]
+    }
   },
   "include": ["src/**/*", "tests/**/*", "*.ts", "*.mts"]
 }

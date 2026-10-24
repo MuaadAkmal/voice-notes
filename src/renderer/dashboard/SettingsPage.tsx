@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { AudioDevice, Settings } from '../../shared/channels';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Kbd } from './NotesPage';
 
 const api = window.dashboardApi;
+// Radix Select can't hold an empty value; this stands for "System default" (micDeviceId null).
+const DEFAULT_MIC = 'default';
 
 export function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -37,79 +42,70 @@ export function SettingsPage() {
     <div className="mx-auto max-w-3xl px-10 py-9">
       <h1 className="mb-8 text-2xl font-semibold tracking-tight">Settings</h1>
 
-      <div className="divide-y divide-stone-100 rounded-2xl border border-stone-200 bg-white">
+      <div className="divide-y divide-border rounded-2xl border bg-card">
         <Row
           title="Recording hotkey"
           hint="Hold to record, double-tap for hands-free. Other apps still receive these keys."
         >
           <Kbd>{capturing ? 'Press keys…' : settings.hotkeyLabel}</Kbd>
-          <button onClick={changeHotkey} disabled={capturing} className={buttonClass}>
+          <Button variant="outline" size="sm" onClick={changeHotkey} disabled={capturing}>
             Change
-          </button>
+          </Button>
         </Row>
 
         <Row title="Microphone">
-          <select
-            value={settings.micDeviceId ?? ''}
-            onChange={(e) => update({ micDeviceId: e.target.value || null })}
-            className="max-w-64 rounded-lg border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
+          <Select
+            value={settings.micDeviceId ?? DEFAULT_MIC}
+            onValueChange={(v) => update({ micDeviceId: v === DEFAULT_MIC ? null : v })}
           >
-            <option value="">System default</option>
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="w-64" aria-label="Microphone">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={DEFAULT_MIC}>System default</SelectItem>
+              {devices.map((d) => (
+                <SelectItem key={d.deviceId} value={d.deviceId}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Row>
 
         <Row title="Launch at login" hint="Starts quietly in the tray.">
-          <Toggle checked={settings.launchAtLogin} onChange={(v) => update({ launchAtLogin: v })} />
+          <Switch
+            aria-label="Launch at login"
+            checked={settings.launchAtLogin}
+            onCheckedChange={(v) => update({ launchAtLogin: v })}
+          />
         </Row>
 
         <Row title="Show pill when idle" hint="When off, the pill only appears while recording.">
-          <Toggle checked={settings.showIdlePill} onChange={(v) => update({ showIdlePill: v })} />
+          <Switch
+            aria-label="Show pill when idle"
+            checked={settings.showIdlePill}
+            onCheckedChange={(v) => update({ showIdlePill: v })}
+          />
         </Row>
 
         <Row title="Recordings folder">
-          <button onClick={() => api.openRecordingsFolder()} className={buttonClass}>
+          <Button variant="outline" size="sm" onClick={() => api.openRecordingsFolder()}>
             Open folder
-          </button>
+          </Button>
         </Row>
       </div>
     </div>
   );
 }
-
-const buttonClass =
-  'rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50';
 
 function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-6 px-5 py-4">
       <div>
         <div className="text-sm font-medium">{title}</div>
-        {hint && <div className="mt-0.5 text-xs text-stone-500">{hint}</div>}
+        {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
       </div>
       <div className="flex shrink-0 items-center gap-3">{children}</div>
     </div>
-  );
-}
-
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative h-6 w-10 rounded-full transition-colors ${checked ? 'bg-stone-900' : 'bg-stone-300'}`}
-    >
-      <span
-        // left-0 matters: without it the absolute knob sits at its static position, which a <button> centers.
-        className={`absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-[18px]' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
   );
 }
