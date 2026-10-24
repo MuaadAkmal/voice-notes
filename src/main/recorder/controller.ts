@@ -17,10 +17,13 @@ type ControllerOpts = {
   getDeviceId: () => string | null;
   onSaved: (n: Note) => void;
   idleState: () => OverlayState;
+  /** Fired when the controller returns to idle without a gesture asking it to (save, error, watchdog). */
+  onIdle?: () => void;
   minMs?: number;
   maxMs?: number;
   savedMs?: number;
   errorMs?: number;
+  stopTimeoutMs?: number;
 };
 
 type State = 'idle' | 'recording' | 'stopping' | 'saving' | 'failed';
@@ -34,11 +37,13 @@ export class RecorderController {
   private startedAt = 0;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: NewAudio | null = null;
   private readonly minMs: number;
   private readonly maxMs: number;
   private readonly savedMs: number;
   private readonly errorMs: number;
+  private readonly stopTimeoutMs: number;
 
   constructor(
     private readonly overlay: OverlayPort,
@@ -49,6 +54,7 @@ export class RecorderController {
     this.maxMs = opts.maxMs ?? 300_000;
     this.savedMs = opts.savedMs ?? 1000;
     this.errorMs = opts.errorMs ?? 3000;
+    this.stopTimeoutMs = opts.stopTimeoutMs ?? 5000;
   }
 
   get state(): State {
@@ -75,11 +81,13 @@ export class RecorderController {
         this.clearMax();
         this._state = 'stopping';
         this.overlay.stop();
+        // If the overlay never answers (renderer crashed, recorder died), don't stay stuck in 'stopping'.
+        this.stopTimer = setTimeout(() => this.onCaptureError('Recording lost'), this.stopTimeoutMs);
         break;
       case 'discard':
       case 'cancel':
         if (this._state !== 'recording' && this._state !== 'stopping') return;
-        this.clearMax();
+        this.clearTimers();
         this._state = 'idle';
         this.overlay.cancel();
         this.overlay.setState(this.opts.idleState());
@@ -87,10 +95,12 @@ export class RecorderController {
     }
   }
 
+  /** Accepted while 'stopping', or while 'recording' when the recorder ended on its own (e.g. mic unplugged). */
   async onAudio(audio: NewAudio): Promise<void> {
-    if (this._state !== 'stopping') return;
+    if (this._state !== 'stopping' && this._state !== 'recording') return;
+    this.clearTimers();
     if (audio.durationMs < this.minMs) {
-      this._state = 'idle';
+      this.toIdle();
       this.overlay.setState(this.opts.idleState());
       return;
     }
@@ -100,8 +110,8 @@ export class RecorderController {
 
   onCaptureError(message: string): void {
     if (this._state !== 'recording' && this._state !== 'stopping') return;
-    this.clearMax();
-    this._state = 'idle';
+    this.clearTimers();
+    this.toIdle();
     this.flash({ kind: 'error', message, retry: false }, this.errorMs);
   }
 
@@ -117,7 +127,7 @@ export class RecorderController {
     try {
       const note = await this.sink.create(audio);
       this.pending = null;
-      this._state = 'idle';
+      this.toIdle();
       this.opts.onSaved(note);
       this.flash({ kind: 'saved' }, this.savedMs);
     } catch {
@@ -141,8 +151,19 @@ export class RecorderController {
     this.flashTimer = null;
   }
 
+  private toIdle(): void {
+    this._state = 'idle';
+    this.opts.onIdle?.();
+  }
+
   private clearMax(): void {
     if (this.maxTimer) clearTimeout(this.maxTimer);
     this.maxTimer = null;
+  }
+
+  private clearTimers(): void {
+    this.clearMax();
+    if (this.stopTimer) clearTimeout(this.stopTimer);
+    this.stopTimer = null;
   }
 }

@@ -75,6 +75,8 @@ async function boot(): Promise<void> {
     {
       getDeviceId: () => settings.micDeviceId,
       idleState,
+      // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
+      onIdle: () => gesture.reset(),
       onSaved: (note) => {
         log.info('[recorder] saved', note.id, note.durationMs, 'ms');
         toDashboard(Ch.NotesChanged);
@@ -83,6 +85,10 @@ async function boot(): Promise<void> {
   );
   gesture.onEvent((e) => controller.handleGesture(e));
   overlay.webContents.on('did-finish-load', () => send(Ch.OverlayState, idleState()));
+  overlay.webContents.on('render-process-gone', (_e, details) => {
+    log.error('[overlay] renderer gone', details.reason);
+    if (!overlay.isDestroyed()) overlay.webContents.reload();
+  });
 
   let devices: AudioDevice[] = [];
   registerOverlayIpc({ overlay, gesture, controller, onDevices: (d) => (devices = d) });

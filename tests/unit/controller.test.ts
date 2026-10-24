@@ -22,6 +22,7 @@ let states: OverlayState[];
 let saved: Note[];
 let failNext: boolean;
 let created: NewAudio[];
+let idles: number;
 let c: RecorderController;
 const audio = (durationMs: number): NewAudio => ({
   bytes: Buffer.from('xyz'),
@@ -38,6 +39,7 @@ beforeEach(() => {
   saved = [];
   created = [];
   failNext = false;
+  idles = 0;
   const overlay: OverlayPort = {
     start: (d) => calls.push(`start:${d}`),
     stop: () => calls.push('stop'),
@@ -58,6 +60,7 @@ beforeEach(() => {
     getDeviceId: () => 'mic-1',
     onSaved: (n) => saved.push(n),
     idleState: () => IDLE,
+    onIdle: () => idles++,
   });
 });
 afterEach(() => vi.useRealTimers());
@@ -144,4 +147,40 @@ it('capture error shows message then idle after 3000ms', () => {
   vi.advanceTimersByTime(3000);
   expect(lastState()).toEqual(IDLE);
   expect(c.state).toBe('idle');
+});
+
+it('audio while recording is saved (recorder ended on its own)', async () => {
+  c.handleGesture('start');
+  await c.onAudio(audio(1500));
+  expect(created).toHaveLength(1);
+  expect(lastState()).toEqual({ kind: 'saved' });
+  expect(c.state).toBe('idle');
+});
+
+it('stopping without audio for 5000ms → "Recording lost", then idle', () => {
+  c.handleGesture('start');
+  c.handleGesture('stop');
+  vi.advanceTimersByTime(4999);
+  expect(c.state).toBe('stopping');
+  vi.advanceTimersByTime(1);
+  expect(lastState()).toEqual({ kind: 'error', message: 'Recording lost', retry: false });
+  expect(c.state).toBe('idle');
+});
+
+it('audio arriving in time cancels the stopping watchdog', async () => {
+  c.handleGesture('start');
+  c.handleGesture('stop');
+  await c.onAudio(audio(1500));
+  vi.advanceTimersByTime(10_000);
+  expect(states.some((s) => s.kind === 'error')).toBe(false);
+});
+
+it('calls onIdle when it returns to idle on its own', async () => {
+  c.handleGesture('start');
+  c.onCaptureError('No microphone');
+  expect(idles).toBe(1);
+  c.handleGesture('start');
+  vi.advanceTimersByTime(300_000); // auto-stop
+  await c.onAudio(audio(2000));
+  expect(idles).toBe(2);
 });

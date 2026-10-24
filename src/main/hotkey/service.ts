@@ -1,4 +1,4 @@
-import { uIOhook, UiohookKey, type UiohookKeyboardEvent } from 'uiohook-napi';
+import { uIOhook, UiohookKey } from 'uiohook-napi';
 import type { HotkeyGesture } from './gesture';
 
 // Right-hand modifiers count as their left-hand twin, so "Ctrl" matches either Ctrl key.
@@ -20,6 +20,21 @@ const CAPTURE_TIMEOUT_MS = 10_000;
 
 const canonical = (code: number) => CANONICAL[code] ?? code;
 
+type KeyEvent = { keycode: number; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
+export type KeyHook = {
+  on(event: 'keydown' | 'keyup', listener: (e: KeyEvent) => void): unknown;
+  start(): void;
+  stop(): void;
+};
+
+// Which event flag reports each (canonical) modifier as physically held.
+const MODIFIER_FLAG: Record<number, keyof KeyEvent> = {
+  [UiohookKey.Ctrl]: 'ctrlKey',
+  [UiohookKey.Meta]: 'metaKey',
+  [UiohookKey.Alt]: 'altKey',
+  [UiohookKey.Shift]: 'shiftKey',
+};
+
 export function comboLabel(keycodes: number[]): string {
   return keycodes.map((k) => NAMES[k] ?? `Key${k}`).join('+');
 }
@@ -33,16 +48,19 @@ export class HotkeyService {
   private capture: ((keys: number[]) => void) | null = null;
   private captureMax = new Set<number>();
 
-  constructor(private readonly gesture: HotkeyGesture) {}
+  constructor(
+    private readonly gesture: HotkeyGesture,
+    private readonly hook: KeyHook = uIOhook,
+  ) {}
 
   start(): void {
-    uIOhook.on('keydown', this.onKeyDown);
-    uIOhook.on('keyup', this.onKeyUp);
-    uIOhook.start();
+    this.hook.on('keydown', this.onKeyDown);
+    this.hook.on('keyup', this.onKeyUp);
+    this.hook.start();
   }
 
   stop(): void {
-    uIOhook.stop();
+    this.hook.stop();
   }
 
   setCombo(keycodes: number[]): void {
@@ -77,8 +95,24 @@ export class HotkeyService {
     });
   }
 
-  private onKeyDown = (e: UiohookKeyboardEvent): void => {
+  /**
+   * Drop modifiers the event flags say are no longer held. Their key-up can be swallowed
+   * (Win+L, UAC secure desktop), which would otherwise leave them "pressed" forever.
+   */
+  private pruneStale(e: KeyEvent, code: number): void {
+    for (const key of [...this.pressed]) {
+      const flag = MODIFIER_FLAG[key];
+      if (flag && key !== code && !e[flag]) this.pressed.delete(key);
+    }
+    if (this.comboActive && !this.combo.every((k) => k === code || this.pressed.has(k))) {
+      this.comboActive = false;
+      this.gesture.keyUp();
+    }
+  }
+
+  private onKeyDown = (e: KeyEvent): void => {
     const code = canonical(e.keycode);
+    this.pruneStale(e, code);
     this.pressed.add(code);
     if (this.capture) {
       this.captureMax = new Set(this.pressed);
@@ -95,8 +129,9 @@ export class HotkeyService {
     }
   };
 
-  private onKeyUp = (e: UiohookKeyboardEvent): void => {
+  private onKeyUp = (e: KeyEvent): void => {
     const code = canonical(e.keycode);
+    this.pruneStale(e, code);
     this.pressed.delete(code);
     if (this.capture) {
       const done = this.capture;

@@ -38,8 +38,12 @@ export function useRecorder(): AnalyserNode | null {
       const live = stream.current?.media.getAudioTracks().some((t) => t.readyState === 'live');
       if (stream.current && live && stream.current.deviceId === deviceId) return stream.current.media;
       release();
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: deviceId ? { exact: deviceId } : undefined, channelCount: 1 },
+      const open = (id: string | null) =>
+        navigator.mediaDevices.getUserMedia({ audio: { deviceId: id ? { exact: id } : undefined, channelCount: 1 } });
+      // The chosen mic may have been unplugged since it was picked: fall back to the system default.
+      const media = await open(deviceId).catch((err) => {
+        if (deviceId && err instanceof DOMException && err.name === 'OverconstrainedError') return open(null);
+        throw err;
       });
       const ctx = new AudioContext();
       const node = ctx.createAnalyser();
@@ -61,9 +65,10 @@ export function useRecorder(): AnalyserNode | null {
 
     api.onStart(async ({ deviceId }) => {
       if (releaseTimer.current) clearTimeout(releaseTimer.current);
+      // The latest command wins: a start while the mic is still opening voids a queued stop/cancel.
+      pending.current = null;
       if (starting.current || recorder.current) return;
       starting.current = true;
-      pending.current = null;
       try {
         const media = await getStream(deviceId);
         const rec = new MediaRecorder(media, { mimeType: MIME, audioBitsPerSecond: BITRATE });
