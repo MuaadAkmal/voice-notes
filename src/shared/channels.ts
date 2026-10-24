@@ -28,7 +28,10 @@ export type Settings = {
   launchAtLogin: boolean;
   showIdlePill: boolean;
   hotkeyPaused: boolean;
+  theme: Theme;
 };
+
+export type Theme = 'system' | 'light' | 'dark';
 
 export type RecordingMode = 'hold' | 'handsfree';
 

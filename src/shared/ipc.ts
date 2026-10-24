@@ -10,6 +10,7 @@ export const SettingsFieldSchemas = {
   launchAtLogin: z.boolean(),
   showIdlePill: z.boolean(),
   hotkeyPaused: z.boolean(),
+  theme: z.enum(['system', 'light', 'dark']),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

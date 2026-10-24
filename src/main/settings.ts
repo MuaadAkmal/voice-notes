@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   launchAtLogin: false,
   showIdlePill: true,
   hotkeyPaused: false,
+  theme: 'system',
 };
 
 function readRaw(file: string): Record<string, unknown> {

@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
-import type { AudioDevice, Settings } from '../../shared/channels';
+import { Monitor, Moon, Sun } from 'lucide-react';
+import type { AudioDevice, Settings, Theme } from '../../shared/channels';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Kbd } from './NotesPage';
 
 const api = window.dashboardApi;
+const THEMES: { value: Theme; label: string; Icon: typeof Monitor }[] = [
+  { value: 'system', label: 'System', Icon: Monitor },
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+];
 // Radix Select can't hold an empty value; this stands for "System default" (micDeviceId null).
 const DEFAULT_MIC = 'default';
 
@@ -51,6 +57,22 @@ export function SettingsPage() {
           <Button variant="outline" size="sm" onClick={changeHotkey} disabled={capturing}>
             Change
           </Button>
+        </Row>
+
+        <Row title="Appearance" hint="System follows your Windows light/dark setting.">
+          <div role="group" aria-label="Appearance" className="flex rounded-lg border bg-muted p-0.5">
+            {THEMES.map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                aria-pressed={settings.theme === value}
+                onClick={() => update({ theme: value })}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+              >
+                <Icon className="size-3.5" />
+                {label}
+              </button>
+            ))}
+          </div>
         </Row>
 
         <Row title="Microphone">

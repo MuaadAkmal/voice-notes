@@ -139,10 +139,10 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
     >
       <header className="mb-7">
         {path.length > 1 && (
-          <nav className="mb-1 flex flex-wrap items-center gap-1 text-xs text-stone-500">
+          <nav className="mb-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {path.slice(0, -1).map((f) => (
               <span key={f.id} className="flex items-center gap-1">
-                <button className="hover:text-stone-900 hover:underline" onClick={() => onNavigate({ kind: 'folder', id: f.id })}>
+                <button className="hover:text-foreground hover:underline" onClick={() => onNavigate({ kind: 'folder', id: f.id })}>
                   {f.name}
                 </button>
                 <span>›</span>
@@ -152,7 +152,7 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
         )}
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {view.kind !== 'folder' && (
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Hold <Kbd>{hotkeyLabel}</Kbd> anywhere to record. New notes land in Inbox.
           </p>
         )}
@@ -166,14 +166,14 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
       />
 
       {selected.size > 0 && (
-        <div className="sticky top-3 z-10 mb-4 flex items-center gap-3 rounded-xl border border-stone-200 bg-white/95 px-4 py-2 text-sm shadow-sm backdrop-blur">
+        <div className="sticky top-3 z-10 mb-4 flex items-center gap-3 rounded-xl border bg-card/95 px-4 py-2 text-sm shadow-sm backdrop-blur">
           <span className="font-medium">{selected.size} selected</span>
-          <span className="text-stone-400">Drag onto a folder to move</span>
+          <span className="text-muted-foreground/70">Drag onto a folder to move</span>
           <span className="flex-1" />
-          <button className="rounded-md px-2 py-1 text-red-600 hover:bg-red-50" onClick={() => remove(order.filter((id) => selected.has(id)))}>
+          <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>
             Delete
           </button>
-          <button className="rounded-md px-2 py-1 text-stone-600 hover:bg-stone-100" onClick={clearSelection}>
+          <button className="rounded-md px-2 py-1 text-muted-foreground hover:bg-accent" onClick={clearSelection}>
             Clear
           </button>
         </div>
@@ -184,8 +184,8 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
       ) : (
         groupByDay(visible, Date.now()).map((group) => (
           <section key={group.label} className="mb-8">
-            <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-stone-500">{group.label}</h2>
-            <ul className="divide-y divide-stone-100 overflow-hidden rounded-2xl border border-stone-200 bg-white">
+            <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">{group.label}</h2>
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">
               {group.notes.map((note) => (
                 <NoteRow
                   key={note.id}
@@ -213,16 +213,16 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
 
 function EmptyState({ view, hotkeyLabel }: { view: NotesView; hotkeyLabel: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-stone-300 bg-white px-8 py-14 text-center">
+    <div className="rounded-2xl border border-dashed bg-card px-8 py-14 text-center">
       {view.kind === 'folder' ? (
         <>
           <p className="text-[15px] font-medium">No notes here</p>
-          <p className="mt-1 text-sm text-stone-500">Drag notes onto this folder in the sidebar.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Drag notes onto this folder in the sidebar.</p>
         </>
       ) : (
         <>
           <p className="text-[15px] font-medium">No notes yet</p>
-          <p className="mt-1 text-sm text-stone-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Hold <Kbd>{hotkeyLabel}</Kbd> anywhere to record your first phrase.
           </p>
         </>
@@ -233,7 +233,7 @@ function EmptyState({ view, hotkeyLabel }: { view: NotesView; hotkeyLabel: strin
 
 export function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-md border border-stone-300 bg-white px-1.5 py-0.5 font-sans text-xs font-medium text-stone-700 shadow-[0_1px_0_0_rgb(0_0_0/0.06)]">
+    <kbd className="rounded-md border border-border bg-background px-1.5 py-0.5 font-sans text-xs font-medium text-foreground/80 shadow-[0_1px_0_0_rgb(0_0_0/0.06)]">
       {children}
     </kbd>
   );

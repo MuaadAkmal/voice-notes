@@ -24,6 +24,8 @@ export async function launch(): Promise<TestApp> {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
   const app = await electron.launch({
     args: ['.', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    // Playwright emulates prefers-color-scheme: light by default; let nativeTheme decide, as in the real app.
+    colorScheme: null,
     env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData },
   });
   const dashboard = await app.waitForEvent('window', { predicate: (p) => p.url().includes('/dashboard/') });

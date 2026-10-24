@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, session } from 'electron';
+import { app, type BrowserWindow, nativeTheme, session } from 'electron';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
@@ -11,7 +11,7 @@ import { RecorderController } from './recorder/controller';
 import { loadSettings, saveSettings } from './settings';
 import { NoteStore } from './store/note-store';
 import { createTray } from './tray';
-import { createDashboardWindow, createOverlayWindow } from './windows';
+import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
@@ -42,6 +42,9 @@ async function boot(): Promise<void> {
   const userData = app.getPath('userData');
   const settingsFile = path.join(userData, 'settings.json');
   const settings: Settings = loadSettings(settingsFile);
+  // themeSource drives prefers-color-scheme in every renderer; the dashboard maps that to html.dark.
+  nativeTheme.themeSource = settings.theme;
+  nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
   const store = NoteStore.open(userData);
   log.info('[store] reconcile', await store.reconcile());
   registerNoteProtocol(store);
@@ -119,6 +122,7 @@ async function boot(): Promise<void> {
       app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: [HIDDEN_ARG] });
     }
     if (patch.showIdlePill !== undefined && controller.state === 'idle') send(Ch.OverlayState, idleState());
+    if (patch.theme) nativeTheme.themeSource = settings.theme; // fires 'updated' → caption buttons recolour
     toDashboard(Ch.SettingsChanged);
     return { ...settings };
   }

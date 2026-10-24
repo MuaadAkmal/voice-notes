@@ -1,10 +1,24 @@
-import { BrowserWindow, screen } from 'electron';
+import { BrowserWindow, nativeTheme, screen } from 'electron';
 import path from 'node:path';
 
 const OVERLAY_WIDTH = 360;
 const OVERLAY_HEIGHT = 80;
 const OVERLAY_MARGIN = 16;
 const TITLEBAR_HEIGHT = 40; // keep in sync with the dashboard's h-10 drag strip
+// Caption-button strip colours; `color` matches the dashboard background in each theme.
+const TITLEBAR = {
+  light: { color: '#fafaf9', symbolColor: '#44403c' },
+  dark: { color: '#0c0a09', symbolColor: '#d6d3d1' },
+};
+
+const titleBarColors = () => (nativeTheme.shouldUseDarkColors ? TITLEBAR.dark : TITLEBAR.light);
+
+/** Recolour the native caption buttons after the effective theme changes. */
+export function applyTitleBarTheme(win: BrowserWindow | null): void {
+  if (!win || win.isDestroyed()) return;
+  win.setTitleBarOverlay({ ...titleBarColors(), height: TITLEBAR_HEIGHT });
+  win.setBackgroundColor(titleBarColors().color);
+}
 
 const secureWebPreferences = (preload: string) => ({
   preload: path.join(__dirname, preload),
@@ -78,10 +92,10 @@ export function createDashboardWindow(): BrowserWindow {
     minHeight: 480,
     title: 'Voice Notes',
     autoHideMenuBar: true,
-    backgroundColor: '#fafaf9',
+    backgroundColor: titleBarColors().color,
     // Frameless look like Wispr Flow, but keep native caption buttons (and Windows 11 snap layouts).
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#fafaf9', symbolColor: '#44403c', height: TITLEBAR_HEIGHT },
+    titleBarOverlay: { ...titleBarColors(), height: TITLEBAR_HEIGHT },
     webPreferences: secureWebPreferences('dashboard.cjs'),
   });
   loadRenderer(win, DASHBOARD_VITE_DEV_SERVER_URL, DASHBOARD_VITE_NAME);

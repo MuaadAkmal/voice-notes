@@ -157,7 +157,7 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
     },
   });
 
-  const ring = (key: DropKey) => (dropKey === key ? 'ring-2 ring-stone-900/70 bg-white' : '');
+  const ring = (key: DropKey) => (dropKey === key ? 'ring-2 ring-ring bg-background' : '');
 
   // ---- rendering ---------------------------------------------------------
   const renderNode = (node: FolderNode, depth: number): React.ReactNode => {
@@ -210,14 +210,14 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
           }}
           onDragEnd={() => setDragging(null)}
           className={`group relative flex items-center rounded-lg pr-1 text-sm transition-colors ${
-            active ? 'bg-white font-medium shadow-sm ring-1 ring-stone-200' : 'text-stone-700 hover:bg-stone-200/60'
+            active ? 'bg-background font-medium shadow-sm ring-1 ring-border' : 'text-sidebar-foreground/85 hover:bg-sidebar-accent'
           } ${ring(node.id)}`}
           style={{ paddingLeft: 6 + depth * 14 }}
         >
           <button
             aria-label={open ? 'Collapse' : 'Expand'}
             onClick={() => setOpen(node.id, !open)}
-            className={`grid h-6 w-5 shrink-0 place-items-center text-stone-400 hover:text-stone-700 ${
+            className={`grid h-6 w-5 shrink-0 place-items-center text-muted-foreground hover:text-foreground ${
               node.children.length ? '' : 'invisible'
             }`}
           >
@@ -239,7 +239,7 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
             <DropdownMenuTrigger asChild>
               <button
                 aria-label="Folder options"
-                className="grid h-6 w-6 shrink-0 place-items-center rounded text-stone-400 opacity-0 hover:bg-stone-200 hover:text-stone-700 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground opacity-0 hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
               >
                 <Dots />
               </button>
@@ -267,7 +267,7 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
   };
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-stone-200 bg-stone-100/70">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3 pt-3">
         <NavItem
           label="Inbox"
@@ -290,12 +290,12 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
           {...dropProps('root')}
           className={`mt-5 flex items-center justify-between rounded-md px-2 py-1 ${ring('root')}`}
         >
-          <span className="text-[11px] font-medium uppercase tracking-wider text-stone-500">Folders</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Folders</span>
           <button
             aria-label="New folder"
             title="New folder"
             onClick={() => setEditing({ mode: 'create', parentId: null })}
-            className="grid h-5 w-5 place-items-center rounded text-stone-500 hover:bg-stone-200 hover:text-stone-800"
+            className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
           >
             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M12 5v14M5 12h14" strokeLinecap="round" />
@@ -307,10 +307,10 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
           {tree.map((n) => renderNode(n, 0))}
         </ul>
         {tree.length === 0 && editing === null && (
-          <p className="px-2 py-1 text-xs text-stone-400">No folders yet. Click + to create one.</p>
+          <p className="px-2 py-1 text-xs text-muted-foreground/70">No folders yet. Click + to create one.</p>
         )}
       </div>
-      <div className="border-t border-stone-200 px-3 py-3">
+      <div className="border-t border-sidebar-border px-3 py-3">
         <NavItem
           label="Settings"
           active={view.kind === 'settings'}
@@ -337,14 +337,14 @@ function NavItem({ label, icon, active, onClick, count, extra = '', ...drop }: N
       {...drop}
       onClick={onClick}
       className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
-        active ? 'bg-white font-medium shadow-sm ring-1 ring-stone-200' : 'text-stone-600 hover:bg-stone-200/60'
+        active ? 'bg-background font-medium shadow-sm ring-1 ring-border' : 'text-sidebar-foreground/75 hover:bg-sidebar-accent'
       } ${extra}`}
     >
       <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8}>
         <path d={icon} strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <span className="flex-1">{label}</span>
-      {count !== undefined && <span className="text-xs tabular-nums text-stone-400">{count}</span>}
+      {count !== undefined && <span className="text-xs tabular-nums text-muted-foreground/70">{count}</span>}
     </button>
   );
 }
@@ -387,14 +387,14 @@ function NameInput({ initial, onCommit }: { initial: string; onCommit: (name: st
       onBlur={(e) => {
         if (!busy.current) commit(e.currentTarget.value);
       }}
-      className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-1.5 py-0.5 text-sm outline-none focus:border-stone-500"
+      className="min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 py-0.5 text-sm outline-none focus:border-ring"
     />
   );
 }
 
 
 const FolderIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-stone-500" fill="none" stroke="currentColor" strokeWidth={1.8}>
+  <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth={1.8}>
     <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" strokeLinejoin="round" />
   </svg>
 );

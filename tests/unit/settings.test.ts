@@ -33,6 +33,14 @@ it('saveSettings persists and returns merged', () => {
   expect(fs.existsSync(`${file}.tmp`)).toBe(false);
 });
 
+it('theme defaults to system and rejects unknown values', () => {
+  expect(DEFAULT_SETTINGS.theme).toBe('system');
+  fs.writeFileSync(file, JSON.stringify({ theme: 'blue' }));
+  expect(loadSettings(file).theme).toBe('system');
+  fs.writeFileSync(file, JSON.stringify({ theme: 'dark' }));
+  expect(loadSettings(file).theme).toBe('dark');
+});
+
 it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);
