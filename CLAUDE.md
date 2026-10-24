@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Voice Notes**: a Windows Electron app. A global hotkey (default Alt+Win) shows a floating pill that records a voice note to a local `.webm` file indexed in SQLite. A dashboard plays, renames and deletes notes. Spec: `docs/superpowers/specs/2026-10-24-voice-notes-desktop-v1-design.md`; plan: `docs/superpowers/plans/2026-10-24-voice-notes-desktop-v1.md`.
+**Voice Notes**: a Windows Electron app. A global hotkey (default Alt+Win) shows a floating pill that records a voice note to a local `.webm` file indexed in SQLite. A dashboard organises notes into nested folders (Inbox = unfiled), and plays, renames, moves (drag & drop, multi-select) and deletes them. Specs: `docs/superpowers/specs/` (v1 design + folders addendum); plans: `docs/superpowers/plans/`.
 
 ## Commands
 
@@ -12,21 +12,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm test`: Vitest unit tests. Runs **under Electron as Node** (`ELECTRON_RUN_AS_NODE=1`) because `better-sqlite3`/`uiohook-napi` are rebuilt for Electron's ABI by `postinstall`. Never run vitest with plain `node`/`npx vitest`. Filter: `npm test -- gesture`.
 - `npm run typecheck`: `tsc --noEmit`
 - `npm run package` / `npm run make`: packaged app / Squirrel installer in `out/`
-- `npm run test:e2e`: runs `package` (emits the production Vite build to `.vite/`), then Playwright `_electron` tests in `tests/e2e/`. They launch `electron .` with the dev binary, not the packaged exe, because packaged fuses disable the Node inspector Playwright needs.
+- `npm run test:e2e`: runs `package` (emits the production Vite build to `.vite/`), then Playwright `_electron` tests in `tests/e2e/` (shared launcher `tests/e2e/launch.ts`; screenshots to `.superpowers/shots/`). Stop any running `npm start` first: its watcher rewrites `.vite/` with dev-server URLs. They launch `electron .` with the dev binary, not the packaged exe, because packaged fuses disable the Node inspector Playwright needs.
 - Packaging: Vite bundles everything except `better-sqlite3`/`uiohook-napi`; `forge.config.mts` `packageAfterCopy` copies them (plus `node-gyp-build`) into the package. Add any new native module there and to `vite.main.config.mts` externals.
 
 ## Architecture
 
-- `src/main/`: Electron main. Pure, unit-tested core (`hotkey/gesture.ts`, `recorder/controller.ts`, `store/note-store.ts`, `settings.ts`) plus thin Electron adapters (`hotkey/service.ts` uiohook, `windows.ts`, `ipc.ts`, `protocol.ts`, `tray.ts`). `index.ts` wires them.
+- `src/main/`: Electron main. Pure, unit-tested core (`hotkey/gesture.ts`, `recorder/controller.ts`, `store/note-store.ts`, `store/folder-store.ts`, `settings.ts`) plus thin Electron adapters (`hotkey/service.ts` uiohook, `windows.ts`, `ipc.ts`, `protocol.ts`, `tray.ts`). `index.ts` wires them.
 - `src/preload/`: one sandboxed preload per renderer (`overlay.ts`, `dashboard.ts`), built to `.vite/build/<name>.cjs`.
 - `src/renderer/overlay/`: the floating pill; owns mic capture (`MediaRecorder`).
-- `src/renderer/dashboard/`: notes list and settings.
-- `src/shared/`: IPC channel names, payload types and zod schemas (`ipc.ts`), plus pure formatting helpers.
+- `src/renderer/dashboard/`: `App.tsx` owns the `View` (`inbox | all | folder | settings`) and loads notes + folders; `Sidebar.tsx` (folder tree, inline create/rename, drop targets), `NotesPage.tsx` (filtered list, selection, drag source), `dnd.ts` (current drag payload, since dataTransfer is unreadable during dragover), `Toast.tsx`.
+- `src/shared/`: IPC channel names, payload types and zod schemas (`ipc.ts`), plus pure helpers: `format.ts`, `folders.ts` (tree, path, cycle check, range selection).
 - Vite configs are `.mts` (Forge 8). Renderer roots are `src/renderer/<name>`; CSP is injected at build time only (`vite.csp.mts`).
 
 ## Data
 
-`%APPDATA%/Voice Notes/`: `recordings/<uuid>.webm`, `voice-notes.sqlite`, `settings.json`, `logs/`. Override with env `VOICE_NOTES_USER_DATA` (used by e2e). `VOICE_NOTES_TEST=1` exposes `globalThis.__voiceNotes` in main for Playwright.
+`%APPDATA%/Voice Notes/`: `recordings/<uuid>.webm`, `voice-notes.sqlite`, `settings.json`, `logs/`. Folders are database rows only (migration #2); audio files never move. Override the data dir with env `VOICE_NOTES_USER_DATA` (used by e2e). `VOICE_NOTES_TEST=1` exposes `globalThis.__voiceNotes` in main for Playwright.
 
 ## Contents
 

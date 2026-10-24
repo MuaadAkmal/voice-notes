@@ -1,44 +1,23 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { _electron as electron, type ElectronApplication, expect, type Page, test } from '@playwright/test';
-import type { Note } from '../../src/shared/channels';
+import { expect, type Page, test } from '@playwright/test';
+import { launch, type TestApp } from './launch';
 
-// Drives the production Vite build (`npm run package` emits .vite/) through the dev Electron binary:
-// packaged builds disable the Node inspector fuse that Playwright needs.
-type Hooks = {
-  gesture: { toggle(): void; escape(): void };
-  store: { list(): Note[]; absolutePath(n: Note): string };
-};
-
-let app: ElectronApplication;
+let t: TestApp;
 let dashboard: Page;
-let userData: string;
-
-const hooks = <T>(fn: (h: Hooks) => T) =>
-  app.evaluate((_electron, src) => {
-    const h = (globalThis as unknown as { __voiceNotes: Hooks }).__voiceNotes;
-    return new Function('h', `return (${src})(h)`)(h);
-  }, fn.toString()) as Promise<T>;
+const hooks: TestApp['hooks'] = (fn) => t.hooks(fn);
 
 test.beforeEach(async () => {
-  userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
-  app = await electron.launch({
-    args: ['.', '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
-    env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData },
-  });
-  dashboard = await app.waitForEvent('window', { predicate: (p) => p.url().includes('/dashboard/') });
-  await dashboard.waitForLoadState('domcontentloaded');
+  t = await launch();
+  dashboard = t.dashboard;
 });
 
 test.afterEach(async () => {
-  await app.evaluate(({ app }) => app.exit(0)).catch(() => undefined);
+  await t.close();
 });
 
 test('records a note via gesture and manages it from the dashboard', async () => {
-  await hooks((h) => h.gesture.toggle()); // start + hands-free
-  await dashboard.waitForTimeout(1500);
-  await hooks((h) => h.gesture.toggle()); // stop
+  await t.record();
   await expect.poll(() => hooks((h) => h.store.list().length)).toBe(1);
 
   const file = await hooks((h) => h.store.absolutePath(h.store.list()[0]));
@@ -74,5 +53,5 @@ test('cancel does not create a note', async () => {
   await hooks((h) => h.gesture.escape());
   await dashboard.waitForTimeout(1000);
   expect(await hooks((h) => h.store.list().length)).toBe(0);
-  expect(fs.readdirSync(path.join(userData, 'recordings'))).toEqual([]);
+  expect(fs.readdirSync(path.join(t.userData, 'recordings'))).toEqual([]);
 });
