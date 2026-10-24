@@ -45,7 +45,7 @@ Overlay renderer (React)    pill UI; owns getUserMedia + MediaRecorder; sends au
 Dashboard renderer (React)  sidebar (Notes, Settings); list, playback, rename, delete
 ```
 
-**Stack:** Electron Forge (Vite + TypeScript template), React 18, Tailwind CSS, Drizzle ORM + better-sqlite3, uiohook-napi, Vitest, Playwright (`_electron`).
+**Stack:** Electron Forge (Vite + TypeScript template), Electron 45, React 19, Tailwind CSS, Drizzle ORM + better-sqlite3, uiohook-napi, Vitest, Playwright (`_electron`).
 
 **Unit boundaries**
 | Unit | Purpose | Depends on |
@@ -80,11 +80,11 @@ notes {
 }
 ```
 
-Migrations via `drizzle-kit` generated SQL, applied at startup. Future metadata fields (see §1) are added as nullable columns.
+Migrations: an ordered array of SQL strings in `src/main/store/migrations.ts`, applied at startup and tracked with `PRAGMA user_version` (no migrations folder to ship in the package). Drizzle is used for typed queries only. Future metadata fields (see §1) are added as nullable columns.
 
 **Write order:** write file to `recordings/<id>.webm.tmp` → fsync → rename to `.webm` → insert row. A crash between steps leaves an orphan file, which startup reconcile adopts.
 
-**Startup reconcile:** rows whose file is absent → `status='missing'`; `.webm` files without a row → insert row (duration probed in renderer lazily, stored as 0 until first play); stale `.tmp` files → deleted.
+**Startup reconcile:** rows whose file is absent → `status='missing'`; `.webm` files without a row → insert row with `durationMs = 0`, shown as "—" in the dashboard; stale `.tmp` files → deleted.
 
 Why files + SQLite (not BLOBs, not a cloud DB): audio is the primary artifact to replay/export/sync; files are backup-friendly and survive DB corruption. A cloud DB (Neon/Prisma) would make capture network-dependent. Future web: Postgres (Neon) for metadata + object storage (R2/S3/Vercel Blob) for audio; Drizzle schema ports over.
 
@@ -92,7 +92,7 @@ Why files + SQLite (not BLOBs, not a cloud DB): audio is the primary artifact to
 
 **Hotkey (default `Ctrl+Win`, configurable):**
 - **Hold** ≥ 250 ms → push-to-talk; **release** → stop & save.
-- **Double-tap** (two presses whose releases fall within 400 ms, each press < 250 ms) → hands-free; next **single tap** → stop & save.
+- **Double-tap** (a press < 250 ms, then a second key-down within 400 ms of its release) → hands-free; next **single tap** → stop & save.
 - **Esc** while recording → cancel, discard.
 - **Click pill** → toggle hands-free.
 
@@ -148,7 +148,7 @@ src/
   main/        index.ts, windows.ts, tray.ts, ipc.ts, protocol.ts, settings.ts
   main/hotkey/ gesture.ts, service.ts
   main/recorder/ controller.ts
-  main/store/  schema.ts, note-store.ts, migrations/
+  main/store/  schema.ts, note-store.ts, migrations.ts
   preload/     overlay.ts, dashboard.ts
   shared/      ipc-types.ts
   renderer/overlay/   index.html, main.tsx, Pill.tsx, useRecorder.ts
