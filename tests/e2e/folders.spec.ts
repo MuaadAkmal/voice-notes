@@ -98,3 +98,18 @@ test('folders: nesting, duplicate-name toast, multi-select drag, cycle refused',
   await expect(page.getByText('Spanish › Films')).toHaveCount(2);
   await shot('5-all');
 });
+
+test('playback stops when the playing note leaves the view', async () => {
+  await t.record(8000); // long enough that it can't simply finish during the check
+  await createFolder('Spanish');
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  await page.getByRole('button', { name: 'Play' }).click();
+  await expect.poll(() => page.evaluate(() => document.querySelector('audio')!.currentTime)).toBeGreaterThan(0);
+  await folderRow('Spanish').getByText('Spanish').click();
+  await page.waitForTimeout(300);
+  const state = await page.evaluate(() => {
+    const a = document.querySelector('audio')!;
+    return { paused: a.paused, ended: a.ended };
+  });
+  expect(state).toEqual({ paused: true, ended: false });
+});

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { type AudioDevice, Ch, type Folder, type Note, type Settings } from '../shared/channels';
+import { type AudioDevice, Ch, type Folder, MAX_BATCH, type Note, type Settings } from '../shared/channels';
+import { chunk } from '../shared/format';
 
 const subscribe = (channel: string, cb: () => void) => {
   const listener = () => cb();
@@ -19,9 +20,13 @@ const dashboardApi = {
   captureHotkey: (): Promise<{ keycodes: number[]; label: string }> => ipcRenderer.invoke(Ch.HotkeyCapture),
   listDevices: (): Promise<AudioDevice[]> => ipcRenderer.invoke(Ch.DevicesList),
   openRecordingsFolder: (): Promise<void> => ipcRenderer.invoke(Ch.OpenRecordingsFolder),
-  moveNotes: (ids: string[], folderId: string | null): Promise<void> =>
-    ipcRenderer.invoke(Ch.NotesMove, { ids, folderId }),
-  deleteNotes: (ids: string[]): Promise<void> => ipcRenderer.invoke(Ch.NotesDeleteMany, ids),
+  // Main caps each call at MAX_BATCH ids; larger selections go in sequential batches.
+  moveNotes: async (ids: string[], folderId: string | null): Promise<void> => {
+    for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.NotesMove, { ids: batch, folderId });
+  },
+  deleteNotes: async (ids: string[]): Promise<void> => {
+    for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.NotesDeleteMany, batch);
+  },
   listFolders: (): Promise<Folder[]> => ipcRenderer.invoke(Ch.FoldersList),
   createFolder: (name: string, parentId: string | null): Promise<Folder> =>
     ipcRenderer.invoke(Ch.FoldersCreate, { name, parentId }),

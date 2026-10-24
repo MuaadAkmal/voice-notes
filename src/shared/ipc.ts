@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { Settings } from './channels';
+import { MAX_BATCH, type Settings } from './channels';
 
 export * from './channels';
 
@@ -34,5 +34,5 @@ const ParentSchema = IdSchema.nullable();
 export const CreateFolderSchema = z.object({ name: FolderNameSchema, parentId: ParentSchema });
 export const RenameFolderSchema = z.object({ id: IdSchema, name: FolderNameSchema });
 export const MoveFolderSchema = z.object({ id: IdSchema, parentId: ParentSchema });
-export const IdListSchema = z.array(IdSchema).min(1).max(500);
+export const IdListSchema = z.array(IdSchema).min(1).max(MAX_BATCH);
 export const MoveNotesSchema = z.object({ ids: IdListSchema, folderId: ParentSchema });

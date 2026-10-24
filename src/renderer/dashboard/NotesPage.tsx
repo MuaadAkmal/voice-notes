@@ -52,7 +52,12 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
       const next = new Set([...prev].filter((id) => ids.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [visible]);
+    // A playing note that left the view would have no row left to stop it from.
+    if (playingId && !ids.has(playingId)) {
+      audio.current?.pause();
+      setPlayingId(null);
+    }
+  }, [visible, playingId]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && clearSelection();

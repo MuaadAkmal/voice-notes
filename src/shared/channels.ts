@@ -42,6 +42,9 @@ export type AudioDevice = { deviceId: string; label: string };
 
 export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string };
 
+/** Most note ids one bulk IPC call carries (the dashboard preload batches larger selections). */
+export const MAX_BATCH = 500;
+
 export const Ch = {
   // main → overlay
   RecorderStart: 'recorder:start', // { deviceId: string | null }

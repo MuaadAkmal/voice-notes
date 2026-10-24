@@ -40,6 +40,13 @@ export function groupByDay(notes: Note[], now: number): { label: string; notes: 
   return groups;
 }
 
+/** Split into batches of at most `n`, in order. */
+export function chunk<T>(items: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += n) out.push(items.slice(i, i + n));
+  return out;
+}
+
 /** Electron wraps rejected invokes as "Error invoking remote method '<ch>': Error: <msg>"; keep just <msg>. */
 export function cleanIpcError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);

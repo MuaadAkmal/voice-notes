@@ -45,7 +45,11 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
 
   // dragleave is unreliable in Chromium; make sure no drop highlight outlives the drag.
   useEffect(() => {
-    const clear = () => setDropKey(null);
+    // Also forget the drag payload: if the dragged row unmounted mid-drag, React never saw its dragend.
+    const clear = () => {
+      setDropKey(null);
+      setDragging(null);
+    };
     window.addEventListener('dragend', clear);
     window.addEventListener('drop', clear);
     return () => {
