@@ -67,7 +67,8 @@ async function boot(): Promise<void> {
       return;
     }
     desktopCapturer
-      .getSources({ types: ['screen'] })
+      // No thumbnails: they're unused and generating them delays the start of every system clip.
+      .getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
       .then(([screen]) => callback(screen ? { video: screen, audio: 'loopback' } : {}))
       .catch((err) => {
         log.error('[capture] getSources failed', err);

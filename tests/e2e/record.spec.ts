@@ -57,6 +57,20 @@ test('records system audio when the source is set to system', async () => {
   await expect(dashboard.getByLabel('Includes system audio')).toBeVisible();
 });
 
+test('cancelling the delete dialog keeps the note and the page stays clickable', async () => {
+  await t.record(1200);
+  await expect.poll(() => hooks((h) => h.store.list().length)).toBe(1);
+  await dashboard.getByRole('button', { name: 'More' }).click();
+  await dashboard.getByRole('menuitem', { name: 'Delete' }).click();
+  await dashboard.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(dashboard.getByRole('alertdialog')).toHaveCount(0);
+  expect(await hooks((h) => h.store.list().length)).toBe(1);
+  // Radix can leave body { pointer-events: none } behind when a dialog opens from a menu item.
+  expect(await dashboard.evaluate(() => getComputedStyle(document.body).pointerEvents)).not.toBe('none');
+  await dashboard.getByRole('button', { name: 'Settings' }).click({ timeout: 3000 });
+  await expect(dashboard.getByRole('heading', { name: 'Settings' })).toBeVisible();
+});
+
 test('cancel does not create a note', async () => {
   await hooks((h) => h.gesture.toggle());
   await dashboard.waitForTimeout(500);

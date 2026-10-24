@@ -77,8 +77,11 @@ export function useRecorder(): AnalyserNode | null {
     const micClip = (m: Mic): Clip => ({ stream: m.media, source: 'mic', analyser: m.analyser, dispose: () => undefined });
 
     const systemClip = async (): Promise<Clip> => {
+      // The user chose not to record the mic: don't leave a warm one open during this clip.
+      releaseMic();
       const sys = await openSystemAudio();
       const ctx = new AudioContext();
+      await ctx.resume();
       const node = makeAnalyser(ctx);
       ctx.createMediaStreamSource(sys).connect(node);
       return {
@@ -100,6 +103,8 @@ export function useRecorder(): AnalyserNode | null {
       });
       if (!sys) return micClip(m);
       const ctx = new AudioContext();
+      // A suspended context would mix silence into the recording.
+      await ctx.resume();
       const dest = ctx.createMediaStreamDestination();
       const node = makeAnalyser(ctx);
       for (const [stream, gain] of [
@@ -144,8 +149,10 @@ export function useRecorder(): AnalyserNode | null {
       pending.current = null;
       if (starting.current || recorder.current) return;
       starting.current = true;
+      let clip: Clip | null = null;
       try {
-        const clip = await openClip(deviceId, source);
+        clip = await openClip(deviceId, source);
+        const opened = clip;
         const rec = new MediaRecorder(clip.stream, { mimeType: MIME, audioBitsPerSecond: BITRATE });
         const chunks: Blob[] = [];
         const t0 = performance.now();
@@ -153,18 +160,21 @@ export function useRecorder(): AnalyserNode | null {
         rec.onstop = async () => {
           const durationMs = performance.now() - t0;
           const bytes = new Uint8Array(await new Blob(chunks, { type: MIME }).arrayBuffer());
-          api.sendAudio({ bytes, durationMs, mimeType: MIME, source: clip.source });
+          api.sendAudio({ bytes, durationMs, mimeType: MIME, source: opened.source });
         };
         // Runs on stop and on cancel (onstop is nulled for cancel; listeners are not).
         rec.addEventListener('stop', () => {
-          clip.dispose();
+          opened.dispose();
           setAnalyser(null);
         });
         rec.start(TIMESLICE_MS);
         recorder.current = rec;
-        setAnalyser(clip.analyser);
+        setAnalyser(opened.analyser);
       } catch (err) {
         console.error('capture failed', err);
+        // Nothing is recording: free anything this attempt opened, and let a warm mic time out.
+        clip?.dispose();
+        scheduleMicRelease();
         api.sendError(source === 'system' ? 'System audio unavailable' : 'No microphone');
       } finally {
         starting.current = false;

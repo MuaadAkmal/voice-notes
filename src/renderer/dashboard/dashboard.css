@@ -104,6 +104,14 @@
   -webkit-app-region: no-drag;
 }
 
+/* Popups render in body portals, but Electron ignores z-order for drag regions: a menu over the
+   strip would drag the window instead of being clicked. */
+[data-radix-popper-content-wrapper],
+[role='dialog'],
+[role='alertdialog'] {
+  -webkit-app-region: no-drag;
+}
+
 /* Thin, unobtrusive scrollbars to match the frameless window. */
 ::-webkit-scrollbar {
   width: 10px;
