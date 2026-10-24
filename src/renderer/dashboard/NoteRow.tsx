@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
+import { MoreHorizontal } from 'lucide-react';
 import type { Note } from '../../shared/channels';
 import { formatDuration } from '../../shared/format';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type Props = {
   note: Note;
@@ -24,7 +32,7 @@ export function NoteRow(props: Props) {
   const { note, selected, folderLabel, onSelect, onDragStart, onDragEnd } = props;
   const { playing, positionMs, onTogglePlay, onRename, onReveal, onDelete } = props;
   const [editing, setEditing] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  const renameFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const missing = note.status === 'missing';
   // MediaRecorder WebM has no duration header (<audio>.duration is Infinity), so progress uses the stored length.
@@ -33,13 +41,6 @@ export function NoteRow(props: Props) {
   useEffect(() => {
     if (editing) input.current?.select();
   }, [editing]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const close = () => setMenuOpen(false);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [menuOpen]);
 
   const commit = (value: string) => {
     setEditing(false);
@@ -52,18 +53,22 @@ export function NoteRow(props: Props) {
       draggable={!editing}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      // Clicks on the row's own controls (play, title, menu) don't change the selection.
-      onClick={(e) => !(e.target as HTMLElement).closest('button, input') && onSelect(e)}
+      onClick={(e) => {
+        const target = e.target as HTMLElement;
+        // Ignore the row's own controls, and portal content (menus) whose React events bubble here.
+        if (!e.currentTarget.contains(target) || target.closest('button, input')) return;
+        onSelect(e);
+      }}
       aria-selected={selected}
       className={`group relative flex cursor-default select-none items-center gap-4 px-4 py-3 transition-colors ${
-        selected ? 'bg-stone-100 shadow-[inset_3px_0_0_0_#1c1917]' : 'hover:bg-stone-50/80'
+        selected ? 'bg-accent shadow-[inset_3px_0_0_0_var(--foreground)]' : 'hover:bg-accent/50'
       } ${missing ? 'opacity-50' : ''}`}
     >
       <button
         onClick={onTogglePlay}
         disabled={missing}
         aria-label={playing ? 'Pause' : 'Play'}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-stone-900 text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:bg-stone-300"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {playing ? (
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
@@ -88,72 +93,73 @@ export function NoteRow(props: Props) {
               if (e.key === 'Enter') commit(e.currentTarget.value);
               if (e.key === 'Escape') setEditing(false);
             }}
-            className="w-full rounded-md border border-stone-300 px-2 py-0.5 text-sm outline-none focus:border-stone-500"
+            className="w-full rounded-md border border-input bg-background px-2 py-0.5 text-sm outline-none focus:border-ring"
           />
         ) : (
           <button
             onClick={() => setEditing(true)}
             title="Click to rename"
-            className="block max-w-full truncate text-left text-sm font-medium hover:underline hover:decoration-stone-300"
+            className="block max-w-full truncate text-left text-sm font-medium hover:underline hover:decoration-muted-foreground/40"
           >
             {note.title}
           </button>
         )}
         <div className="mt-1.5 flex items-center gap-3">
           {folderLabel && (
-            <span className="max-w-48 truncate rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">{folderLabel}</span>
+            <span className="max-w-48 truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {folderLabel}
+            </span>
           )}
           {missing ? (
-            <span className="text-xs text-red-600">File missing</span>
+            <span className="text-xs text-destructive">File missing</span>
           ) : (
             note.durationMs > 0 && (
-              <div className="h-1 w-40 overflow-hidden rounded-full bg-stone-200">
-                <div className="h-full rounded-full bg-stone-800" style={{ width: `${progress * 100}%` }} />
+              <div className="h-1 w-40 overflow-hidden rounded-full bg-muted">
+                <div className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
               </div>
             )
           )}
         </div>
       </div>
 
-      <span className="w-12 text-right text-xs tabular-nums text-stone-500">{formatDuration(note.durationMs)}</span>
-      <span className="w-12 text-right text-xs tabular-nums text-stone-400">{timeOf(note.createdAt)}</span>
+      <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{formatDuration(note.durationMs)}</span>
+      <span className="w-12 text-right text-xs tabular-nums text-muted-foreground/70">{timeOf(note.createdAt)}</span>
 
-      <div className="relative">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setMenuOpen((o) => !o);
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label="More"
+            className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-44"
+          // Returning focus to the trigger would immediately blur (and commit) the rename input.
+          onCloseAutoFocus={(e) => {
+            if (renameFromMenu.current) {
+              e.preventDefault();
+              renameFromMenu.current = false;
+            }
           }}
-          aria-label="More"
-          className="grid h-8 w-8 place-items-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-stone-700"
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-            <circle cx="5" cy="12" r="1.8" />
-            <circle cx="12" cy="12" r="1.8" />
-            <circle cx="19" cy="12" r="1.8" />
-          </svg>
-        </button>
-        {menuOpen && (
-          <div className="absolute right-0 top-9 z-10 w-44 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm shadow-lg">
-            <MenuItem onClick={() => setEditing(true)}>Rename</MenuItem>
-            {!missing && <MenuItem onClick={onReveal}>Show in folder</MenuItem>}
-            <MenuItem danger onClick={onDelete}>
-              Delete
-            </MenuItem>
-          </div>
-        )}
-      </div>
+          <DropdownMenuItem
+            onSelect={() => {
+              renameFromMenu.current = true;
+              setEditing(true);
+            }}
+          >
+            Rename
+          </DropdownMenuItem>
+          {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </li>
-  );
-}
-
-function MenuItem({ children, danger, onClick }: { children: React.ReactNode; danger?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`block w-full px-3 py-1.5 text-left hover:bg-stone-100 ${danger ? 'text-red-600' : 'text-stone-700'}`}
-    >
-      {children}
-    </button>
   );
 }

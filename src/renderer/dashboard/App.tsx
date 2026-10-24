@@ -4,6 +4,7 @@ import { NotesPage } from './NotesPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
 import { ToastProvider } from './Toast';
+import { ConfirmProvider } from './ConfirmDialog';
 
 export type View = { kind: 'inbox' } | { kind: 'all' } | { kind: 'folder'; id: string } | { kind: 'settings' };
 
@@ -40,6 +41,7 @@ export function App() {
 
   return (
     <ToastProvider>
+      <ConfirmProvider>
       <div className="flex h-screen flex-col bg-stone-50 text-stone-900 antialiased">
         {/* Draggable strip replacing the native title bar; caption buttons are drawn over its right end. */}
         <div className="app-drag flex h-10 shrink-0">
@@ -61,6 +63,7 @@ export function App() {
           </main>
         </div>
       </div>
+      </ConfirmProvider>
     </ToastProvider>
   );
 }

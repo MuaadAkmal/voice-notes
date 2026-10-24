@@ -22,7 +22,7 @@ async function createFolder(name: string, parent?: string) {
   if (parent) {
     await folderRow(parent).hover();
     await folderRow(parent).getByRole('button', { name: 'Folder options' }).click();
-    await page.getByRole('button', { name: 'New subfolder' }).click();
+    await page.getByRole('menuitem', { name: 'New subfolder' }).click();
   } else {
     await page.getByRole('button', { name: 'New folder' }).click();
   }
@@ -49,10 +49,12 @@ test('folders: create, drag a note in, delete folder returns it to Inbox', async
   await expect(page.getByText(/^Voice note · /)).toBeVisible();
   await shot('2-folder');
 
-  page.once('dialog', (d) => d.accept());
   await folderRow('Spanish').hover();
   await folderRow('Spanish').getByRole('button', { name: 'Folder options' }).click();
-  await page.getByRole('button', { name: 'Delete' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.waitForTimeout(400); // let the menu/dialog animations settle
+  await shot('6-confirm');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
   await expect.poll(() => t.hooks((h) => h.store.list()[0].folderId)).toBeNull();
   await expect(page.getByRole('heading', { name: 'Inbox' })).toBeVisible();
 });

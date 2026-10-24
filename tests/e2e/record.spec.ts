@@ -40,9 +40,9 @@ test('records a note via gesture and manages it from the dashboard', async () =>
   await expect.poll(() => hooks((h) => h.store.list()[0].title)).toBe('hola');
 
   // Delete
-  dashboard.once('dialog', (d) => d.accept());
   await dashboard.getByRole('button', { name: 'More' }).click();
-  await dashboard.getByRole('button', { name: 'Delete' }).click();
+  await dashboard.getByRole('menuitem', { name: 'Delete' }).click();
+  await dashboard.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
   await expect(dashboard.getByText('No notes yet')).toBeVisible();
   expect(fs.existsSync(file)).toBe(false);
 });

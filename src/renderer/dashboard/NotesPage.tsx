@@ -6,6 +6,7 @@ import type { View } from './App';
 import { NOTES_MIME, onDropped, setCountDragImage, setDragging } from './dnd';
 import { NoteRow } from './NoteRow';
 import { useToast } from './Toast';
+import { useConfirm } from './ConfirmDialog';
 
 const api = window.dashboardApi;
 
@@ -16,6 +17,7 @@ const viewKey = (v: NotesView) => (v.kind === 'folder' ? v.id : v.kind);
 
 export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
@@ -116,7 +118,8 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   };
 
   const remove = async (ids: string[]) => {
-    if (!confirm(ids.length === 1 ? 'Delete this note?' : `Delete ${ids.length} notes?`)) return;
+    const ok = await confirm({ title: ids.length === 1 ? 'Delete this note?' : `Delete ${ids.length} notes?` });
+    if (!ok) return;
     stopIfPlaying(ids);
     try {
       await (ids.length === 1 ? api.deleteNote(ids[0]) : api.deleteNotes(ids));

@@ -4,7 +4,22 @@ import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { cleanIpcError } from '../../shared/format';
 import { FOLDER_MIME, getDragging, notifyDropped, setDragging } from './dnd';
 import { useToast } from './Toast';
+import { useConfirm } from './ConfirmDialog';
 import type { View } from './App';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const api = window.dashboardApi;
 const EXPANDED_KEY = 'vn.expanded';
@@ -39,7 +54,9 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
   const toast = useToast();
   const [expanded, setExpanded] = useState(loadExpanded);
   const [editing, setEditing] = useState<Editing>(null);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
+  // Set when a menu action opens an inline input, so the menu doesn't hand focus back and blur it.
+  const keepFocus = useRef(false);
+  const confirm = useConfirm();
   const [dropKey, setDropKey] = useState<DropKey | null>(null);
   const tree = buildTree(folders);
 
@@ -57,13 +74,6 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
       window.removeEventListener('drop', clear);
     };
   }, []);
-
-  useEffect(() => {
-    if (!menuFor) return;
-    const close = () => setMenuFor(null);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [menuFor]);
 
   const setOpen = (id: string, open: boolean) =>
     setExpanded((prev) => {
@@ -100,9 +110,13 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
     }
   };
 
-  const remove = (folder: Folder) => {
+  const remove = async (folder: Folder) => {
     const parent = folders.find((f) => f.id === folder.parentId);
-    if (!confirm(`Delete "${folder.name}"? Its notes and subfolders move to ${parent ? parent.name : 'Inbox'}.`)) return;
+    const ok = await confirm({
+      title: `Delete "${folder.name}"?`,
+      description: `Its notes and subfolders move to ${parent ? parent.name : 'Inbox'}.`,
+    });
+    if (!ok) return;
     if (view.kind === 'folder' && isDescendant(folders, folder.id, view.id)) onSelect(parent ? { kind: 'folder', id: parent.id } : { kind: 'inbox' });
     run(api.deleteFolder(folder.id));
   };
@@ -150,8 +164,42 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
     const open = expanded.has(node.id);
     const active = view.kind === 'folder' && view.id === node.id;
     const renaming = editing?.mode === 'rename' && editing.id === node.id;
+    // Same actions for the ⋯ dropdown and the right-click context menu.
+    const items = (Item: typeof DropdownMenuItem | typeof ContextMenuItem, Separator: React.ElementType) => (
+      <>
+        <Item
+          onSelect={() => {
+            keepFocus.current = true;
+            setOpen(node.id, true);
+            setEditing({ mode: 'create', parentId: node.id });
+          }}
+        >
+          New subfolder
+        </Item>
+        <Item
+          onSelect={() => {
+            keepFocus.current = true;
+            setEditing({ mode: 'rename', id: node.id });
+          }}
+        >
+          Rename
+        </Item>
+        <Separator />
+        <Item variant="destructive" onSelect={() => remove(node)}>
+          Delete
+        </Item>
+      </>
+    );
+    const holdFocus = (e: Event) => {
+      if (keepFocus.current) {
+        e.preventDefault();
+        keepFocus.current = false;
+      }
+    };
     return (
       <li key={node.id}>
+        <ContextMenu>
+        <ContextMenuTrigger asChild>
         <div
           {...dropProps(node.id)}
           draggable={!renaming}
@@ -161,10 +209,6 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
             e.dataTransfer.effectAllowed = 'move';
           }}
           onDragEnd={() => setDragging(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            setMenuFor(node.id);
-          }}
           className={`group relative flex items-center rounded-lg pr-1 text-sm transition-colors ${
             active ? 'bg-white font-medium shadow-sm ring-1 ring-stone-200' : 'text-stone-700 hover:bg-stone-200/60'
           } ${ring(node.id)}`}
@@ -191,33 +235,25 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
               <span className="truncate">{node.name}</span>
             </button>
           )}
-          <button
-            aria-label="Folder options"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuFor(menuFor === node.id ? null : node.id);
-            }}
-            className="grid h-6 w-6 shrink-0 place-items-center rounded text-stone-400 opacity-0 hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100"
-          >
-            <Dots />
-          </button>
-          {menuFor === node.id && (
-            <div className="absolute right-0 top-8 z-20 w-44 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 text-sm font-normal shadow-lg">
-              <MenuItem
-                onClick={() => {
-                  setOpen(node.id, true);
-                  setEditing({ mode: 'create', parentId: node.id });
-                }}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Folder options"
+                className="grid h-6 w-6 shrink-0 place-items-center rounded text-stone-400 opacity-0 hover:bg-stone-200 hover:text-stone-700 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
               >
-                New subfolder
-              </MenuItem>
-              <MenuItem onClick={() => setEditing({ mode: 'rename', id: node.id })}>Rename</MenuItem>
-              <MenuItem danger onClick={() => remove(node)}>
-                Delete
-              </MenuItem>
-            </div>
-          )}
+                <Dots />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44" onCloseAutoFocus={holdFocus}>
+              {items(DropdownMenuItem, DropdownMenuSeparator)}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-44" onCloseAutoFocus={holdFocus}>
+          {items(ContextMenuItem, ContextMenuSeparator)}
+        </ContextMenuContent>
+        </ContextMenu>
         {(open || (editing?.mode === 'create' && editing.parentId === node.id)) && (
           <ul>
             {editing?.mode === 'create' && editing.parentId === node.id && (
@@ -356,16 +392,6 @@ function NameInput({ initial, onCommit }: { initial: string; onCommit: (name: st
   );
 }
 
-function MenuItem({ children, danger, onClick }: { children: React.ReactNode; danger?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`block w-full px-3 py-1.5 text-left hover:bg-stone-100 ${danger ? 'text-red-600' : 'text-stone-700'}`}
-    >
-      {children}
-    </button>
-  );
-}
 
 const FolderIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-stone-500" fill="none" stroke="currentColor" strokeWidth={1.8}>
