@@ -6,6 +6,7 @@ import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { desc, eq } from 'drizzle-orm';
 import type { Note } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
+import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { notes } from './schema';
 
@@ -16,6 +17,7 @@ const ORPHAN_MIME = 'audio/webm;codecs=opus';
 
 export class NoteStore {
   readonly recordingsDir: string;
+  readonly folders: FolderStore;
 
   private constructor(
     private readonly rootDir: string,
@@ -24,6 +26,7 @@ export class NoteStore {
     private readonly now: () => number,
   ) {
     this.recordingsDir = path.join(rootDir, 'recordings');
+    this.folders = new FolderStore(db, sqlite, now);
   }
 
   static open(rootDir: string, now: () => number = Date.now): NoteStore {
@@ -60,6 +63,7 @@ export class NoteStore {
       createdAt: ts,
       updatedAt: ts,
       syncedAt: null,
+      folderId: null,
     };
     this.db.insert(notes).values(note).run();
     return note;
@@ -130,6 +134,7 @@ export class NoteStore {
           createdAt,
           updatedAt: createdAt,
           syncedAt: null,
+          folderId: null,
         })
         .run();
       result.adopted++;

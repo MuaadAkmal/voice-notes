@@ -10,6 +10,15 @@ export type Note = {
   createdAt: number;
   updatedAt: number;
   syncedAt: number | null;
+  folderId: string | null; // null = Inbox
+};
+
+export type Folder = {
+  id: string;
+  name: string;
+  parentId: string | null; // null = top level
+  createdAt: number;
+  updatedAt: number;
 };
 
 export type Settings = {

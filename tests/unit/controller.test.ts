@@ -15,6 +15,7 @@ const fakeNote = (a: NewAudio): Note => ({
   createdAt: 0,
   updatedAt: 0,
   syncedAt: null,
+  folderId: null,
 });
 
 let calls: string[];

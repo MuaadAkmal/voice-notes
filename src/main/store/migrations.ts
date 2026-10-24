@@ -15,6 +15,16 @@ export const MIGRATIONS: string[] = [
      synced_at   INTEGER
    );
    CREATE INDEX notes_created_at ON notes (created_at);`,
+  `CREATE TABLE folders (
+     id         TEXT PRIMARY KEY,
+     name       TEXT NOT NULL,
+     parent_id  TEXT REFERENCES folders(id),
+     created_at INTEGER NOT NULL,
+     updated_at INTEGER NOT NULL
+   );
+   CREATE INDEX folders_parent ON folders (parent_id);
+   ALTER TABLE notes ADD COLUMN folder_id TEXT REFERENCES folders(id);
+   CREATE INDEX notes_folder ON notes (folder_id);`,
 ];
 
 export function migrate(db: Database.Database): void {

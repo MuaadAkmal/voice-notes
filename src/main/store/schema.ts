@@ -11,4 +11,13 @@ export const notes = sqliteTable('notes', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   syncedAt: integer('synced_at'),
+  folderId: text('folder_id'),
+});
+
+export const folders = sqliteTable('folders', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  parentId: text('parent_id'),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });
