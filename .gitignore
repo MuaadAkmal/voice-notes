@@ -1,0 +1,8 @@
+node_modules/
+out/
+.vite/
+dist/
+logs/
+.ssh-mcp-server.port
+*.log
+test-results/
