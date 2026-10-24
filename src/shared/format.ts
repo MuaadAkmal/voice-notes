@@ -4,7 +4,7 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export function formatDuration(ms: number): string {
   if (ms <= 0) return '—';
-  const total = Math.floor(ms / 1000);
+  const total = Math.max(1, Math.round(ms / 1000));
   return `${Math.floor(total / 60)}:${pad2(total % 60)}`;
 }
 

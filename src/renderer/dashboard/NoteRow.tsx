@@ -4,6 +4,11 @@ import { formatDuration } from '../../shared/format';
 
 type Props = {
   note: Note;
+  selected: boolean;
+  folderLabel?: string; // shown in "All notes"
+  onSelect: (e: React.MouseEvent) => void;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
   playing: boolean;
   positionMs: number;
   onTogglePlay: () => void;
@@ -15,7 +20,9 @@ type Props = {
 const timeOf = (ts: number) =>
   new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
-export function NoteRow({ note, playing, positionMs, onTogglePlay, onRename, onReveal, onDelete }: Props) {
+export function NoteRow(props: Props) {
+  const { note, selected, folderLabel, onSelect, onDragStart, onDragEnd } = props;
+  const { playing, positionMs, onTogglePlay, onRename, onReveal, onDelete } = props;
   const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -41,7 +48,17 @@ export function NoteRow({ note, playing, positionMs, onTogglePlay, onRename, onR
   };
 
   return (
-    <li className={`group relative flex items-center gap-4 px-4 py-3 ${missing ? 'opacity-50' : ''}`}>
+    <li
+      draggable={!editing}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      // Clicks on the row's own controls (play, title, menu) don't change the selection.
+      onClick={(e) => !(e.target as HTMLElement).closest('button, input') && onSelect(e)}
+      aria-selected={selected}
+      className={`group relative flex cursor-default select-none items-center gap-4 px-4 py-3 transition-colors ${
+        selected ? 'bg-stone-100 shadow-[inset_3px_0_0_0_#1c1917]' : 'hover:bg-stone-50/80'
+      } ${missing ? 'opacity-50' : ''}`}
+    >
       <button
         onClick={onTogglePlay}
         disabled={missing}
@@ -83,6 +100,9 @@ export function NoteRow({ note, playing, positionMs, onTogglePlay, onRename, onR
           </button>
         )}
         <div className="mt-1.5 flex items-center gap-3">
+          {folderLabel && (
+            <span className="max-w-48 truncate rounded bg-stone-100 px-1.5 py-0.5 text-[11px] text-stone-500">{folderLabel}</span>
+          )}
           {missing ? (
             <span className="text-xs text-red-600">File missing</span>
           ) : (
