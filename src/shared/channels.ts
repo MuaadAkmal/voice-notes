@@ -65,7 +65,15 @@ export const Ch = {
   HotkeyCapture: 'hotkey:capture',
   OpenRecordingsFolder: 'app:open-recordings-folder',
   DevicesList: 'devices:list',
+  FoldersList: 'folders:list',
+  FoldersCreate: 'folders:create',
+  FoldersRename: 'folders:rename',
+  FoldersMove: 'folders:move',
+  FoldersDelete: 'folders:delete',
+  NotesMove: 'notes:move',
+  NotesDeleteMany: 'notes:delete-many',
   // main → dashboard
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
+  FoldersChanged: 'folders:changed',
 } as const;

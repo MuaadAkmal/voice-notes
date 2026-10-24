@@ -131,6 +131,7 @@ async function boot(): Promise<void> {
     updateSettings,
     getDevices: () => devices,
     notesChanged: () => toDashboard(Ch.NotesChanged),
+    foldersChanged: () => toDashboard(Ch.FoldersChanged),
   });
 
   app.on('before-quit', () => {

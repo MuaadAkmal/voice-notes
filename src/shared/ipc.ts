@@ -27,3 +27,12 @@ export const ErrorSchema = z.object({ message: z.string().max(200) });
 export const DevicesSchema = z
   .array(z.object({ deviceId: z.string().max(512), label: z.string().max(300) }))
   .max(64);
+
+// Folder names are validated by FolderStore so its exact messages reach the UI; zod only bounds shape.
+const FolderNameSchema = z.string().max(200);
+const ParentSchema = IdSchema.nullable();
+export const CreateFolderSchema = z.object({ name: FolderNameSchema, parentId: ParentSchema });
+export const RenameFolderSchema = z.object({ id: IdSchema, name: FolderNameSchema });
+export const MoveFolderSchema = z.object({ id: IdSchema, parentId: ParentSchema });
+export const IdListSchema = z.array(IdSchema).min(1).max(500);
+export const MoveNotesSchema = z.object({ ids: IdListSchema, folderId: ParentSchema });

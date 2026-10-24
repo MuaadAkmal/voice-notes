@@ -6,8 +6,13 @@ import {
   AudioPayloadSchema,
   Ch,
   DevicesSchema,
+  CreateFolderSchema,
   ErrorSchema,
+  IdListSchema,
   IdSchema,
+  MoveFolderSchema,
+  MoveNotesSchema,
+  RenameFolderSchema,
   PointerSchema,
   RenameSchema,
   type Settings,
@@ -72,6 +77,7 @@ type DashboardDeps = {
   updateSettings: (patch: Partial<Settings>) => Settings;
   getDevices: () => AudioDevice[];
   notesChanged: () => void;
+  foldersChanged: () => void;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -105,4 +111,29 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.OpenRecordingsFolder, none, async () => {
     await shell.openPath(d.store.recordingsDir);
   });
+
+  handle(Ch.NotesMove, MoveNotesSchema, ({ ids, folderId }) => {
+    d.store.moveNotes(ids, folderId);
+    d.notesChanged();
+  });
+  handle(Ch.NotesDeleteMany, IdListSchema, async (ids) => {
+    await d.store.deleteMany(ids);
+    d.notesChanged();
+  });
+
+  // Folder mutations can change note placement and counts, so both views refresh.
+  const folderMutation = <T>(fn: () => T): T => {
+    const result = fn();
+    d.foldersChanged();
+    d.notesChanged();
+    return result;
+  };
+  const folders = d.store.folders;
+  handle(Ch.FoldersList, none, () => folders.list());
+  handle(Ch.FoldersCreate, CreateFolderSchema, ({ name, parentId }) =>
+    folderMutation(() => folders.create(name, parentId)),
+  );
+  handle(Ch.FoldersRename, RenameFolderSchema, ({ id, name }) => folderMutation(() => folders.rename(id, name)));
+  handle(Ch.FoldersMove, MoveFolderSchema, ({ id, parentId }) => folderMutation(() => folders.move(id, parentId)));
+  handle(Ch.FoldersDelete, IdSchema, (id) => folderMutation(() => folders.delete(id)));
 }
