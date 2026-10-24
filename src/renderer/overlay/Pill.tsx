@@ -85,6 +85,69 @@ function Timer({ startedAt }: { startedAt: number }) {
 const MIC_PATH = 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm-7 9a7 7 0 0 0 14 0M12 19v2';
 const SPEAKER_PATH = 'M4 9v6h4l5 4V5L8 9H4Zm12.5-.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12';
 
+type SavedState = Extract<OverlayState, { kind: 'saved' }>;
+type Hover = { onMouseEnter: () => void; onMouseLeave: () => void };
+
+/** "Saved ✓ · Add title": click to type the phrase or its meaning into the note's title. */
+function SavedPill({ state, shell, hover }: { state: SavedState; shell: string; hover: Hover }) {
+  const api = window.overlayApi;
+  const [titling, setTitling] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+
+  // The window only becomes focusable once main handles startTitle; focus the input when it does.
+  useEffect(() => {
+    if (!titling) return;
+    const focus = () => input.current?.focus();
+    focus();
+    window.addEventListener('focus', focus);
+    return () => window.removeEventListener('focus', focus);
+  }, [titling]);
+
+  const finish = (title: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    if (title?.trim()) api.submitTitle(state.noteId, title.trim());
+    else api.cancelTitle();
+  };
+
+  if (titling) {
+    return (
+      <div {...hover} className={`${shell} h-9 gap-2 px-3`}>
+        <span className="text-sm text-white/60">✓</span>
+        <input
+          ref={input}
+          maxLength={200}
+          placeholder="Phrase or meaning…"
+          aria-label="Note title"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') finish(e.currentTarget.value);
+            if (e.key === 'Escape') finish(null);
+          }}
+          onBlur={(e) => finish(e.currentTarget.value ? e.currentTarget.value : null)}
+          className="w-52 bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      {...hover}
+      onClick={() => {
+        done.current = false;
+        setTitling(true);
+        api.startTitle();
+      }}
+      className={`${shell} h-9 cursor-pointer gap-1.5 px-4 text-sm`}
+    >
+      {state.micOnly ? 'Saved ✓ (mic only)' : 'Saved ✓'}
+      <span className="text-white/40">·</span>
+      <span className="text-white/70 underline-offset-2 hover:underline">Add title</span>
+    </button>
+  );
+}
+
 /** Hands-free (latched) recording: a small lock instead of a text label, to keep the pill narrow. */
 function HandsFreeGlyph() {
   return (
@@ -157,7 +220,8 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
         </div>
       );
     case 'saved':
-      return <div className={`${shell} h-10 px-5 text-sm`}>{state.micOnly ? 'Saved ✓ (mic only)' : 'Saved ✓'}</div>;
+      if (state.titled) return <div className={`${shell} h-9 px-4 text-sm`}>Saved ✓</div>;
+      return <SavedPill state={state} shell={shell} hover={hover} />;
     case 'error':
       return state.retry ? (
         <button {...hover} onClick={() => api.retry()} className={`${shell} h-10 cursor-pointer bg-red-600/95 px-5 text-sm`}>

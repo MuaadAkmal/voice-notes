@@ -7,6 +7,7 @@ import {
   Ch,
   DevicesSchema,
   DragSchema,
+  OverlayTitleSchema,
   CreateFolderSchema,
   ErrorSchema,
   IdListSchema,
@@ -30,6 +31,7 @@ type OverlayDeps = {
   controller: RecorderController;
   onDevices: (devices: AudioDevice[]) => void;
   onDragEnd: () => void;
+  titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -45,7 +47,10 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
   };
 }
 
-export function registerOverlayIpc({ overlay, gesture, controller, onDevices, onDragEnd }: OverlayDeps): void {
+export function registerOverlayIpc({ overlay, gesture, controller, onDevices, onDragEnd, titles }: OverlayDeps): void {
+  ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
+  ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
+  ipcMain.on(Ch.OverlayTitleCancel, (e) => e.sender === overlay.webContents && titles.cancel());
   ipcMain.on(
     Ch.OverlayDrag,
     from(overlay, DragSchema, ({ dx, dy }) => {
@@ -71,7 +76,12 @@ export function registerOverlayIpc({ overlay, gesture, controller, onDevices, on
   );
   ipcMain.on(
     Ch.OverlayPointer,
-    from(overlay, PointerSchema, ({ over }) => overlay.setIgnoreMouseEvents(!over, { forward: true })),
+    from(overlay, PointerSchema, ({ over }) => {
+      overlay.setIgnoreMouseEvents(!over, { forward: true });
+      // Hovering a "Saved" pill keeps it up long enough to click "Add title".
+      if (over) controller.pauseFlash();
+      else controller.resumeFlash();
+    }),
   );
   ipcMain.on(Ch.OverlayClick, (e) => e.sender === overlay.webContents && gesture.toggle());
   ipcMain.on(Ch.OverlayRetry, (e) => {

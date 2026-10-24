@@ -45,7 +45,8 @@ export type RecordingMode = 'hold' | 'handsfree';
 export type OverlayState =
   | { kind: 'idle'; visible: boolean }
   | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource }
-  | { kind: 'saved'; micOnly?: true } // micOnly: 'both' was requested but system audio failed
+  // micOnly: 'both' was requested but system audio failed; titled: confirmation after a title was added
+  | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean };
 
 export type AudioDevice = { deviceId: string; label: string };
@@ -69,6 +70,9 @@ export const Ch = {
   OverlayRetry: 'overlay:retry',
   OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
   OverlayDragEnd: 'overlay:drag-end',
+  OverlayTitleStart: 'overlay:title-start',
+  OverlayTitle: 'overlay:title', // { noteId, title }
+  OverlayTitleCancel: 'overlay:title-cancel',
   OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',

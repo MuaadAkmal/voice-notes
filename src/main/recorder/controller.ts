@@ -29,6 +29,8 @@ type ControllerOpts = {
 
 type State = 'idle' | 'recording' | 'stopping' | 'saving' | 'failed';
 
+const TITLED_MS = 1000; // "Saved ✓" confirmation after a title is saved from the pill
+
 /**
  * Owns one recording's lifecycle: idle → recording → stopping → saving → idle.
  * A failed save keeps its audio until retry() succeeds; new recordings are refused meanwhile.
@@ -41,6 +43,11 @@ export class RecorderController {
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: NewAudio | null = null;
   private requestedSource: RecordingSource = 'mic';
+  private _lastSavedId: string | null = null;
+  /** The "Saved ✓ · Add title" state while it's on screen; null otherwise. */
+  private savedState: OverlayState | null = null;
+  /** The user is typing a title: the saved flash must not time out. */
+  private held = false;
   private readonly minMs: number;
   private readonly maxMs: number;
   private readonly savedMs: number;
@@ -54,7 +61,7 @@ export class RecorderController {
   ) {
     this.minMs = opts.minMs ?? 300;
     this.maxMs = opts.maxMs ?? 300_000;
-    this.savedMs = opts.savedMs ?? 1000;
+    this.savedMs = opts.savedMs ?? 4000;
     this.errorMs = opts.errorMs ?? 3000;
     this.stopTimeoutMs = opts.stopTimeoutMs ?? 5000;
   }
@@ -63,11 +70,49 @@ export class RecorderController {
     return this._state;
   }
 
+  /** The note the current/last "Saved" flash refers to; titles from the pill may only target it. */
+  get lastSavedId(): string | null {
+    return this._lastSavedId;
+  }
+
+  /** The user clicked "Add title": keep the saved state up until titleDone/titleCancelled. */
+  holdFlash(): void {
+    if (!this.savedState) return;
+    this.held = true;
+    this.clearFlash();
+  }
+
+  titleDone(): void {
+    const noteId = this._lastSavedId;
+    this.endSaved();
+    if (noteId) this.flash({ kind: 'saved', noteId, titled: true }, TITLED_MS);
+  }
+
+  titleCancelled(): void {
+    this.endSaved();
+    this.overlay.setState(this.opts.idleState());
+  }
+
+  /** Hovering the pill pauses the countdown; leaving restarts the full flash. */
+  pauseFlash(): void {
+    if (this.savedState && !this.held) this.clearFlash();
+  }
+
+  resumeFlash(): void {
+    if (this.savedState && !this.held && !this.flashTimer) this.flash(this.savedState, this.savedMs);
+  }
+
+  private endSaved(): void {
+    this.clearFlash();
+    this.savedState = null;
+    this.held = false;
+  }
+
   handleGesture(e: GestureEvent): void {
     switch (e) {
       case 'start':
         if (this._state !== 'idle') return;
-        this.clearFlash();
+        this.endSaved();
         this._state = 'recording';
         this.startedAt = Date.now();
         this.requestedSource = this.opts.getSource();
@@ -134,7 +179,10 @@ export class RecorderController {
       this.opts.onSaved(note);
       // 'both' that came back as plain mic means system capture failed; say so in the flash.
       const micOnly = this.requestedSource === 'both' && audio.source === 'mic';
-      this.flash(micOnly ? { kind: 'saved', micOnly: true } : { kind: 'saved' }, this.savedMs);
+      this._lastSavedId = note.id;
+      this.endSaved();
+      this.savedState = micOnly ? { kind: 'saved', noteId: note.id, micOnly: true } : { kind: 'saved', noteId: note.id };
+      this.flash(this.savedState, this.savedMs);
     } catch {
       this._state = 'failed';
       this.overlay.setState({ kind: 'error', message: 'Save failed — Retry', retry: true });
@@ -147,6 +195,7 @@ export class RecorderController {
     this.overlay.setState(state);
     this.flashTimer = setTimeout(() => {
       this.flashTimer = null;
+      this.savedState = null;
       this.overlay.setState(this.opts.idleState());
     }, ms);
   }

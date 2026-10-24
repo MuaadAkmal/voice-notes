@@ -63,6 +63,28 @@ test('a plain click on the pill still toggles hands-free recording', async () =>
   await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
 });
 
+test('Add title on the pill names the note just saved, then gives focus back', async () => {
+  t = await launch();
+  const pill = await overlay(t);
+  await t.record(1000);
+  await expect(pill.getByRole('button', { name: /Add title/ })).toBeVisible();
+  await pill.screenshot({ path: '.superpowers/shots/pill-saved.png' });
+  await pill.getByRole('button', { name: /Add title/ }).click();
+  await pill.waitForTimeout(200);
+  await pill.screenshot({ path: '.superpowers/shots/pill-input.png' });
+  const input = pill.getByLabel('Note title');
+  await expect(input).toBeVisible();
+  await input.fill('gracias');
+  await input.press('Enter');
+  await expect.poll(() => t.hooks((h) => h.store.list()[0].title)).toBe('gracias');
+  await expect(pill.getByText('Saved ✓', { exact: true })).toBeVisible();
+  const focusable = await t.app.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows().find((w) => w.webContents.getURL().includes('/overlay/'))!.isFocusable(),
+  );
+  expect(focusable).toBe(false);
+  await pill.screenshot({ path: '.superpowers/shots/pill-titled.png' });
+});
+
 test('waveform is drawn in the source colour while recording', async () => {
   t = await launch();
   const pill = await overlay(t);

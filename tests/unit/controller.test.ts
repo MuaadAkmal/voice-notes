@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type NoteSink, type OverlayPort, RecorderController } from '../../src/main/recorder/controller';
 import type { NewAudio } from '../../src/main/store/note-store';
 import type { Note, OverlayState, RecordingSource } from '../../src/shared/ipc';
@@ -85,14 +85,16 @@ it('handsfree switches mode, keeps startedAt', () => {
   expect(lastState()).toEqual({ kind: 'recording', mode: 'handsfree', startedAt: 1_000_000, source: 'mic' });
 });
 
-it('stop then audio ≥300ms saves, shows saved, then idle after 1000ms', async () => {
+it('stop then audio ≥300ms saves, shows saved with the note id, then idle after 4000ms', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
   expect(calls).toEqual(['start:mic-1:mic', 'stop']);
   await c.onAudio(audio(1200));
   expect(saved).toHaveLength(1);
-  expect(lastState()).toEqual({ kind: 'saved' });
-  vi.advanceTimersByTime(1000);
+  expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+  vi.advanceTimersByTime(3999);
+  expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+  vi.advanceTimersByTime(1);
   expect(lastState()).toEqual(IDLE);
   expect(c.state).toBe('idle');
 });
@@ -133,7 +135,7 @@ it('save failure shows retry; retry saves the same bytes', async () => {
   expect(created).toHaveLength(2);
   expect(created[1]).toBe(created[0]);
   expect(saved).toHaveLength(1);
-  expect(lastState()).toEqual({ kind: 'saved' });
+  expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
 });
 
 it('start gesture ignored while failed', async () => {
@@ -159,7 +161,7 @@ it('audio while recording is saved (recorder ended on its own)', async () => {
   c.handleGesture('start');
   await c.onAudio(audio(1500));
   expect(created).toHaveLength(1);
-  expect(lastState()).toEqual({ kind: 'saved' });
+  expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
   expect(c.state).toBe('idle');
 });
 
@@ -203,6 +205,63 @@ it('saved flash notes a mic-only fallback', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
   await c.onAudio({ ...audio(2000), source: 'mic' });
-  expect(lastState()).toEqual({ kind: 'saved', micOnly: true });
+  expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1', micOnly: true });
   expect(created[0].source).toBe('mic');
+});
+describe('titling from the pill', () => {
+  const save = async () => {
+    c.handleGesture('start');
+    c.handleGesture('stop');
+    await c.onAudio(audio(1500));
+  };
+
+  it('remembers the last saved note id', async () => {
+    expect(c.lastSavedId).toBeNull();
+    await save();
+    expect(c.lastSavedId).toBe('n1');
+  });
+
+  it('holdFlash keeps the saved state past the 4000ms flash', async () => {
+    await save();
+    c.holdFlash();
+    vi.advanceTimersByTime(10_000);
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+  });
+
+  it('titleDone shows saved for 1000ms, then idle', async () => {
+    await save();
+    c.holdFlash();
+    c.titleDone();
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1', titled: true });
+    vi.advanceTimersByTime(1000);
+    expect(lastState()).toEqual(IDLE);
+  });
+
+  it('titleCancelled goes idle immediately', async () => {
+    await save();
+    c.holdFlash();
+    c.titleCancelled();
+    expect(lastState()).toEqual(IDLE);
+  });
+
+  it('hover pauses the countdown; leaving restarts the full 4000ms', async () => {
+    await save();
+    vi.advanceTimersByTime(3000);
+    c.pauseFlash();
+    vi.advanceTimersByTime(10_000);
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+    c.resumeFlash();
+    vi.advanceTimersByTime(3999);
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+    vi.advanceTimersByTime(1);
+    expect(lastState()).toEqual(IDLE);
+  });
+
+  it('a new recording can start while a title is being typed', async () => {
+    await save();
+    c.holdFlash();
+    c.handleGesture('start');
+    expect(c.state).toBe('recording');
+    expect(lastState()).toMatchObject({ kind: 'recording' });
+  });
 });

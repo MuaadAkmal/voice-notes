@@ -29,6 +29,7 @@ export const AudioPayloadSchema = z.object({
 export const IdSchema = z.uuid();
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
+export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });
 export const DragSchema = z.object({ dx: z.number().int().min(-2000).max(2000), dy: z.number().int().min(-2000).max(2000) });
 export const ErrorSchema = z.object({ message: z.string().max(200) });
 export const DevicesSchema = z

@@ -105,7 +105,16 @@ async function boot(): Promise<void> {
       },
     },
   );
-  gesture.onEvent((e) => controller.handleGesture(e));
+  // The pill takes keyboard focus only while a title is being typed; give it back afterwards.
+  const releaseOverlayFocus = () => {
+    if (overlay.isDestroyed() || !overlay.isFocusable()) return;
+    overlay.setFocusable(false);
+    overlay.blur();
+  };
+  gesture.onEvent((e) => {
+    if (e === 'start') releaseOverlayFocus(); // a new recording abandons an open title input
+    controller.handleGesture(e);
+  });
   overlay.webContents.on('did-finish-load', () => send(Ch.OverlayState, idleState()));
   overlay.webContents.on('render-process-gone', (_e, details) => {
     log.error('[overlay] renderer gone', details.reason);
@@ -119,6 +128,34 @@ async function boot(): Promise<void> {
     controller,
     onDevices: (d) => (devices = d),
     onDragEnd: () => updateSettings({ pillPosition: pillPositionOf(overlay) }),
+    titles: {
+      start: () => {
+        if (!controller.lastSavedId) return;
+        controller.holdFlash();
+        overlay.setFocusable(true);
+        overlay.focus();
+      },
+      submit: (noteId, title) => {
+        releaseOverlayFocus();
+        if (noteId !== controller.lastSavedId) {
+          log.warn('[overlay] title for a note other than the one just saved; ignored');
+          controller.titleCancelled();
+          return;
+        }
+        try {
+          store.rename(noteId, title);
+          toDashboard(Ch.NotesChanged);
+          controller.titleDone();
+        } catch (err) {
+          log.error('[overlay] rename failed', err);
+          controller.titleCancelled();
+        }
+      },
+      cancel: () => {
+        releaseOverlayFocus();
+        controller.titleCancelled();
+      },
+    },
   });
 
   const hotkey = new HotkeyService(gesture);
