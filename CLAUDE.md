@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Voice Notes**: a Windows Electron app. A global hotkey (default Ctrl+Win) shows a floating pill that records a voice note to a local `.webm` file indexed in SQLite. A dashboard plays, renames and deletes notes. Spec: `docs/superpowers/specs/2026-10-24-voice-notes-desktop-v1-design.md`; plan: `docs/superpowers/plans/2026-10-24-voice-notes-desktop-v1.md`.
+**Voice Notes**: a Windows Electron app. A global hotkey (default Alt+Win) shows a floating pill that records a voice note to a local `.webm` file indexed in SQLite. A dashboard plays, renames and deletes notes. Spec: `docs/superpowers/specs/2026-10-24-voice-notes-desktop-v1-design.md`; plan: `docs/superpowers/plans/2026-10-24-voice-notes-desktop-v1.md`.
 
 ## Commands
 

@@ -17,7 +17,7 @@
 - Files: `recordings/<uuid>.webm`, `voice-notes.sqlite`, `settings.json`, logs via electron-log in `userData/logs/`.
 - Audio: `audio/webm;codecs=opus`, `audioBitsPerSecond: 32000`, mono, `MediaRecorder` timeslice 250 ms.
 - Timing constants: hold threshold 250 ms; double-tap window 400 ms; min clip 300 ms; max clip 300 000 ms (5 min); mic warm 30 000 ms; "Saved ✓" 1 000 ms; no-mic error 3 000 ms.
-- Default hotkey `Ctrl+Win` (uiohook keycodes `UiohookKey.Ctrl` + `UiohookKey.Meta`, left variants; right variants also count).
+- Default hotkey `Alt+Win` (uiohook keycodes `UiohookKey.Alt` 56 + `UiohookKey.Meta` 3675; right variants also count). Changed from Ctrl+Win at user request (Wispr Flow collision).
 - Default title `Voice note · HH:mm` (24-hour, local time, zero-padded).
 - Both renderers: `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`; IPC payloads from renderers validated with zod in main.
 - Native modules (`better-sqlite3`, `uiohook-napi`) are built for Electron's ABI, so unit tests run under Electron-as-Node (`ELECTRON_RUN_AS_NODE=1`), never plain Node.

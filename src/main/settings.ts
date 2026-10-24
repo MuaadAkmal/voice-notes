@@ -1,13 +1,14 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
 
-// uiohook keycodes for Ctrl + Meta (Win). Literal so this module never loads the native hook.
-const CTRL = 29;
+// uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
+// Not Ctrl+Win: that's Wispr Flow's dictation key, and both apps would fire.
+const ALT = 56;
 const META = 3675;
 
 export const DEFAULT_SETTINGS: Settings = {
-  hotkey: [CTRL, META],
-  hotkeyLabel: 'Ctrl+Win',
+  hotkey: [ALT, META],
+  hotkeyLabel: 'Alt+Win',
   micDeviceId: null,
   launchAtLogin: false,
   showIdlePill: true,

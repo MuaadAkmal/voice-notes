@@ -90,7 +90,7 @@ Why files + SQLite (not BLOBs, not a cloud DB): audio is the primary artifact to
 
 ## 5. Recording flow
 
-**Hotkey (default `Ctrl+Win`, configurable):**
+**Hotkey (default `Alt+Win`, configurable; changed from Ctrl+Win on 2026-10-24 because it collides with Wispr Flow):**
 - **Hold** ≥ 250 ms → push-to-talk; **release** → stop & save.
 - **Double-tap** (a press < 250 ms, then a second key-down within 400 ms of its release) → hands-free; next **single tap** → stop & save.
 - **Esc** while recording → cancel, discard.

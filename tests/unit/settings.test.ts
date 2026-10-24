@@ -11,8 +11,8 @@ beforeEach(() => {
 
 it('returns defaults when file absent', () => {
   expect(loadSettings(file)).toEqual(DEFAULT_SETTINGS);
-  expect(DEFAULT_SETTINGS.hotkeyLabel).toBe('Ctrl+Win');
-  expect(DEFAULT_SETTINGS.hotkey).toEqual([29, 3675]);
+  expect(DEFAULT_SETTINGS.hotkeyLabel).toBe('Alt+Win');
+  expect(DEFAULT_SETTINGS.hotkey).toEqual([56, 3675]);
 });
 
 it('falls back to defaults on invalid JSON', () => {
