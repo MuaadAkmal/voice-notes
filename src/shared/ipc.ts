@@ -3,6 +3,8 @@ import { MAX_BATCH, type Settings } from './channels';
 
 export * from './channels';
 
+const SourceSchema = z.enum(['mic', 'system', 'both']);
+
 export const SettingsFieldSchemas = {
   hotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   hotkeyLabel: z.string().min(1).max(60),
@@ -11,6 +13,7 @@ export const SettingsFieldSchemas = {
   showIdlePill: z.boolean(),
   hotkeyPaused: z.boolean(),
   theme: z.enum(['system', 'light', 'dark']),
+  recordingSource: SourceSchema,
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -19,6 +22,7 @@ export const AudioPayloadSchema = z.object({
   bytes: z.instanceof(Uint8Array),
   durationMs: z.number().nonnegative().finite(),
   mimeType: z.string().min(1).max(100),
+  source: SourceSchema,
 });
 
 export const IdSchema = z.uuid();

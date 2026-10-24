@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { type NoteSink, type OverlayPort, RecorderController } from '../../src/main/recorder/controller';
 import type { NewAudio } from '../../src/main/store/note-store';
-import type { Note, OverlayState } from '../../src/shared/ipc';
+import type { Note, OverlayState, RecordingSource } from '../../src/shared/ipc';
 
 const IDLE: OverlayState = { kind: 'idle', visible: true };
 const fakeNote = (a: NewAudio): Note => ({
@@ -16,6 +16,7 @@ const fakeNote = (a: NewAudio): Note => ({
   updatedAt: 0,
   syncedAt: null,
   folderId: null,
+  source: a.source,
 });
 
 let calls: string[];
@@ -24,11 +25,13 @@ let saved: Note[];
 let failNext: boolean;
 let created: NewAudio[];
 let idles: number;
+let source: RecordingSource;
 let c: RecorderController;
 const audio = (durationMs: number): NewAudio => ({
   bytes: Buffer.from('xyz'),
   durationMs,
   mimeType: 'audio/webm;codecs=opus',
+  source: 'mic',
 });
 const lastState = () => states[states.length - 1];
 
@@ -41,8 +44,9 @@ beforeEach(() => {
   created = [];
   failNext = false;
   idles = 0;
+  source = 'mic';
   const overlay: OverlayPort = {
-    start: (d) => calls.push(`start:${d}`),
+    start: (d, s) => calls.push(`start:${d}:${s}`),
     stop: () => calls.push('stop'),
     cancel: () => calls.push('cancel'),
     setState: (s) => states.push(s),
@@ -59,6 +63,7 @@ beforeEach(() => {
   };
   c = new RecorderController(overlay, sink, {
     getDeviceId: () => 'mic-1',
+    getSource: () => source,
     onSaved: (n) => saved.push(n),
     idleState: () => IDLE,
     onIdle: () => idles++,
@@ -68,7 +73,7 @@ afterEach(() => vi.useRealTimers());
 
 it('start → overlay.start with device id and recording state (mode hold)', () => {
   c.handleGesture('start');
-  expect(calls).toEqual(['start:mic-1']);
+  expect(calls).toEqual(['start:mic-1:mic']);
   expect(lastState()).toEqual({ kind: 'recording', mode: 'hold', startedAt: 1_000_000 });
   expect(c.state).toBe('recording');
 });
@@ -83,7 +88,7 @@ it('handsfree switches mode, keeps startedAt', () => {
 it('stop then audio ≥300ms saves, shows saved, then idle after 1000ms', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
-  expect(calls).toEqual(['start:mic-1', 'stop']);
+  expect(calls).toEqual(['start:mic-1:mic', 'stop']);
   await c.onAudio(audio(1200));
   expect(saved).toHaveLength(1);
   expect(lastState()).toEqual({ kind: 'saved' });
@@ -113,7 +118,7 @@ it('ignores audio after cancel', async () => {
 it('auto-stops at max duration', () => {
   c.handleGesture('start');
   vi.advanceTimersByTime(300_000);
-  expect(calls).toEqual(['start:mic-1', 'stop']);
+  expect(calls).toEqual(['start:mic-1:mic', 'stop']);
   expect(c.state).toBe('stopping');
 });
 
@@ -184,4 +189,19 @@ it('calls onIdle when it returns to idle on its own', async () => {
   vi.advanceTimersByTime(300_000); // auto-stop
   await c.onAudio(audio(2000));
   expect(idles).toBe(2);
+});
+
+it('start passes the recording source to the overlay', () => {
+  source = 'system';
+  c.handleGesture('start');
+  expect(calls).toEqual(['start:mic-1:system']);
+});
+
+it('saved flash notes a mic-only fallback', async () => {
+  source = 'both';
+  c.handleGesture('start');
+  c.handleGesture('stop');
+  await c.onAudio({ ...audio(2000), source: 'mic' });
+  expect(lastState()).toEqual({ kind: 'saved', micOnly: true });
+  expect(created[0].source).toBe('mic');
 });

@@ -1,9 +1,9 @@
 import type { GestureEvent } from '../hotkey/gesture';
 import type { NewAudio } from '../store/note-store';
-import type { Note, OverlayState } from '../../shared/ipc';
+import type { Note, OverlayState, RecordingSource } from '../../shared/ipc';
 
 export interface OverlayPort {
-  start(deviceId: string | null): void;
+  start(deviceId: string | null, source: RecordingSource): void;
   stop(): void;
   cancel(): void;
   setState(state: OverlayState): void;
@@ -15,6 +15,7 @@ export interface NoteSink {
 
 type ControllerOpts = {
   getDeviceId: () => string | null;
+  getSource: () => RecordingSource;
   onSaved: (n: Note) => void;
   idleState: () => OverlayState;
   /** Fired when the controller returns to idle without a gesture asking it to (save, error, watchdog). */
@@ -39,6 +40,7 @@ export class RecorderController {
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: NewAudio | null = null;
+  private requestedSource: RecordingSource = 'mic';
   private readonly minMs: number;
   private readonly maxMs: number;
   private readonly savedMs: number;
@@ -68,7 +70,8 @@ export class RecorderController {
         this.clearFlash();
         this._state = 'recording';
         this.startedAt = Date.now();
-        this.overlay.start(this.opts.getDeviceId());
+        this.requestedSource = this.opts.getSource();
+        this.overlay.start(this.opts.getDeviceId(), this.requestedSource);
         this.overlay.setState({ kind: 'recording', mode: 'hold', startedAt: this.startedAt });
         this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
         break;
@@ -129,7 +132,9 @@ export class RecorderController {
       this.pending = null;
       this.toIdle();
       this.opts.onSaved(note);
-      this.flash({ kind: 'saved' }, this.savedMs);
+      // 'both' that came back as plain mic means system capture failed; say so in the flash.
+      const micOnly = this.requestedSource === 'both' && audio.source === 'mic';
+      this.flash(micOnly ? { kind: 'saved', micOnly: true } : { kind: 'saved' }, this.savedMs);
     } catch {
       this._state = 'failed';
       this.overlay.setState({ kind: 'error', message: 'Save failed — Retry', retry: true });

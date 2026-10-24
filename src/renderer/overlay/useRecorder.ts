@@ -78,7 +78,7 @@ export function useRecorder(): AnalyserNode | null {
         rec.onstop = async () => {
           const durationMs = performance.now() - t0;
           const bytes = new Uint8Array(await new Blob(chunks, { type: MIME }).arrayBuffer());
-          api.sendAudio({ bytes, durationMs, mimeType: MIME });
+          api.sendAudio({ bytes, durationMs, mimeType: MIME, source: 'mic' });
         };
         rec.start(TIMESLICE_MS);
         recorder.current = rec;

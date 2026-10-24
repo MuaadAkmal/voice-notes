@@ -14,6 +14,7 @@ const note = (id: string, createdAt: number): Note => ({
   updatedAt: createdAt,
   syncedAt: null,
   folderId: null,
+  source: 'mic',
 });
 
 it('groups notes by day, preserving input order within a group', () => {

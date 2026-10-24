@@ -12,6 +12,7 @@ export const notes = sqliteTable('notes', {
   updatedAt: integer('updated_at').notNull(),
   syncedAt: integer('synced_at'),
   folderId: text('folder_id'),
+  source: text('source', { enum: ['mic', 'system', 'both'] }).notNull().default('mic'),
 });
 
 export const folders = sqliteTable('folders', {

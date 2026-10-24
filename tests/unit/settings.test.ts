@@ -41,6 +41,14 @@ it('theme defaults to system and rejects unknown values', () => {
   expect(loadSettings(file).theme).toBe('dark');
 });
 
+it('recordingSource defaults to mic and rejects unknown values', () => {
+  expect(DEFAULT_SETTINGS.recordingSource).toBe('mic');
+  fs.writeFileSync(file, JSON.stringify({ recordingSource: 'speakers' }));
+  expect(loadSettings(file).recordingSource).toBe('mic');
+  fs.writeFileSync(file, JSON.stringify({ recordingSource: 'both' }));
+  expect(loadSettings(file).recordingSource).toBe('both');
+});
+
 it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);

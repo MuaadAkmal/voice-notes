@@ -69,7 +69,7 @@ async function boot(): Promise<void> {
   const gesture = new HotkeyGesture();
   const controller = new RecorderController(
     {
-      start: (deviceId) => send(Ch.RecorderStart, { deviceId }),
+      start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source }),
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
       setState: (s) => send(Ch.OverlayState, s),
@@ -77,6 +77,7 @@ async function boot(): Promise<void> {
     store,
     {
       getDeviceId: () => settings.micDeviceId,
+      getSource: () => settings.recordingSource,
       idleState,
       // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
       onIdle: () => gesture.reset(),

@@ -11,6 +11,7 @@ export type Note = {
   updatedAt: number;
   syncedAt: number | null;
   folderId: string | null; // null = Inbox
+  source: RecordingSource; // what was captured
 };
 
 export type Folder = {
@@ -29,28 +30,30 @@ export type Settings = {
   showIdlePill: boolean;
   hotkeyPaused: boolean;
   theme: Theme;
+  recordingSource: RecordingSource;
 };
 
 export type Theme = 'system' | 'light' | 'dark';
+export type RecordingSource = 'mic' | 'system' | 'both';
 
 export type RecordingMode = 'hold' | 'handsfree';
 
 export type OverlayState =
   | { kind: 'idle'; visible: boolean }
   | { kind: 'recording'; mode: RecordingMode; startedAt: number }
-  | { kind: 'saved' }
+  | { kind: 'saved'; micOnly?: true } // micOnly: 'both' was requested but system audio failed
   | { kind: 'error'; message: string; retry: boolean };
 
 export type AudioDevice = { deviceId: string; label: string };
 
-export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string };
+export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string; source: RecordingSource };
 
 /** Most note ids one bulk IPC call carries (the dashboard preload batches larger selections). */
 export const MAX_BATCH = 500;
 
 export const Ch = {
   // main → overlay
-  RecorderStart: 'recorder:start', // { deviceId: string | null }
+  RecorderStart: 'recorder:start', // { deviceId: string | null; source: RecordingSource }
   RecorderStop: 'recorder:stop',
   RecorderCancel: 'recorder:cancel',
   OverlayState: 'overlay:state', // OverlayState

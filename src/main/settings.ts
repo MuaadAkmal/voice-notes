@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showIdlePill: true,
   hotkeyPaused: false,
   theme: 'system',
+  recordingSource: 'mic',
 };
 
 function readRaw(file: string): Record<string, unknown> {

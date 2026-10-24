@@ -8,7 +8,7 @@ import type { FolderStore } from '../../src/main/store/folder-store';
 
 let store: NoteStore;
 let folders: FolderStore;
-const audio = () => ({ bytes: Buffer.from('abc'), durationMs: 1500, mimeType: 'audio/webm;codecs=opus' });
+const audio = () => ({ bytes: Buffer.from('abc'), durationMs: 1500, mimeType: 'audio/webm;codecs=opus', source: 'mic' as const });
 const place = (noteId: string, folderId: string | null) => store.moveNotes([noteId], folderId);
 const names = () => folders.list().map((f) => f.name).sort();
 

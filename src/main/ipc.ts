@@ -49,7 +49,7 @@ export function registerOverlayIpc({ overlay, gesture, controller, onDevices }: 
     Ch.RecorderAudio,
     from(overlay, AudioPayloadSchema, (a) => {
       const bytes = Buffer.from(a.bytes.buffer, a.bytes.byteOffset, a.bytes.byteLength);
-      controller.onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType }).catch((e) => log.error(e));
+      controller.onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }).catch((e) => log.error(e));
     }),
   );
   ipcMain.on(

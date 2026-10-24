@@ -4,13 +4,13 @@ import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { desc, eq, inArray } from 'drizzle-orm';
-import type { Note } from '../../shared/ipc';
+import type { Note, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { notes } from './schema';
 
-export type NewAudio = { bytes: Buffer; durationMs: number; mimeType: string };
+export type NewAudio = { bytes: Buffer; durationMs: number; mimeType: string; source: RecordingSource };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORPHAN_MIME = 'audio/webm;codecs=opus';
@@ -64,6 +64,7 @@ export class NoteStore {
       updatedAt: ts,
       syncedAt: null,
       folderId: null,
+      source: audio.source,
     };
     this.db.insert(notes).values(note).run();
     return note;
@@ -145,6 +146,7 @@ export class NoteStore {
           updatedAt: createdAt,
           syncedAt: null,
           folderId: null,
+          source: 'mic',
         })
         .run();
       result.adopted++;

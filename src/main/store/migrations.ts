@@ -25,6 +25,7 @@ export const MIGRATIONS: string[] = [
    CREATE INDEX folders_parent ON folders (parent_id);
    ALTER TABLE notes ADD COLUMN folder_id TEXT REFERENCES folders(id);
    CREATE INDEX notes_folder ON notes (folder_id);`,
+  `ALTER TABLE notes ADD COLUMN source TEXT NOT NULL DEFAULT 'mic' CHECK (source IN ('mic', 'system', 'both'));`,
 ];
 
 export function migrate(db: Database.Database): void {

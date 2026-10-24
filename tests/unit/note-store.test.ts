@@ -15,6 +15,7 @@ const audio = (s = 'abc', durationMs = 1500) => ({
   bytes: Buffer.from(s),
   durationMs,
   mimeType: 'audio/webm;codecs=opus',
+  source: 'mic' as const,
 });
 
 beforeEach(() => {
@@ -162,5 +163,29 @@ it('migrates a v1 database', async () => {
   const upgraded = NoteStore.open(dir);
   expect(upgraded.list()).toEqual([expect.objectContaining({ id, title: 'old', folderId: null })]);
   expect(upgraded.folders.list()).toEqual([]);
+  upgraded.close();
+});
+
+it('create stores the recording source', async () => {
+  const n = await store.create({ ...audio(), source: 'system' });
+  expect(n.source).toBe('system');
+  expect(store.get(n.id)?.source).toBe('system');
+});
+
+it('migrates a v2 database: existing notes get source mic', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-v2-'));
+  fs.mkdirSync(path.join(dir, 'recordings'));
+  const db = new Database(path.join(dir, 'voice-notes.sqlite'));
+  db.exec(MIGRATIONS[0]);
+  db.exec(MIGRATIONS[1]);
+  db.pragma('user_version = 2');
+  const id = randomUUID();
+  fs.writeFileSync(path.join(dir, 'recordings', `${id}.webm`), 'x');
+  db.prepare(
+    `INSERT INTO notes VALUES (?, 'old', ?, 1000, 1, 'audio/webm;codecs=opus', 'ok', 1, 1, NULL, NULL)`,
+  ).run(id, `recordings/${id}.webm`);
+  db.close();
+  const upgraded = NoteStore.open(dir);
+  expect(upgraded.get(id)?.source).toBe('mic');
   upgraded.close();
 });
