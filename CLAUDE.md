@@ -12,7 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm test`: Vitest unit tests. Runs **under Electron as Node** (`ELECTRON_RUN_AS_NODE=1`) because `better-sqlite3`/`uiohook-napi` are rebuilt for Electron's ABI by `postinstall`. Never run vitest with plain `node`/`npx vitest`. Filter: `npm test -- gesture`.
 - `npm run typecheck`: `tsc --noEmit`
 - `npm run package` / `npm run make`: packaged app / Squirrel installer in `out/`
-- `npm run test:e2e`: packages, then Playwright `_electron` tests in `tests/e2e/`
+- `npm run test:e2e`: runs `package` (emits the production Vite build to `.vite/`), then Playwright `_electron` tests in `tests/e2e/`. They launch `electron .` with the dev binary, not the packaged exe, because packaged fuses disable the Node inspector Playwright needs.
+- Packaging: Vite bundles everything except `better-sqlite3`/`uiohook-napi`; `forge.config.mts` `packageAfterCopy` copies them (plus `node-gyp-build`) into the package. Add any new native module there and to `vite.main.config.mts` externals.
 
 ## Architecture
 

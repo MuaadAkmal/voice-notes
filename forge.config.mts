@@ -1,4 +1,6 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { MakerSquirrel } from '@electron-forge/maker-squirrel';
 import { MakerZIP } from '@electron-forge/maker-zip';
 import { VitePlugin } from '@electron-forge/plugin-vite';
@@ -6,7 +8,21 @@ import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-nati
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+// Vite bundles everything except these natives, so they are copied into the package by hand.
+const NATIVE_MODULES = ['better-sqlite3', 'uiohook-napi', 'node-gyp-build'];
+const SKIP_DIRS = new Set(['deps', 'src', 'libuiohook', 'obj', 'docs']);
+
 const config: ForgeConfig = {
+  hooks: {
+    packageAfterCopy: async (_config, buildPath) => {
+      for (const name of NATIVE_MODULES) {
+        await fs.cp(path.resolve('node_modules', name), path.join(buildPath, 'node_modules', name), {
+          recursive: true,
+          filter: (src) => !SKIP_DIRS.has(path.basename(src)),
+        });
+      }
+    },
+  },
   packagerConfig: {
     asar: true,
     name: 'Voice Notes',
