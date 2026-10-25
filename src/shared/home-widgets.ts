@@ -66,3 +66,29 @@ export const moveWidget = (
   next.splice(Math.max(0, Math.min(toIndex, next.length)), 0, ws[from]);
   return next;
 };
+
+/** Home is a grid of this many columns; a widget spans 1..MAX_SPAN columns and rows. */
+export const GRID_COLUMNS = 4;
+export const MAX_SPAN = 4;
+
+const clampSpan = (n: number) => Math.max(1, Math.min(MAX_SPAN, Math.round(n)));
+
+/** Stored size, or the default for its type (older settings have none). */
+export const widgetSize = (w: HomeWidget): { w: number; h: number } =>
+  w.w && w.h
+    ? { w: w.w, h: w.h }
+    : w.type === 'quick-add'
+      ? { w: 1, h: 2 }
+      : { w: 2, h: 2 };
+
+export const resizeWidget = (
+  ws: HomeWidget[],
+  id: string,
+  w: number,
+  h: number,
+): HomeWidget[] =>
+  ws.map((x) => (x.id === id ? { ...x, w: clampSpan(w), h: clampSpan(h) } : x));
+
+/** How many grid cells a length of `px` covers, given the cell size and the gap between cells. */
+export const spanFor = (px: number, cell: number, gap: number): number =>
+  clampSpan((px + gap) / (cell + gap));

@@ -51,9 +51,11 @@ export type Page = {
 };
 
 /** A card on the Home page. quick-add appends entries to pageId; page shows pageId's body. */
-export type HomeWidget =
+/** w/h: grid columns/rows spanned (1–4); absent = the type's default size. */
+export type HomeWidget = (
   | { id: string; type: 'quick-add'; pageId: string; label: string }
-  | { id: string; type: 'page'; pageId: string };
+  | { id: string; type: 'page'; pageId: string }
+) & { w?: number; h?: number };
 
 export type Settings = {
   hotkey: number[]; // uiohook keycodes

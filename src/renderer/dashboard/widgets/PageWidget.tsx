@@ -45,7 +45,7 @@ export function PageWidget({ page }: Props) {
   };
 
   return (
-    <div className="max-h-80 overflow-y-auto">
+    <div className="compact-md">
       <MarkdownEditor
         key={`${page.id}:${version}`}
         value={text.current}

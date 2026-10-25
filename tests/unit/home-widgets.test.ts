@@ -11,7 +11,10 @@ import {
   pruneWidgets,
   removeWidget,
   renameWidget,
+  resizeWidget,
+  spanFor,
   unpinPage,
+  widgetSize,
 } from '../../src/shared/home-widgets';
 
 const p1 = '11111111-1111-4111-8111-111111111111';
@@ -112,5 +115,36 @@ describe('renameWidget / removeWidget', () => {
     const ws = [quick('a', p1), page('c', p1)];
     expect(removeWidget(ws, 'a')).toEqual([page('c', p1)]);
     expect(removeWidget(ws, 'zz')).toEqual(ws);
+  });
+});
+
+describe('widget sizes', () => {
+  it('defaults quick-add to 1x2 and pages to 2x2', () => {
+    expect(widgetSize(quick('a', p1))).toEqual({ w: 1, h: 2 });
+    expect(widgetSize(page('b', p1))).toEqual({ w: 2, h: 2 });
+    expect(widgetSize({ ...quick('a', p1), w: 3, h: 1 })).toEqual({
+      w: 3,
+      h: 1,
+    });
+  });
+
+  it('resizes one widget, clamped to 1..4', () => {
+    const ws = [quick('a', p1), page('b', p2)];
+    expect(resizeWidget(ws, 'b', 3, 1)).toEqual([
+      quick('a', p1),
+      { ...page('b', p2), w: 3, h: 1 },
+    ]);
+    expect(widgetSize(resizeWidget(ws, 'a', 9, 0)[0])).toEqual({ w: 4, h: 1 });
+    expect(resizeWidget(ws, 'nope', 2, 2)).toEqual(ws);
+  });
+
+  it('snaps a dragged size in px to whole cells', () => {
+    // 4 cells of 100 px with 12 px gaps: 1 cell = 100, 2 = 212, 3 = 324.
+    expect(spanFor(100, 100, 12)).toBe(1);
+    expect(spanFor(150, 100, 12)).toBe(1);
+    expect(spanFor(160, 100, 12)).toBe(2);
+    expect(spanFor(330, 100, 12)).toBe(3);
+    expect(spanFor(10, 100, 12)).toBe(1);
+    expect(spanFor(2000, 100, 12)).toBe(4);
   });
 });

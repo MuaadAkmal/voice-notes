@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import type { HomeWidget, Page } from '../../shared/channels';
 import {
   addWidget,
   canAdd,
+  GRID_COLUMNS,
   moveWidget,
   removeWidget,
   renameWidget,
+  resizeWidget,
+  spanFor,
+  widgetSize,
 } from '../../shared/home-widgets';
 import { AddWidgetDialog } from './AddWidgetDialog';
 import { getDragging, setDragging, WIDGET_MIME } from './dnd';
@@ -16,11 +20,32 @@ import { QuickAddWidget } from './widgets/QuickAddWidget';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+
+const ROW_PX = 120;
+const GAP_PX = 12;
+/** Quick picks in the card menu; any size up to 4 × 4 can be dragged with the corner handle. */
+const SIZE_PRESETS = [
+  [1, 1],
+  [1, 2],
+  [2, 2],
+  [2, 3],
+  [4, 2],
+] as const;
+
+/** Columns that fit: 4 unless a cell would get narrower than ~150 px, then 2, then 1. */
+const columnsFor = (width: number) =>
+  width >= 640 ? GRID_COLUMNS : width >= 320 ? 2 : 1;
+
+type GridMetrics = { cols: number; cellW: number };
 
 type Props = {
   pages: Page[] | null;
@@ -35,6 +60,17 @@ export function HomePage({ pages, onOpenPage }: Props) {
     open: boolean;
     type: HomeWidget['type'];
   }>({ open: false, type: 'quick-add' });
+  const [gridWidth, setGridWidth] = useState(0);
+  const observer = useRef<ResizeObserver | null>(null);
+  // Callback ref: the grid only exists once there is a widget to show.
+  const gridRef = useCallback((el: HTMLDivElement | null) => {
+    observer.current?.disconnect();
+    if (!el) return;
+    observer.current = new ResizeObserver(([entry]) =>
+      setGridWidth(entry.contentRect.width),
+    );
+    observer.current.observe(el);
+  }, []);
 
   // Another card being dragged (by its header) can drop here; it takes this card's position.
   const draggedWidget = (overId: string) => {
@@ -74,6 +110,11 @@ export function HomePage({ pages, onOpenPage }: Props) {
 
   if (widgets === null) return null;
   const full = !canAdd(widgets);
+  const cols = columnsFor(gridWidth);
+  const metrics: GridMetrics = {
+    cols,
+    cellW: (gridWidth - GAP_PX * (cols - 1)) / cols,
+  };
   // A widget whose page isn't known (not loaded yet, or just deleted) renders nothing.
   const shown = widgets.flatMap((w) => {
     const page = pages?.find((p) => p.id === w.pageId);
@@ -81,9 +122,9 @@ export function HomePage({ pages, onOpenPage }: Props) {
   });
 
   return (
-    <div className="@container mx-auto min-h-full max-w-5xl px-10 py-8">
-      <header className="mb-7 flex items-center justify-between gap-4">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">
+    <div className="min-h-full px-6 py-6">
+      <header className="mb-5 flex items-center justify-between gap-4">
+        <h1 className="font-display text-xl font-semibold tracking-tight">
           Home
         </h1>
         {/* A disabled button shows no tooltip, so the wrapper carries it. */}
@@ -122,11 +163,24 @@ export function HomePage({ pages, onOpenPage }: Props) {
           </div>
         </div>
       ) : (
-        <div className="grid items-start gap-4 @[900px]:grid-cols-2">
+        <div
+          ref={gridRef}
+          className="grid"
+          style={{
+            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+            gridAutoRows: ROW_PX,
+            gap: GAP_PX,
+          }}
+        >
           {shown.map(({ widget, page }) => (
             <WidgetCard
               key={widget.id}
               id={widget.id}
+              size={widgetSize(widget)}
+              metrics={metrics}
+              onResize={(w, h) =>
+                run((cur) => resizeWidget(cur, widget.id, w, h))
+              }
               dropping={dropId === widget.id}
               dropProps={dropProps(widget.id)}
               title={widget.type === 'quick-add' ? widget.label : page.title}
@@ -167,6 +221,9 @@ export function HomePage({ pages, onOpenPage }: Props) {
 
 type CardProps = {
   id: string;
+  size: { w: number; h: number };
+  metrics: GridMetrics;
+  onResize: (w: number, h: number) => void;
   /** Another card is being dragged over this one. */
   dropping: boolean;
   dropProps: React.HTMLAttributes<HTMLElement>;
@@ -182,6 +239,9 @@ type CardProps = {
 
 function WidgetCard({
   id,
+  size,
+  metrics,
+  onResize,
   dropping,
   dropProps,
   title,
@@ -197,6 +257,40 @@ function WidgetCard({
   const card = useRef<HTMLElement>(null);
   // Set once Enter or Escape has ended the edit, so the unmount blur can't commit again.
   const closed = useRef(false);
+  // The size shown while the corner handle is dragged; cleared once the saved size arrives.
+  const [preview, setPreview] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => setPreview(null), [size.w, size.h]);
+  const shown = preview ?? size;
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = card.current?.getBoundingClientRect();
+    if (!rect || metrics.cellW <= 0) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId);
+    const [x0, y0] = [e.clientX, e.clientY];
+    let next = size;
+    const move = (ev: PointerEvent) => {
+      next = {
+        w: Math.min(
+          metrics.cols,
+          spanFor(rect.width + ev.clientX - x0, metrics.cellW, GAP_PX),
+        ),
+        h: spanFor(rect.height + ev.clientY - y0, ROW_PX, GAP_PX),
+      };
+      setPreview(next);
+    };
+    const end = () => {
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
+      if (next.w === size.w && next.h === size.h) setPreview(null);
+      else onResize(next.w, next.h);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+  };
 
   useEffect(() => {
     if (editing) closed.current = false;
@@ -214,7 +308,12 @@ function WidgetCard({
     <section
       ref={card}
       {...dropProps}
-      className={`min-w-0 rounded-2xl border bg-card p-5 transition-shadow ${dropping ? 'ring-2 ring-ring' : ''}`}
+      data-size={`${shown.w}x${shown.h}`}
+      style={{
+        gridColumn: `span ${Math.min(shown.w, metrics.cols)}`,
+        gridRow: `span ${shown.h}`,
+      }}
+      className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card p-3 transition-shadow ${dropping ? 'ring-2 ring-ring' : ''}`}
     >
       {/* The header is the drag handle; the whole card is the drag image. */}
       <header
@@ -232,7 +331,7 @@ function WidgetCard({
             );
         }}
         onDragEnd={() => setDragging(null)}
-        className="mb-3 flex cursor-grab items-center gap-2 active:cursor-grabbing"
+        className="mb-2 flex shrink-0 cursor-grab items-center gap-2 active:cursor-grabbing"
       >
         {editing ? (
           <input
@@ -248,10 +347,10 @@ function WidgetCard({
                 setEditing(false);
               }
             }}
-            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-0.5 font-display text-[15px] font-semibold outline-none focus:border-ring"
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-0.5 font-display text-[13px] font-semibold outline-none focus:border-ring"
           />
         ) : (
-          <h2 className="min-w-0 flex-1 truncate font-display text-[15px] font-semibold tracking-tight">
+          <h2 className="min-w-0 flex-1 truncate font-display text-[13px] font-semibold tracking-tight">
             {onTitleClick ? (
               <button onClick={onTitleClick} className="hover:underline">
                 {title}
@@ -265,7 +364,7 @@ function WidgetCard({
           <DropdownMenuTrigger asChild>
             <button
               aria-label="Widget options"
-              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <MoreHorizontal className="size-4" />
             </button>
@@ -294,6 +393,20 @@ function WidgetCard({
                 Rename
               </DropdownMenuItem>
             )}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Size</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                {SIZE_PRESETS.map(([w, h]) => (
+                  <DropdownMenuCheckboxItem
+                    key={`${w}x${h}`}
+                    checked={size.w === w && size.h === h}
+                    onSelect={() => onResize(w, h)}
+                  >
+                    {w} × {h}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={onRemove}>
               Remove
@@ -301,7 +414,23 @@ function WidgetCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      {children}
+      <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      <div
+        role="slider"
+        aria-label="Resize widget"
+        aria-valuetext={`${shown.w} by ${shown.h}`}
+        onPointerDown={startResize}
+        className="absolute right-0.5 bottom-0.5 grid size-4 cursor-se-resize touch-none place-items-center text-muted-foreground/60 opacity-0 transition-opacity group-hover:opacity-100 hover:text-foreground"
+      >
+        <svg
+          viewBox="0 0 10 10"
+          className="size-2.5"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        >
+          <path d="M9 3 3 9M9 6.5 6.5 9" />
+        </svg>
+      </div>
     </section>
   );
 }

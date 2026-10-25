@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
-import { MAX_HOME_WIDGETS } from './home-widgets';
+import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
 import { LANGUAGE_CODES, normaliseBaseUrl } from './transcription';
 
@@ -9,14 +9,17 @@ export * from './channels';
 
 const SourceSchema = z.enum(['mic', 'system', 'both']);
 
+const Span = z.number().int().min(1).max(MAX_SPAN).optional();
 const HomeWidgetSchema = z.discriminatedUnion('type', [
   z.object({
     id: z.uuid(),
     type: z.literal('quick-add'),
     pageId: z.uuid(),
     label: z.string().trim().min(1).max(60),
+    w: Span,
+    h: Span,
   }),
-  z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid() }),
+  z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid(), w: Span, h: Span }),
 ]);
 
 const TranscriptionSchema = z

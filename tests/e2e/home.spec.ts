@@ -254,3 +254,53 @@ test('home: a checkbox tick and a quick-add on the same page both stick', async 
     'Ctrl+P palette',
   );
 });
+
+test('home: widgets resize on the grid and keep their size', async () => {
+  await page.evaluate(async () => {
+    const api = window.dashboardApi;
+    const p = await api.createPage(null);
+    await api.renamePage(p.id, 'New words');
+    await api.setSettings({
+      homeWidgets: [
+        {
+          id: crypto.randomUUID(),
+          type: 'quick-add',
+          pageId: p.id,
+          label: 'Learned today',
+        },
+        { id: crypto.randomUUID(), type: 'page', pageId: p.id },
+      ],
+    });
+  });
+  // Defaults: quick-add 1 column x 2 rows, a pinned page 2 x 2.
+  await expect(cards().nth(0)).toHaveAttribute('data-size', '1x2');
+  await expect(cards().nth(1)).toHaveAttribute('data-size', '2x2');
+
+  // Drag the corner handle about one cell right and one row down.
+  const card = cards().nth(0);
+  await card.hover();
+  const handle = card.getByRole('slider', { name: 'Resize widget' });
+  const box = (await handle.boundingBox())!;
+  const cardBox = (await card.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + cardBox.width + 20, box.y + 130, { steps: 8 });
+  await page.mouse.up();
+  await expect(card).toHaveAttribute('data-size', '2x3');
+
+  // The menu's Size presets.
+  await cards().nth(1).getByRole('button', { name: 'Widget options' }).click();
+  await page.getByRole('menuitem', { name: 'Size' }).click();
+  await page.getByRole('menuitemcheckbox', { name: '1 × 1' }).click();
+  await expect(cards().nth(1)).toHaveAttribute('data-size', '1x1');
+  await setTheme('light');
+  await shot('6-sizes-light');
+  await setTheme('dark');
+  await shot('6-sizes-dark');
+
+  await t.close();
+  t = await launch({ userData: t.userData });
+  page = t.dashboard;
+  await expect(cards().nth(0)).toHaveAttribute('data-size', '2x3');
+  await expect(cards().nth(1)).toHaveAttribute('data-size', '1x1');
+});

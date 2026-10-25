@@ -37,10 +37,10 @@ export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <button
         onClick={() => onOpenPage(page.id)}
-        className="-mt-2 self-start truncate text-xs text-muted-foreground hover:text-foreground hover:underline"
+        className="-mt-1.5 max-w-full self-start truncate text-[11px] text-muted-foreground hover:text-foreground hover:underline"
       >
         {page.title}
       </button>
@@ -56,16 +56,16 @@ export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
             submit();
           }
         }}
-        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
       />
       <div>
-        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+        <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           Today
         </p>
         {entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground/70">Nothing yet today</p>
+          <p className="text-xs text-muted-foreground/70">Nothing yet today</p>
         ) : (
-          <ul className="flex flex-col gap-1 text-sm">
+          <ul className="flex flex-col gap-0.5 text-xs">
             {entries.map((entry, i) => (
               <li key={i} className="break-words">
                 {entry}
