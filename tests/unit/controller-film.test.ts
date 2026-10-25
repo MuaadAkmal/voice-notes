@@ -143,3 +143,14 @@ it('stop then audio fires capture end only once', async () => {
   await c.onAudio(audio(1000));
   expect(captures).toEqual(['start:mic', 'end']);
 });
+
+it('notify flashes a message only while idle, then returns to idle', () => {
+  c.notify('Turn on film mode to rewind');
+  expect(lastState()).toEqual({ kind: 'error', message: 'Turn on film mode to rewind', retry: false });
+  vi.advanceTimersByTime(3000);
+  expect(lastState()).toEqual(IDLE);
+  c.handleGesture('start');
+  const n = states.length;
+  c.notify('ignored');
+  expect(states).toHaveLength(n);
+});

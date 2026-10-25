@@ -22,6 +22,11 @@ const overlayApi = {
   submitTitle: (noteId: string, title: string) => ipcRenderer.send(Ch.OverlayTitle, { noteId, title }),
   cancelTitle: () => ipcRenderer.send(Ch.OverlayTitleCancel),
   discard: () => ipcRenderer.send(Ch.OverlayDiscard),
+  onFilmMode: (cb: (p: { on: boolean }) => void) => on(Ch.FilmMode, cb),
+  onFilmSave: (cb: (p: { seconds: number }) => void) => on(Ch.FilmSave, cb),
+  sendFilmError: (message: string) => ipcRenderer.send(Ch.FilmError, { message }),
+  onProbe: (cb: (p: { id: number }) => void) => on(Ch.MediaProbe, cb),
+  sendProbeResult: (id: number, playing: boolean) => ipcRenderer.send(Ch.MediaProbeResult, { id, playing }),
 };
 
 export type OverlayApi = typeof overlayApi;

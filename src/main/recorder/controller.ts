@@ -173,6 +173,12 @@ export class RecorderController {
     }
   }
 
+  /** A short message on the pill (e.g. "Film mode stopped"), only when nothing else is on it. */
+  notify(message: string): void {
+    if (this._state !== 'idle' || this.savedState) return;
+    this.flash({ kind: 'error', message, retry: false }, this.errorMs);
+  }
+
   /** Save the last N seconds of the film-mode buffer. Only from idle; returns whether it started. */
   rewind(): boolean {
     if (this._state !== 'idle') return false;

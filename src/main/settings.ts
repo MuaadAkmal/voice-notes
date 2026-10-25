@@ -5,6 +5,11 @@ import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
 // Not Ctrl+Win: that's Wispr Flow's dictation key, and both apps would fire.
 const ALT = 56;
 const META = 3675;
+const SHIFT = 42;
+
+/** Fixed: saves the last N seconds of the film-mode buffer. A superset of the default hotkey, so it's easy to remember. */
+export const REWIND_HOTKEY = [ALT, META, SHIFT];
+export const REWIND_HOTKEY_LABEL = 'Alt+Win+Shift';
 
 export const DEFAULT_SETTINGS: Settings = {
   hotkey: [ALT, META],

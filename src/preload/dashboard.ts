@@ -27,6 +27,10 @@ const dashboardApi = {
   deleteNotes: async (ids: string[]): Promise<void> => {
     for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.NotesDeleteMany, batch);
   },
+  starNotes: async (ids: string[], starred: boolean): Promise<void> => {
+    for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.NotesStar, { ids: batch, starred });
+  },
+  setShow: (id: string, show: string | null): Promise<Note> => ipcRenderer.invoke(Ch.NotesSetShow, { id, show }),
   listFolders: (): Promise<Folder[]> => ipcRenderer.invoke(Ch.FoldersList),
   createFolder: (name: string, parentId: string | null): Promise<Folder> =>
     ipcRenderer.invoke(Ch.FoldersCreate, { name, parentId }),

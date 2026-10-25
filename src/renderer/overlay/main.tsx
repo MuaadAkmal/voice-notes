@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client';
 import type { OverlayState } from '../../shared/channels';
 import { Pill } from './Pill';
 import { useDrag } from './useDrag';
+import { useFilmBuffer } from './useFilmBuffer';
 import { useRecorder } from './useRecorder';
 import './overlay.css';
 
 function Overlay() {
   const [state, setState] = useState<OverlayState>({ kind: 'idle', visible: true });
   const analyser = useRecorder();
+  useFilmBuffer();
   const drag = useDrag();
 
   useEffect(() => window.overlayApi.onState(setState), []);

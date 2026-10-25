@@ -2,13 +2,16 @@ import { app, type BrowserWindow, desktopCapturer, nativeTheme, session } from '
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
-import { type AudioDevice, Ch, type OverlayState, type Settings } from '../shared/ipc';
+import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { showFromTitle } from '../shared/show';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
+import { AutoPause } from './media/auto-pause';
 import { registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
-import { loadSettings, saveSettings } from './settings';
+import { loadSettings, REWIND_HOTKEY, saveSettings } from './settings';
+import { foregroundWindow, pressPlayPause } from './win32';
 import { NoteStore } from './store/note-store';
 import { createTray } from './tray';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
@@ -21,6 +24,7 @@ log.initialize();
 registerNoteScheme();
 
 const HIDDEN_ARG = '--hidden'; // passed by the login item so startup stays silent
+const PROBE_TIMEOUT_MS = 1000; // no answer from the overlay counts as "nothing playing"
 let isQuitting = false;
 let dashboard: BrowserWindow | null = null;
 
@@ -42,6 +46,8 @@ async function boot(): Promise<void> {
   const userData = app.getPath('userData');
   const settingsFile = path.join(userData, 'settings.json');
   const settings: Settings = loadSettings(settingsFile);
+  // Film mode never survives a restart: the app must not start listening to system audio on its own.
+  if (settings.filmMode) Object.assign(settings, saveSettings(settingsFile, { filmMode: false }));
   // themeSource drives prefers-color-scheme in every renderer; the dashboard maps that to html.dark.
   nativeTheme.themeSource = settings.theme;
   nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
@@ -82,7 +88,43 @@ async function boot(): Promise<void> {
   const toDashboard = (channel: string) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(channel);
   };
-  const idleState = (): OverlayState => ({ kind: 'idle', visible: settings.showIdlePill });
+  const idleState = (): OverlayState =>
+    settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
+
+  // Which window the note was recorded over. Replaceable under test (there's no real foreground window).
+  let foreground = foregroundWindow;
+  const getContext = (): NoteContext | null => {
+    const fg = foreground();
+    // No window, or our own dashboard in front: nothing to attribute the note to.
+    if (!fg || !fg.title || fg.pid === process.pid) return null;
+    return { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
+  };
+
+  // Auto-pause asks the overlay whether anything is playing before pressing play/pause.
+  let probeSeq = 0;
+  const probes = new Map<number, (playing: boolean) => void>();
+  const probePlayback = () =>
+    new Promise<boolean>((resolve) => {
+      const id = ++probeSeq;
+      const done = (playing: boolean) => {
+        clearTimeout(timer);
+        probes.delete(id);
+        resolve(playing);
+      };
+      const timer = setTimeout(() => done(false), PROBE_TIMEOUT_MS);
+      probes.set(id, done);
+      send(Ch.MediaProbe, { id });
+    });
+  let mediaPresses = 0;
+  const autoPause = new AutoPause({
+    enabled: () => settings.autoPause,
+    probe: probePlayback,
+    press: () => {
+      mediaPresses++;
+      // Under test, only count: a real key press would play/pause the developer's own music.
+      if (process.env.VOICE_NOTES_TEST !== '1') pressPlayPause();
+    },
+  });
 
   const gesture = new HotkeyGesture();
   const controller = new RecorderController(
@@ -90,12 +132,17 @@ async function boot(): Promise<void> {
       start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source }),
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
+      rewind: (seconds) => send(Ch.FilmSave, { seconds }),
       setState: (s) => send(Ch.OverlayState, s),
     },
     store,
     {
       getDeviceId: () => settings.micDeviceId,
       getSource: () => settings.recordingSource,
+      getContext: () => getContext(),
+      getRewindSeconds: () => settings.rewindSeconds,
+      onCaptureStart: (source) => autoPause.start(source),
+      onCaptureEnd: () => autoPause.end(),
       idleState,
       // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
       onIdle: () => gesture.reset(),
@@ -116,7 +163,10 @@ async function boot(): Promise<void> {
     if (e === 'start') releaseOverlayFocus(); // a new recording abandons an open title input
     controller.handleGesture(e);
   });
-  overlay.webContents.on('did-finish-load', () => send(Ch.OverlayState, idleState()));
+  overlay.webContents.on('did-finish-load', () => {
+    send(Ch.OverlayState, idleState());
+    send(Ch.FilmMode, { on: settings.filmMode }); // a reloaded overlay restarts the buffer
+  });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     log.error('[overlay] renderer gone', details.reason);
     if (!overlay.isDestroyed()) overlay.webContents.reload();
@@ -157,10 +207,27 @@ async function boot(): Promise<void> {
         controller.titleCancelled();
       },
     },
+    onFilmError: (message) => {
+      log.warn('[film] buffer stopped:', message);
+      if (settings.filmMode) updateSettings({ filmMode: false });
+      controller.notify(message);
+    },
+    onProbeResult: (id, playing) => probes.get(id)?.(playing),
   });
+
+  const rewind = () => {
+    if (!settings.filmMode) {
+      controller.notify('Turn on film mode to rewind');
+      return;
+    }
+    releaseOverlayFocus(); // a rewind replaces an open title input, like a new recording
+    controller.rewind();
+  };
 
   const hotkey = new HotkeyService(gesture);
   hotkey.setCombo(settings.hotkey);
+  hotkey.setRewindCombo(REWIND_HOTKEY);
+  hotkey.onRewind(rewind);
   hotkey.setPaused(settings.hotkeyPaused);
   // Under test the gesture is driven through __voiceNotes; a global hook would also react to whatever
   // the person at the keyboard is doing and scramble the run.
@@ -172,6 +239,8 @@ async function boot(): Promise<void> {
     getSource: () => settings.recordingSource,
     setSource: (recordingSource) => updateSettings({ recordingSource }),
     resetPill: () => updateSettings({ pillPosition: null }),
+    isFilmMode: () => settings.filmMode,
+    toggleFilmMode: () => updateSettings({ filmMode: !settings.filmMode }),
     togglePause: () => updateSettings({ hotkeyPaused: !settings.hotkeyPaused }).hotkeyPaused,
     quit: () => {
       isQuitting = true;
@@ -192,7 +261,13 @@ async function boot(): Promise<void> {
     if (patch.launchAtLogin !== undefined) {
       app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: [HIDDEN_ARG] });
     }
-    if (patch.showIdlePill !== undefined && controller.state === 'idle') send(Ch.OverlayState, idleState());
+    if (patch.filmMode !== undefined) {
+      send(Ch.FilmMode, { on: settings.filmMode });
+      tray.refresh();
+    }
+    if ((patch.showIdlePill !== undefined || patch.filmMode !== undefined) && controller.state === 'idle') {
+      send(Ch.OverlayState, idleState());
+    }
     if (patch.theme) nativeTheme.themeSource = settings.theme; // fires 'updated' → caption buttons recolour
     toDashboard(Ch.SettingsChanged);
     return { ...settings };
@@ -218,7 +293,14 @@ async function boot(): Promise<void> {
   });
 
   if (process.env.VOICE_NOTES_TEST === '1') {
-    (globalThis as Record<string, unknown>).__voiceNotes = { gesture, controller, store };
+    (globalThis as Record<string, unknown>).__voiceNotes = {
+      gesture,
+      controller,
+      store,
+      rewind, // what Alt+Win+Shift does
+      setForeground: (fn: typeof foregroundWindow) => (foreground = fn),
+      mediaPresses: () => mediaPresses,
+    };
   }
 
   if (!process.argv.includes(HIDDEN_ARG)) showDashboard();

@@ -55,7 +55,7 @@ beforeEach(() => {
     start: (d, s) => calls.push(`start:${d}:${s}`),
     stop: () => calls.push('stop'),
     cancel: () => calls.push('cancel'),
-    rewind: (s) => calls.push("rewind:${s}"),
+    rewind: (s) => calls.push(`rewind:${s}`),
     setState: (s) => states.push(s),
   };
   const sink: NoteSink = {

@@ -189,14 +189,34 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
 
   switch (state.kind) {
     case 'idle':
-      if (!state.visible) return null;
+      // Film mode is always shown, even with the idle pill hidden: the app is listening to system audio.
+      if (!state.visible && !state.film) return null;
       return (
-        <button
-          {...hover}
-          onClick={() => api.click()}
-          title="Click or hold your hotkey to record"
-          className="h-2 w-10 cursor-pointer rounded-full border border-white/20 bg-neutral-900/70 transition-all hover:h-3 hover:w-14 hover:bg-neutral-800"
-        />
+        <div className="flex items-center gap-1.5">
+          {state.film && (
+            <span
+              {...hover}
+              data-testid="film-dot"
+              title="Film mode: Alt+Win+Shift saves the last few seconds"
+              className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_6px] shadow-sky-400/70"
+            />
+          )}
+          {state.visible && (
+            <button
+              {...hover}
+              onClick={() => api.click()}
+              title="Click or hold your hotkey to record"
+              className="h-2 w-10 cursor-pointer rounded-full border border-white/20 bg-neutral-900/70 transition-all hover:h-3 hover:w-14 hover:bg-neutral-800"
+            />
+          )}
+        </div>
+      );
+    case 'busy':
+      return (
+        <div className={`${shell} h-9 gap-2 px-4 text-sm text-white/80`}>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
+          {state.message}
+        </div>
       );
     case 'recording':
       return (

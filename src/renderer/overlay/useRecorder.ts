@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RecordingSource } from '../../shared/channels';
+import { openSystemAudio } from './capture';
 
 const MIME = 'audio/webm;codecs=opus';
 const BITRATE = 32_000;
@@ -18,15 +19,6 @@ function makeAnalyser(ctx: AudioContext): AnalyserNode {
   const node = ctx.createAnalyser();
   node.fftSize = 1024; // time-domain window for the loudness waveform
   return node;
-}
-
-/** Windows loopback ("what you hear") via main's display-media handler; the video track is dropped at once. */
-async function openSystemAudio(): Promise<MediaStream> {
-  const display = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
-  display.getVideoTracks().forEach((t) => t.stop());
-  const audio = display.getAudioTracks();
-  if (audio.length === 0) throw new Error('no loopback audio track');
-  return new MediaStream(audio);
 }
 
 /**

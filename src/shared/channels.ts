@@ -92,6 +92,12 @@ export const Ch = {
   OverlayTitleCancel: 'overlay:title-cancel',
   OverlayDiscard: 'overlay:discard', // the hands-free × (same as Esc)
   OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
+  // film mode / auto-pause (main → overlay, then overlay → main)
+  FilmMode: 'film:mode', // { on: boolean }
+  FilmSave: 'film:save', // { seconds } → answered with recorder:audio or recorder:error
+  FilmError: 'film:error', // { message } the buffer's loopback stream failed or ended
+  MediaProbe: 'media:probe', // { id } is sound playing?
+  MediaProbeResult: 'media:probe-result', // { id, playing }
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
   NotesRename: 'notes:rename',
@@ -109,6 +115,8 @@ export const Ch = {
   FoldersDelete: 'folders:delete',
   NotesMove: 'notes:move',
   NotesDeleteMany: 'notes:delete-many',
+  NotesStar: 'notes:star', // { ids, starred }
+  NotesSetShow: 'notes:set-show', // { id, show: string | null }
   // main → dashboard
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',

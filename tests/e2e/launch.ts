@@ -9,6 +9,9 @@ import type { Folder, Note } from '../../src/shared/channels';
 export type Hooks = {
   gesture: { toggle(): void; escape(): void };
   store: { list(): Note[]; absolutePath(n: Note): string; folders: { list(): Folder[] } };
+  rewind(): void;
+  setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
+  mediaPresses(): number;
 };
 
 export type TestApp = {

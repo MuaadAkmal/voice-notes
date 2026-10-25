@@ -12,6 +12,8 @@ type TrayActions = {
   getSource(): RecordingSource;
   setSource(source: RecordingSource): void;
   resetPill(): void;
+  isFilmMode(): boolean;
+  toggleFilmMode(): void;
   quit(): void;
 };
 
@@ -30,6 +32,12 @@ export function createTray(actions: TrayActions): { tray: Tray; refresh: () => v
     tray.setContextMenu(
       Menu.buildFromTemplate([
         { label: 'Open dashboard', click: actions.openDashboard },
+        {
+          label: 'Film mode (Alt+Win+Shift rewinds)',
+          type: 'checkbox',
+          checked: actions.isFilmMode(),
+          click: actions.toggleFilmMode,
+        },
         {
           label: 'Pause hotkey',
           type: 'checkbox',

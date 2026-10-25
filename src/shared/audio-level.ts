@@ -20,3 +20,11 @@ export function levelFromRms(rms: number): number {
 export function isSilent(rms: number): boolean {
   return toDb(rms) < SILENCE_DB;
 }
+
+/** True if any `window`-sample slice is louder than the silence threshold (e.g. 50 ms windows: is a film playing?). */
+export function anyAudible(samples: Float32Array, window: number): boolean {
+  for (let i = 0; i < samples.length; i += window) {
+    if (!isSilent(rmsOf(samples.subarray(i, i + window)))) return true;
+  }
+  return false;
+}

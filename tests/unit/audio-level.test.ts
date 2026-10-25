@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { isSilent, levelFromRms, rmsOf } from '../../src/shared/audio-level';
+import { anyAudible, isSilent, levelFromRms, rmsOf } from '../../src/shared/audio-level';
 
 const db = (d: number) => 10 ** (d / 20);
 
@@ -26,4 +26,13 @@ it('isSilent uses a -50 dBFS threshold', () => {
 it('rmsOf a ±0.5 square wave is 0.5', () => {
   const samples = Float32Array.from({ length: 64 }, (_, i) => (i % 2 ? 0.5 : -0.5));
   expect(rmsOf(samples)).toBeCloseTo(0.5, 6);
+});
+
+it('anyAudible finds one loud window among silent ones', () => {
+  const quiet = new Float32Array(4800).fill(0.0001);
+  expect(anyAudible(quiet, 2400)).toBe(false);
+  const loud = quiet.slice();
+  loud.fill(0.2, 3000, 3600); // a short burst in the second window
+  expect(anyAudible(loud, 2400)).toBe(true);
+  expect(anyAudible(new Float32Array(0), 2400)).toBe(false);
 });

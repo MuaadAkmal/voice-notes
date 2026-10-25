@@ -14,6 +14,9 @@ import {
   IdSchema,
   MoveFolderSchema,
   MoveNotesSchema,
+  ProbeResultSchema,
+  SetShowSchema,
+  StarNotesSchema,
   RenameFolderSchema,
   PointerSchema,
   RenameSchema,
@@ -32,6 +35,8 @@ type OverlayDeps = {
   onDevices: (devices: AudioDevice[]) => void;
   onDragEnd: () => void;
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
+  onFilmError: (message: string) => void;
+  onProbeResult: (id: number, playing: boolean) => void;
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -47,7 +52,10 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
   };
 }
 
-export function registerOverlayIpc({ overlay, gesture, controller, onDevices, onDragEnd, titles }: OverlayDeps): void {
+export function registerOverlayIpc(deps: OverlayDeps): void {
+  const { overlay, gesture, controller, onDevices, onDragEnd, titles } = deps;
+  ipcMain.on(Ch.FilmError, from(overlay, ErrorSchema, ({ message }) => deps.onFilmError(message)));
+  ipcMain.on(Ch.MediaProbeResult, from(overlay, ProbeResultSchema, ({ id, playing }) => deps.onProbeResult(id, playing)));
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
   ipcMain.on(Ch.OverlayTitleCancel, (e) => e.sender === overlay.webContents && titles.cancel());
@@ -136,6 +144,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.NotesMove, MoveNotesSchema, ({ ids, folderId }) => {
     d.store.moveNotes(ids, folderId);
     d.notesChanged();
+  });
+  handle(Ch.NotesStar, StarNotesSchema, ({ ids, starred }) => {
+    d.store.setStarred(ids, starred);
+    d.notesChanged();
+  });
+  handle(Ch.NotesSetShow, SetShowSchema, ({ id, show }) => {
+    const note = d.store.setShow(id, show);
+    d.notesChanged();
+    return note;
   });
   handle(Ch.NotesDeleteMany, IdListSchema, async (ids) => {
     await d.store.deleteMany(ids);

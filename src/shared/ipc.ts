@@ -47,3 +47,10 @@ export const RenameFolderSchema = z.object({ id: IdSchema, name: FolderNameSchem
 export const MoveFolderSchema = z.object({ id: IdSchema, parentId: ParentSchema });
 export const IdListSchema = z.array(IdSchema).min(1).max(MAX_BATCH);
 export const MoveNotesSchema = z.object({ ids: IdListSchema, folderId: ParentSchema });
+export const StarNotesSchema = z.object({ ids: IdListSchema, starred: z.boolean() });
+// Blank clears the label.
+export const SetShowSchema = z.object({
+  id: IdSchema,
+  show: z.string().trim().max(120).nullable().transform((s) => s || null),
+});
+export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });
