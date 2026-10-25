@@ -1,6 +1,7 @@
 // What is being dragged right now. dataTransfer contents are unreadable during dragover,
 // so drop targets consult this to decide whether to highlight and accept.
-export type Dragging = { kind: 'notes'; ids: string[] } | { kind: 'folder'; id: string } | null;
+// Dragged list rows: voice note ids and page ids, kept apart because they move through different APIs.
+export type Dragging = { kind: 'notes'; ids: string[]; pageIds: string[] } | { kind: 'folder'; id: string } | null;
 
 export const NOTES_MIME = 'application/x-vn-notes';
 export const FOLDER_MIME = 'application/x-vn-folder';

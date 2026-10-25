@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import type { Folder, Note } from '../../src/shared/channels';
+import type { Folder, Note, Page as TextPage } from '../../src/shared/channels';
 
 // Drives the production Vite build (`npm run package` emits .vite/) through the dev Electron binary:
 // packaged builds disable the Node inspector fuse that Playwright needs.
@@ -13,10 +13,12 @@ export type Hooks = {
     absolutePath(n: Note): string;
     rename(id: string, title: string): Note;
     folders: { list(): Folder[] };
+    pages: { list(): TextPage[]; deleteMany(ids: string[]): Promise<void> };
   };
   rewind(): void;
   setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
   mediaPresses(): number;
+  pagesChanged(): void;
 };
 
 export type TestApp = {
@@ -28,9 +30,9 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-/** fakeAudioFile: feed this WAV to Chromium's fake mic instead of its default beeps. */
-export async function launch(opts: { fakeAudioFile?: string } = {}): Promise<TestApp> {
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
+/** fakeAudioFile: feed this WAV to Chromium's fake mic instead of its default beeps. userData: reuse a data dir (relaunch). */
+export async function launch(opts: { fakeAudioFile?: string; userData?: string } = {}): Promise<TestApp> {
+  const userData = opts.userData ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
   const app = await electron.launch({
     args: [
       '.',

@@ -48,9 +48,10 @@ type Props = {
   onSelect: (v: View) => void;
   folders: Folder[];
   counts: { inbox: number; all: number; starred: number };
+  onNewPage: (folderId: string | null) => void;
 };
 
-export function Sidebar({ view, onSelect, folders, counts }: Props) {
+export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   const toast = useToast();
   const [expanded, setExpanded] = useState(loadExpanded);
   const [editing, setEditing] = useState<Editing>(null);
@@ -151,7 +152,10 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
       const d = getDragging();
       if (!d || !accepts(key)) return;
       const target = key === 'inbox' || key === 'root' ? null : key;
-      const done = d.kind === 'notes' ? api.moveNotes(d.ids, target) : api.moveFolder(d.id, target);
+      const done =
+        d.kind === 'notes'
+          ? Promise.all([d.ids.length > 0 && api.moveNotes(d.ids, target), d.pageIds.length > 0 && api.movePages(d.pageIds, target)])
+          : api.moveFolder(d.id, target);
       run(done.then(() => target && setOpen(target, true)));
       notifyDropped();
     },
@@ -176,6 +180,7 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
         >
           New subfolder
         </Item>
+        <Item onSelect={() => onNewPage(node.id)}>New text note</Item>
         <Item
           onSelect={() => {
             keepFocus.current = true;

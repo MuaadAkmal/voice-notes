@@ -303,6 +303,7 @@ async function boot(): Promise<void> {
       rewind, // what Alt+Win+Shift does
       setForeground: (fn: typeof foregroundWindow) => (foreground = fn),
       mediaPresses: () => mediaPresses,
+      pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
     };
   }
 

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Folder, Note } from '../../shared/channels';
+import type { Folder, Note, Page } from '../../shared/channels';
+import { cleanIpcError } from '../../shared/format';
 import { Logo } from './Logo';
-import { NotesPage } from './NotesPage';
+import { NotesPage, type NotesView } from './NotesPage';
+import { PageView } from './PageView';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
-import { ToastProvider } from './Toast';
+import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
 export type View =
@@ -12,11 +14,13 @@ export type View =
   | { kind: 'all' }
   | { kind: 'starred' }
   | { kind: 'folder'; id: string }
+  | { kind: 'page'; id: string }
   | { kind: 'settings' };
 
 const api = window.dashboardApi;
 
 export function App() {
+  const toast = useToast();
   const [view, setView] = useState<View>({ kind: 'inbox' });
   // Bumped on every sidebar click, even on the current view, so NotesPage can drop its search.
   const [navSeq, setNavSeq] = useState(0);
@@ -25,31 +29,58 @@ export function App() {
     setNavSeq((n) => n + 1);
   };
   const [notes, setNotes] = useState<Note[] | null>(null);
+  const [pages, setPages] = useState<Page[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
+  // Where Back from a page goes, and the page just created (its title starts selected).
+  const [backTo, setBackTo] = useState<NotesView>({ kind: 'inbox' });
+  const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
   const loadNotes = useCallback(() => api.listNotes().then(setNotes), []);
+  const loadPages = useCallback(() => api.listPages().then(setPages), []);
   const loadFolders = useCallback(() => api.listFolders().then(setFolders), []);
 
   useEffect(() => {
     loadNotes();
+    loadPages();
     loadFolders();
     const offNotes = api.onNotesChanged(loadNotes);
+    const offPages = api.onPagesChanged(loadPages);
     const offFolders = api.onFoldersChanged(loadFolders);
     return () => {
       offNotes();
+      offPages();
       offFolders();
     };
-  }, [loadNotes, loadFolders]);
+  }, [loadNotes, loadPages, loadFolders]);
 
-  // The folder being viewed was deleted (here or elsewhere): fall back to Inbox.
+  // The folder or page being viewed was deleted (here or elsewhere): fall back to Inbox.
   useEffect(() => {
     if (view.kind === 'folder' && !folders.some((f) => f.id === view.id)) setView({ kind: 'inbox' });
-  }, [folders, view]);
+    if (view.kind === 'page' && pages && !pages.some((p) => p.id === view.id)) setView({ kind: 'inbox' });
+  }, [folders, pages, view]);
 
+  const openPage = (id: string, fresh = false) => {
+    if (view.kind !== 'page' && view.kind !== 'settings') setBackTo(view);
+    setFreshPageId(fresh ? id : null);
+    navigate({ kind: 'page', id });
+  };
+
+  const newPage = (folderId: string | null) =>
+    api
+      .createPage(folderId)
+      .then((page) => {
+        // Known before the PagesChanged reload lands, so the fallback above doesn't bounce the new page.
+        setPages((prev) => [page, ...(prev ?? []).filter((p) => p.id !== page.id)]);
+        openPage(page.id, true);
+      })
+      .catch((e) => toast(cleanIpcError(e)));
+
+  const inInbox = (x: { folderId: string | null }) => x.folderId === null;
+  const isStarred = (x: { starred: boolean }) => x.starred;
   const counts = {
-    inbox: notes?.filter((n) => n.folderId === null).length ?? 0,
-    all: notes?.length ?? 0,
-    starred: notes?.filter((n) => n.starred).length ?? 0,
+    inbox: (notes?.filter(inInbox).length ?? 0) + (pages?.filter(inInbox).length ?? 0),
+    all: (notes?.length ?? 0) + (pages?.length ?? 0),
+    starred: (notes?.filter(isStarred).length ?? 0) + (pages?.filter(isStarred).length ?? 0),
   };
 
   return (
@@ -64,12 +95,28 @@ export function App() {
           </div>
         </div>
         <div className="flex min-h-0 flex-1">
-          <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} />
+          <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} onNewPage={newPage} />
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'settings' ? (
               <SettingsPage />
+            ) : view.kind === 'page' ? (
+              <PageView
+                key={view.id}
+                page={pages?.find((p) => p.id === view.id)}
+                fresh={freshPageId === view.id}
+                onBack={() => navigate(backTo)}
+              />
             ) : (
-              <NotesPage view={view} navSeq={navSeq} notes={notes} folders={folders} onNavigate={navigate} />
+              <NotesPage
+                view={view}
+                navSeq={navSeq}
+                notes={notes}
+                pages={pages}
+                folders={folders}
+                onNavigate={navigate}
+                onOpenPage={openPage}
+                onNewPage={newPage}
+              />
             )}
           </main>
         </div>

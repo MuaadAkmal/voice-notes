@@ -1,20 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Star, X } from 'lucide-react';
-import type { Folder, Note } from '../../shared/channels';
-import { distinctShows, filterNotes, isFiltering, NO_FILTER, type NoteFilter, type SourceFilter } from '../../shared/search';
+import { FilePlus, Search, Star, X } from 'lucide-react';
+import type { Folder, Note, Page } from '../../shared/channels';
+import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, type SourceFilter } from '../../shared/search';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
+import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems } from '../../shared/items';
 import type { View } from './App';
 import { NOTES_MIME, onDropped, setCountDragImage, setDragging } from './dnd';
 import { NoteRow } from './NoteRow';
+import { PageRow } from './PageRow';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 
 const api = window.dashboardApi;
 
-type NotesView = Exclude<View, { kind: 'settings' }>;
-type Props = { view: NotesView; navSeq: number; notes: Note[] | null; folders: Folder[]; onNavigate: (v: View) => void };
+export type NotesView = Exclude<View, { kind: 'settings' } | { kind: 'page' }>;
+type Props = {
+  view: NotesView;
+  navSeq: number;
+  notes: Note[] | null;
+  pages: Page[] | null;
+  folders: Folder[];
+  onNavigate: (v: View) => void;
+  onOpenPage: (id: string) => void;
+  onNewPage: (folderId: string | null) => void;
+};
 
 const viewKey = (v: NotesView) => (v.kind === 'folder' ? v.id : v.kind);
 // Radix Select can't hold an empty value; this stands for "no filter".
@@ -26,7 +37,13 @@ const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
   { value: 'rewind', label: 'Rewinds' },
 ];
 
-export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
+/** Splits list ids into voice note ids and page ids. */
+function splitIds(ids: string[], items: Item[]): { noteIds: string[]; pageIds: string[] } {
+  const pages = new Set(items.flatMap((i) => (i.type === 'page' ? [i.page.id] : [])));
+  return { noteIds: ids.filter((id) => !pages.has(id)), pageIds: ids.filter((id) => pages.has(id)) };
+}
+
+export function NotesPage({ view, navSeq, notes, pages, folders, onNavigate, onOpenPage, onNewPage }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
@@ -46,15 +63,16 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
     return api.onSettingsChanged(load);
   }, []);
 
+  const items = useMemo(() => (notes && pages ? mergeItems(notes, pages) : null), [notes, pages]);
   // Any search or filter looks across every folder.
   const visible = useMemo(() => {
-    if (!notes) return null;
-    if (filtering) return filterNotes(notes, filter);
-    if (view.kind === 'starred') return notes.filter((n) => n.starred);
-    if (view.kind === 'inbox') return notes.filter((n) => n.folderId === null);
-    if (view.kind === 'folder') return notes.filter((n) => n.folderId === view.id);
-    return notes;
-  }, [notes, view, filter, filtering]);
+    if (!items) return null;
+    if (filtering) return filterItems(items, filter);
+    if (view.kind === 'starred') return items.filter(itemStarred);
+    if (view.kind === 'inbox') return items.filter((i) => itemFolderId(i) === null);
+    if (view.kind === 'folder') return items.filter((i) => itemFolderId(i) === view.id);
+    return items;
+  }, [items, view, filter, filtering]);
 
   const clearSelection = () => {
     setSelected(new Set());
@@ -73,7 +91,7 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
   // Notes that left this view (moved, deleted) leave the selection too.
   useEffect(() => {
     if (!visible) return;
-    const ids = new Set(visible.map((n) => n.id));
+    const ids = new Set(visible.map(itemId));
     setSelected((prev) => {
       const next = new Set([...prev].filter((id) => ids.has(id)));
       return next.size === prev.size ? prev : next;
@@ -97,29 +115,30 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const order = visible?.map((n) => n.id) ?? [];
+  const order = visible?.map(itemId) ?? [];
 
-  const select = (note: Note, e: React.MouseEvent) => {
+  const select = (id: string, e: React.MouseEvent) => {
     if (e.shiftKey && anchor.current) {
-      setSelected(new Set(selectRange(order, anchor.current, note.id)));
+      setSelected(new Set(selectRange(order, anchor.current, id)));
       return;
     }
-    anchor.current = note.id;
+    anchor.current = id;
     if (e.ctrlKey || e.metaKey) {
       setSelected((prev) => {
         const next = new Set(prev);
-        if (next.has(note.id)) next.delete(note.id);
-        else next.add(note.id);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
         return next;
       });
     } else {
-      setSelected(new Set([note.id]));
+      setSelected(new Set([id]));
     }
   };
 
-  const dragStart = (note: Note, e: React.DragEvent) => {
-    const ids = selected.has(note.id) ? order.filter((id) => selected.has(id)) : [note.id];
-    setDragging({ kind: 'notes', ids });
+  const dragStart = (id: string, e: React.DragEvent) => {
+    const ids = selected.has(id) ? order.filter((i) => selected.has(i)) : [id];
+    const { noteIds, pageIds } = splitIds(ids, items ?? []);
+    setDragging({ kind: 'notes', ids: noteIds, pageIds });
     e.dataTransfer.setData(NOTES_MIME, JSON.stringify(ids));
     e.dataTransfer.effectAllowed = 'move';
     setCountDragImage(e, ids.length);
@@ -151,8 +170,12 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
     const ok = await confirm({ title: ids.length === 1 ? 'Delete this note?' : `Delete ${ids.length} notes?` });
     if (!ok) return;
     stopIfPlaying(ids);
+    const { noteIds, pageIds } = splitIds(ids, items ?? []);
     try {
-      await (ids.length === 1 ? api.deleteNote(ids[0]) : api.deleteNotes(ids));
+      await Promise.all([
+        noteIds.length === 1 ? api.deleteNote(noteIds[0]) : noteIds.length > 1 && api.deleteNotes(noteIds),
+        pageIds.length > 0 && api.deletePages(pageIds),
+      ]);
     } catch (e) {
       toast(cleanIpcError(e));
     }
@@ -169,7 +192,7 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
           ? 'Starred'
           : (path.at(-1)?.name ?? '');
   const showFolders = filtering || view.kind === 'all' || view.kind === 'starred';
-  const labelFor = (n: Note) => folderPath(n.folderId, folders).map((f) => f.name).join(' › ') || 'Inbox';
+  const labelFor = (i: Item) => folderPath(itemFolderId(i), folders).map((f) => f.name).join(' › ') || 'Inbox';
 
   return (
     <div
@@ -210,7 +233,7 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
             ref={searchInput}
             type="search"
             aria-label="Search notes"
-            placeholder="Search titles and shows…"
+            placeholder="Search titles, shows and text…"
             value={filter.query}
             onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
             onKeyDown={(e) => {
@@ -264,6 +287,14 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
         >
           <Star className="size-4" fill={filter.starred ? 'currentColor' : 'none'} />
         </button>
+        <button
+          aria-label="New text note"
+          title="New text note"
+          onClick={() => onNewPage(view.kind === 'folder' ? view.id : null)}
+          className="grid h-9 w-9 place-items-center rounded-md border border-input text-muted-foreground shadow-xs transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <FilePlus className="size-4" />
+        </button>
         {filtering && (
           <button
             aria-label="Clear filters"
@@ -300,29 +331,49 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
       {visible === null ? null : visible.length === 0 ? (
         <EmptyState view={view} hotkeyLabel={hotkeyLabel} filtering={filtering} />
       ) : (
-        groupByDay(visible, Date.now(), (n) => n.createdAt).map((group) => (
+        groupByDay(visible, Date.now(), itemTime).map((group) => (
           <section key={group.label} className="mb-8">
             <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">{group.label}</h2>
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">
-              {group.items.map((note) => (
-                <NoteRow
-                  key={note.id}
-                  note={note}
-                  selected={selected.has(note.id)}
-                  folderLabel={showFolders ? labelFor(note) : undefined}
-                  playing={playingId === note.id}
-                  positionMs={playingId === note.id ? positionMs : 0}
-                  onSelect={(e) => select(note, e)}
-                  onDragStart={(e) => dragStart(note, e)}
-                  onDragEnd={() => setDragging(null)}
-                  onTogglePlay={() => togglePlay(note)}
-                  onRename={(t) => api.renameNote(note.id, t).catch((e) => toast(cleanIpcError(e)))}
-                  onReveal={() => api.revealNote(note.id)}
-                  onDelete={() => remove([note.id])}
-                  onToggleStar={() => api.starNotes([note.id], !note.starred).catch((e) => toast(cleanIpcError(e)))}
-                  onSetShow={(show) => api.setShow(note.id, show).catch((e) => toast(cleanIpcError(e)))}
-                />
-              ))}
+              {group.items.map((item) => {
+                const id = itemId(item);
+                const common = {
+                  selected: selected.has(id),
+                  folderLabel: showFolders ? labelFor(item) : undefined,
+                  onSelect: (e: React.MouseEvent) => select(id, e),
+                  onDragStart: (e: React.DragEvent) => dragStart(id, e),
+                  onDragEnd: () => setDragging(null),
+                  onDelete: () => remove([id]),
+                };
+                if (item.type === 'page') {
+                  const { page } = item;
+                  return (
+                    <PageRow
+                      key={id}
+                      {...common}
+                      page={page}
+                      onOpen={() => onOpenPage(page.id)}
+                      onRename={(t) => api.renamePage(page.id, t).catch((e) => toast(cleanIpcError(e)))}
+                      onToggleStar={() => api.starPages([page.id], !page.starred).catch((e) => toast(cleanIpcError(e)))}
+                    />
+                  );
+                }
+                const { note } = item;
+                return (
+                  <NoteRow
+                    key={id}
+                    {...common}
+                    note={note}
+                    playing={playingId === note.id}
+                    positionMs={playingId === note.id ? positionMs : 0}
+                    onTogglePlay={() => togglePlay(note)}
+                    onRename={(t) => api.renameNote(note.id, t).catch((e) => toast(cleanIpcError(e)))}
+                    onReveal={() => api.revealNote(note.id)}
+                    onToggleStar={() => api.starNotes([note.id], !note.starred).catch((e) => toast(cleanIpcError(e)))}
+                    onSetShow={(show) => api.setShow(note.id, show).catch((e) => toast(cleanIpcError(e)))}
+                  />
+                );
+              })}
             </ul>
           </section>
         ))
