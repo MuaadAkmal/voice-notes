@@ -14,7 +14,7 @@ import { useConfirm } from './ConfirmDialog';
 const api = window.dashboardApi;
 
 type NotesView = Exclude<View, { kind: 'settings' }>;
-type Props = { view: NotesView; notes: Note[] | null; folders: Folder[]; onNavigate: (v: View) => void };
+type Props = { view: NotesView; navSeq: number; notes: Note[] | null; folders: Folder[]; onNavigate: (v: View) => void };
 
 const viewKey = (v: NotesView) => (v.kind === 'folder' ? v.id : v.kind);
 // Radix Select can't hold an empty value; this stands for "no filter".
@@ -26,7 +26,7 @@ const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
   { value: 'rewind', label: 'Rewinds' },
 ];
 
-export function NotesPage({ view, notes, folders, onNavigate }: Props) {
+export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
@@ -64,7 +64,11 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   // Selection belongs to one view; drop it on navigation and after a successful drag-move.
   useEffect(clearSelection, [viewKey(view)]);
   // Navigating somewhere is a new question: drop the search.
-  useEffect(() => setFilter(NO_FILTER), [viewKey(view)]);
+  useEffect(() => setFilter(NO_FILTER), [viewKey(view), navSeq]);
+  // The chosen show vanished (its last note was renamed or deleted): stop filtering on it.
+  useEffect(() => {
+    if (filter.show !== null && !shows.some((s) => s.show === filter.show)) setFilter((f) => ({ ...f, show: null }));
+  }, [shows, filter.show]);
   useEffect(() => onDropped(clearSelection), []);
   // Notes that left this view (moved, deleted) leave the selection too.
   useEffect(() => {

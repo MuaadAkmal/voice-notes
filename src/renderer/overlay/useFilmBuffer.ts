@@ -71,16 +71,16 @@ export function useFilmBuffer(): void {
 
     api.onFilmSave(async ({ seconds }) => {
       if (!film || film.ring.size === 0) {
-        api.sendError(film ? 'Nothing to rewind yet' : 'Film mode is off');
+        api.sendRewindError(film ? 'Nothing to rewind yet' : 'Film mode is off');
         return;
       }
       try {
         const samples = film.ring.latest(seconds * SAMPLE_RATE);
         const bytes = await encodeWebmOpus(samples, SAMPLE_RATE);
-        api.sendAudio({ bytes, durationMs: (samples.length / SAMPLE_RATE) * 1000, mimeType: MIME, source: 'system' });
+        api.sendRewindAudio({ bytes, durationMs: (samples.length / SAMPLE_RATE) * 1000, mimeType: MIME, source: 'system' });
       } catch (err) {
         console.error('rewind encode failed', err);
-        api.sendError('Rewind failed');
+        api.sendRewindError('Rewind failed');
       }
     });
 

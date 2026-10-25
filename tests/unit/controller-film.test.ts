@@ -80,7 +80,7 @@ it('rewind asks the overlay for the last N seconds and saves a rewind note with 
   expect(calls).toEqual(['rewind:15']);
   expect(c.state).toBe('rewinding');
   expect(lastState()).toEqual({ kind: 'busy', message: 'Saving last 15 s…' });
-  await c.onAudio(audio(15_000, 'system'));
+  await c.onRewindAudio(audio(15_000, 'system'));
   expect(created[0]).toMatchObject({ kind: 'rewind', source: 'system', show: 'Dark' });
   expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
   expect(c.state).toBe('idle');
@@ -97,24 +97,52 @@ it('rewind is refused unless idle, and a hotkey start is ignored while rewinding
   expect(c.state).toBe('rewinding');
 });
 
-it('a rewind the overlay never answers fails after the watchdog', () => {
+it('a rewind the overlay never answers fails after a watchdog scaled to its length (5 s + 0.2 s per second)', () => {
   c.rewind();
-  vi.advanceTimersByTime(5000);
+  vi.advanceTimersByTime(7999);
+  expect(c.state).toBe('rewinding');
+  vi.advanceTimersByTime(1);
   expect(lastState()).toEqual({ kind: 'error', message: 'Rewind failed', retry: false });
   expect(c.state).toBe('idle');
 });
 
 it('an overlay error during rewind (empty buffer) flashes it', () => {
   c.rewind();
-  c.onCaptureError('Nothing to rewind yet');
+  c.onRewindError('Nothing to rewind yet');
   expect(lastState()).toEqual({ kind: 'error', message: 'Nothing to rewind yet', retry: false });
   expect(c.state).toBe('idle');
+});
+
+it('rewind audio or errors arriving late never touch a new recording, and recording audio never ends a rewind', async () => {
+  c.rewind();
+  vi.advanceTimersByTime(8000); // watchdog gave up
+  c.handleGesture('start');
+  await c.onRewindAudio(audio(15_000, 'system')); // the slow encode finally arrives
+  c.onRewindError('Rewind failed');
+  expect(c.state).toBe('recording');
+  expect(created).toEqual([]);
+  c.handleGesture('cancel');
+  c.rewind();
+  await c.onAudio(audio(1000));
+  c.onCaptureError('No microphone');
+  expect(c.state).toBe('rewinding');
+});
+
+it('refreshIdle re-sends idle only when nothing else is on the pill', async () => {
+  c.refreshIdle();
+  expect(lastState()).toEqual(IDLE);
+  c.handleGesture('start');
+  c.handleGesture('stop');
+  await c.onAudio(audio(1000));
+  const n = states.length;
+  c.refreshIdle(); // the saved flash (and a title typed into it) must survive a settings change
+  expect(states).toHaveLength(n);
 });
 
 it('a failed rewind save keeps kind and context for retry', async () => {
   failNext = true;
   c.rewind();
-  await c.onAudio(audio(15_000, 'system'));
+  await c.onRewindAudio(audio(15_000, 'system'));
   expect(c.state).toBe('failed');
   await c.retry();
   expect(created[1]).toMatchObject({ kind: 'rewind', show: 'Dark' });

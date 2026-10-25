@@ -94,7 +94,9 @@ export const Ch = {
   OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
   // film mode / auto-pause (main → overlay, then overlay → main)
   FilmMode: 'film:mode', // { on: boolean }
-  FilmSave: 'film:save', // { seconds } → answered with recorder:audio or recorder:error
+  FilmSave: 'film:save', // { seconds } → answered with film:audio or film:save-error
+  FilmAudio: 'film:audio', // AudioPayload of a rewind (own channel: never mistaken for a recording's audio)
+  FilmSaveError: 'film:save-error', // { message }
   FilmError: 'film:error', // { message } the buffer's loopback stream failed or ended
   MediaProbe: 'media:probe', // { id } is sound playing?
   MediaProbeResult: 'media:probe-result', // { id, playing }

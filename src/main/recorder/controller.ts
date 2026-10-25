@@ -1,6 +1,6 @@
 import type { GestureEvent } from '../hotkey/gesture';
 import type { NewAudio } from '../store/note-store';
-import type { Note, NoteContext, OverlayState, RecordingSource } from '../../shared/ipc';
+import type { Note, NoteContext, NoteKind, OverlayState, RecordingSource } from '../../shared/ipc';
 
 export interface OverlayPort {
   start(deviceId: string | null, source: RecordingSource): void;
@@ -179,6 +179,12 @@ export class RecorderController {
     this.flash({ kind: 'error', message, retry: false }, this.errorMs);
   }
 
+  /** The idle look changed (settings): re-send it, unless a saved/error flash is on the pill. */
+  refreshIdle(): void {
+    if (this._state !== 'idle' || this.savedState || this.flashTimer) return;
+    this.overlay.setState(this.opts.idleState());
+  }
+
   /** Save the last N seconds of the film-mode buffer. Only from idle; returns whether it started. */
   rewind(): boolean {
     if (this._state !== 'idle') return false;
@@ -189,17 +195,29 @@ export class RecorderController {
     const seconds = this.opts.getRewindSeconds?.() ?? 15;
     this.overlay.setState({ kind: 'busy', message: `Saving last ${seconds} s…` });
     this.overlay.rewind(seconds);
-    this.stopTimer = setTimeout(() => this.onCaptureError('Rewind failed'), this.stopTimeoutMs);
+    // Longer rewinds take longer to encode.
+    this.stopTimer = setTimeout(() => this.onRewindError('Rewind failed'), this.stopTimeoutMs + seconds * 200);
     return true;
   }
 
-  /**
-   * Accepted while 'stopping' or 'rewinding', or while 'recording' when the recorder ended on its own
-   * (e.g. mic unplugged).
-   */
+  /** The encoded rewind clip. Only accepted while 'rewinding': a late one must never land in a new recording. */
+  async onRewindAudio(audio: NewAudio): Promise<void> {
+    if (this._state !== 'rewinding') return;
+    await this.accept(audio, 'rewind');
+  }
+
+  onRewindError(message: string): void {
+    if (this._state !== 'rewinding') return;
+    this.fail(message);
+  }
+
+  /** Accepted while 'stopping', or while 'recording' when the recorder ended on its own (e.g. mic unplugged). */
   async onAudio(audio: NewAudio): Promise<void> {
-    if (this._state !== 'stopping' && this._state !== 'recording' && this._state !== 'rewinding') return;
-    const kind = this._state === 'rewinding' ? 'rewind' : 'note';
+    if (this._state !== 'stopping' && this._state !== 'recording') return;
+    await this.accept(audio, 'note');
+  }
+
+  private async accept(audio: NewAudio, kind: NoteKind): Promise<void> {
     this.endCapture();
     this.clearTimers();
     if (audio.durationMs < this.minMs) {
@@ -217,7 +235,11 @@ export class RecorderController {
   }
 
   onCaptureError(message: string): void {
-    if (this._state !== 'recording' && this._state !== 'stopping' && this._state !== 'rewinding') return;
+    if (this._state !== 'recording' && this._state !== 'stopping') return;
+    this.fail(message);
+  }
+
+  private fail(message: string): void {
     this.endCapture();
     this.clearTimers();
     this.toIdle();

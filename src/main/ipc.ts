@@ -55,6 +55,14 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
 export function registerOverlayIpc(deps: OverlayDeps): void {
   const { overlay, gesture, controller, onDevices, onDragEnd, titles } = deps;
   ipcMain.on(Ch.FilmError, from(overlay, ErrorSchema, ({ message }) => deps.onFilmError(message)));
+  ipcMain.on(
+    Ch.FilmAudio,
+    from(overlay, AudioPayloadSchema, (a) => {
+      const bytes = Buffer.from(a.bytes.buffer, a.bytes.byteOffset, a.bytes.byteLength);
+      controller.onRewindAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }).catch((e) => log.error(e));
+    }),
+  );
+  ipcMain.on(Ch.FilmSaveError, from(overlay, ErrorSchema, ({ message }) => controller.onRewindError(message)));
   ipcMain.on(Ch.MediaProbeResult, from(overlay, ProbeResultSchema, ({ id, playing }) => deps.onProbeResult(id, playing)));
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));

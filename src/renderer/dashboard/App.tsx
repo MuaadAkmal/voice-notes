@@ -18,6 +18,12 @@ const api = window.dashboardApi;
 
 export function App() {
   const [view, setView] = useState<View>({ kind: 'inbox' });
+  // Bumped on every sidebar click, even on the current view, so NotesPage can drop its search.
+  const [navSeq, setNavSeq] = useState(0);
+  const navigate = (v: View) => {
+    setView(v);
+    setNavSeq((n) => n + 1);
+  };
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
 
@@ -58,12 +64,12 @@ export function App() {
           </div>
         </div>
         <div className="flex min-h-0 flex-1">
-          <Sidebar view={view} onSelect={setView} folders={folders} counts={counts} />
+          <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} />
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'settings' ? (
               <SettingsPage />
             ) : (
-              <NotesPage view={view} notes={notes} folders={folders} onNavigate={setView} />
+              <NotesPage view={view} navSeq={navSeq} notes={notes} folders={folders} onNavigate={navigate} />
             )}
           </main>
         </div>

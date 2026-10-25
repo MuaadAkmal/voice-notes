@@ -266,9 +266,8 @@ async function boot(): Promise<void> {
       send(Ch.FilmMode, { on: settings.filmMode });
       tray.refresh();
     }
-    if ((patch.showIdlePill !== undefined || patch.filmMode !== undefined) && controller.state === 'idle') {
-      send(Ch.OverlayState, idleState());
-    }
+    // Not over a saved flash: that would wipe "Add title" (or a title being typed).
+    if (patch.showIdlePill !== undefined || patch.filmMode !== undefined) controller.refreshIdle();
     if (patch.theme) nativeTheme.themeSource = settings.theme; // fires 'updated' → caption buttons recolour
     toDashboard(Ch.SettingsChanged);
     return { ...settings };
@@ -287,6 +286,7 @@ async function boot(): Promise<void> {
 
   app.on('before-quit', () => {
     isQuitting = true;
+    autoPause.end(); // quitting mid-note must not leave the film paused
   });
   app.on('will-quit', () => {
     hotkey.stop();

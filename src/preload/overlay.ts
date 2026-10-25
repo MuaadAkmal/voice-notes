@@ -25,6 +25,8 @@ const overlayApi = {
   onFilmMode: (cb: (p: { on: boolean }) => void) => on(Ch.FilmMode, cb),
   onFilmSave: (cb: (p: { seconds: number }) => void) => on(Ch.FilmSave, cb),
   sendFilmError: (message: string) => ipcRenderer.send(Ch.FilmError, { message }),
+  sendRewindAudio: (a: AudioPayload) => ipcRenderer.send(Ch.FilmAudio, a),
+  sendRewindError: (message: string) => ipcRenderer.send(Ch.FilmSaveError, { message }),
   onProbe: (cb: (p: { id: number }) => void) => on(Ch.MediaProbe, cb),
   sendProbeResult: (id: number, playing: boolean) => ipcRenderer.send(Ch.MediaProbeResult, { id, playing }),
 };

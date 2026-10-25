@@ -1,4 +1,3 @@
-import koffi from 'koffi';
 import log from 'electron-log/main';
 
 // Thin user32/kernel32 bindings via koffi (FFI, no compile step). Every call degrades to null/no-op
@@ -25,6 +24,9 @@ let bindings: Bindings | null | undefined;
 function bind(): Bindings | null {
   if (bindings !== undefined) return bindings;
   try {
+    // Required lazily: koffi throws at require time if its native binary is missing, and that must
+    // not stop the app from booting.
+    const koffi = require('koffi') as typeof import('koffi');
     const user32 = koffi.load('user32.dll');
     const kernel32 = koffi.load('kernel32.dll');
     bindings = {

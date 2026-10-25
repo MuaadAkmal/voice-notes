@@ -10,6 +10,9 @@ it.each([
   ['La.Casa.De.Papel.S01E03.1080p.WEB-DL.x264.mkv - VLC media player', 'vlc.exe', 'La Casa De Papel S01E03'],
   ['Le_Fabuleux_Destin.mp4 - mpv', 'mpv.exe', 'Le Fabuleux Destin'],
   ['Shōgun', 'Netflix.exe', 'Shōgun'],
+  ['Amélie — YouTube — Mozilla Firefox Private Browsing', 'firefox.exe', 'Amélie'],
+  ['Dark | Netflix - Muaad (Uni) - Microsoft​ Edge', 'msedge.exe', 'Dark'], // any Edge profile name
+  ['Dark | Netflix - InPrivate - Microsoft​ Edge', 'msedge.exe', 'Dark'],
 ])('%s → %s', (title, process, show) => {
   expect(showFromTitle(title, process)).toBe(show);
 });
