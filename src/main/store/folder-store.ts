@@ -4,7 +4,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
 import type { Folder } from '../../shared/channels';
 import { isDescendant } from '../../shared/folders';
-import { folders, notes } from './schema';
+import { folders, notes, pages } from './schema';
 
 const MAX_NAME = 100;
 
@@ -51,11 +51,12 @@ export class FolderStore {
     return this.update(id, { parentId });
   }
 
-  /** Moves the folder's notes and subfolders up to its parent (renaming clashes "Name (2)"), then deletes it. */
+  /** Moves the folder's notes, pages and subfolders up to its parent (renaming clashes "Name (2)"), then deletes it. */
   delete(id: string): void {
     const folder = this.require(id);
     this.sqlite.transaction(() => {
       this.db.update(notes).set({ folderId: folder.parentId }).where(eq(notes.folderId, id)).run();
+      this.db.update(pages).set({ folderId: folder.parentId }).where(eq(pages.folderId, id)).run();
       for (const child of this.list().filter((f) => f.parentId === id)) {
         const name = this.freeName(child.name, folder.parentId, child.id);
         this.update(child.id, { parentId: folder.parentId, name });

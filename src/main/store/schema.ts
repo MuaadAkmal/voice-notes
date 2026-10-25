@@ -19,7 +19,18 @@ export const notes = sqliteTable('notes', {
   starred: integer('starred', { mode: 'boolean' }).notNull().default(false),
 });
 
-export const folders = sqliteTable('folders', {
+export const pages = sqliteTable('pages', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  body: text('body').notNull().default(''),
+  folderId: text('folder_id'),
+  starred: integer('starred', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  syncedAt: integer('synced_at'),
+});
+
+export const folders =sqliteTable('folders', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   parentId: text('parent_id'),

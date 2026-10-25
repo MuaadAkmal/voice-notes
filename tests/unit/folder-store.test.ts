@@ -103,6 +103,14 @@ it('delete renames colliding children', () => {
   expect(names()).toEqual(['Films', 'Films (2)']);
 });
 
+it("delete moves the folder's pages to its parent", () => {
+  const spanish = folders.create('Spanish', null);
+  const films = folders.create('Films', spanish.id);
+  const page = store.pages.create(films.id);
+  folders.delete(films.id);
+  expect(store.pages.get(page.id)?.folderId).toBe(spanish.id);
+});
+
 it('delete of a nested folder moves notes to its parent', async () => {
   const spanish = folders.create('Spanish', null);
   const films = folders.create('Films', spanish.id);

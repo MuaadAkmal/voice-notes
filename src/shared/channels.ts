@@ -35,6 +35,17 @@ export type Folder = {
   updatedAt: number;
 };
 
+/** A markdown text note. The body is stored exactly as typed. */
+export type Page = {
+  id: string;
+  title: string;
+  body: string;
+  folderId: string | null; // null = Inbox
+  starred: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type Settings = {
   hotkey: number[]; // uiohook keycodes
   hotkeyLabel: string;

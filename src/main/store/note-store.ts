@@ -8,6 +8,7 @@ import type { Note, NoteKind, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
+import { PageStore } from './page-store';
 import { notes } from './schema';
 
 export type NewAudio = {
@@ -25,7 +26,9 @@ const ORPHAN_MIME = 'audio/webm;codecs=opus';
 
 export class NoteStore {
   readonly recordingsDir: string;
+  readonly imagesDir: string;
   readonly folders: FolderStore;
+  readonly pages: PageStore;
 
   private constructor(
     private readonly rootDir: string,
@@ -34,11 +37,14 @@ export class NoteStore {
     private readonly now: () => number,
   ) {
     this.recordingsDir = path.join(rootDir, 'recordings');
+    this.imagesDir = path.join(rootDir, 'images');
     this.folders = new FolderStore(db, sqlite, now);
+    this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir);
   }
 
   static open(rootDir: string, now: () => number = Date.now): NoteStore {
     fs.mkdirSync(path.join(rootDir, 'recordings'), { recursive: true });
+    fs.mkdirSync(path.join(rootDir, 'images'), { recursive: true });
     const sqlite = new Database(path.join(rootDir, 'voice-notes.sqlite'));
     sqlite.pragma('journal_mode = WAL');
     migrate(sqlite);
