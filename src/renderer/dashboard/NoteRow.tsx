@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Clapperboard, History, MoreHorizontal, Star, Volume2 } from 'lucide-react';
-import type { Note } from '../../shared/channels';
+import { AudioLines, ChevronDown, Clapperboard, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
+import type { JobStatus, Note } from '../../shared/channels';
 import { formatDuration } from '../../shared/format';
+import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../shared/transcription';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -25,6 +27,13 @@ type Props = {
   onDelete: () => void;
   onToggleStar: () => void;
   onSetShow: (show: string | null) => void;
+  transcription?: JobStatus;
+  transcriptionReady: boolean; // a server is set up
+  transcribeLanguage: TranscribeLanguage;
+  onTranscribe: (language?: TranscribeLanguage) => void;
+  onRetranscribe: () => void;
+  onSetupTranscription: () => void;
+  onEditTranscript: (text: string) => void;
 };
 
 const timeOf = (ts: number) =>
@@ -33,8 +42,13 @@ const timeOf = (ts: number) =>
 export function NoteRow(props: Props) {
   const { note, selected, folderLabel, onSelect, onDragStart, onDragEnd } = props;
   const { playing, positionMs, onTogglePlay, onRename, onReveal, onDelete, onToggleStar, onSetShow } = props;
+  const { transcription, transcriptionReady, onTranscribe, onRetranscribe, onSetupTranscription } = props;
   const [editing, setEditing] = useState(false);
   const [editingShow, setEditingShow] = useState(false);
+  const [editingTranscript, setEditingTranscript] = useState(false);
+  // A queued or running job hides the Transcribe actions; a failed one shows Retry instead.
+  const busy = transcription !== undefined && transcription.state !== 'failed';
+  const canTranscribe = !busy && note.status === 'ok';
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const showInput = useRef<HTMLInputElement>(null);
@@ -63,13 +77,13 @@ export function NoteRow(props: Props) {
 
   return (
     <li
-      draggable={!editing && !editingShow}
+      draggable={!editing && !editingShow && !editingTranscript}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={(e) => {
         const target = e.target as HTMLElement;
         // Ignore the row's own controls, and portal content (menus) whose React events bubble here.
-        if (!e.currentTarget.contains(target) || target.closest('button, input')) return;
+        if (!e.currentTarget.contains(target) || target.closest('button, input, textarea')) return;
         onSelect(e);
       }}
       aria-selected={selected}
@@ -173,7 +187,23 @@ export function NoteRow(props: Props) {
             )
           )}
         </div>
+        <Transcript
+          note={note}
+          editing={editingTranscript}
+          setEditing={setEditingTranscript}
+          onSave={props.onEditTranscript}
+        />
+        {transcription && <JobLine status={transcription} onRetry={() => onTranscribe()} />}
       </div>
+
+      {note.transcript === null && canTranscribe && (
+        <TranscribeButton
+          ready={transcriptionReady}
+          language={props.transcribeLanguage}
+          onTranscribe={onTranscribe}
+          onSetup={onSetupTranscription}
+        />
+      )}
 
       <button
         aria-label={note.starred ? 'Unstar' : 'Star'}
@@ -225,6 +255,11 @@ export function NoteRow(props: Props) {
             {note.show ? 'Edit show' : 'Add show'}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onToggleStar}>{note.starred ? 'Unstar' : 'Star'}</DropdownMenuItem>
+          {transcriptionReady && canTranscribe && (
+            <DropdownMenuItem onSelect={note.transcript === null ? () => onTranscribe() : onRetranscribe}>
+              {note.transcript === null ? 'Transcribe' : 'Re-transcribe'}
+            </DropdownMenuItem>
+          )}
           {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
@@ -233,5 +268,136 @@ export function NoteRow(props: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
+  );
+}
+
+function Transcript(props: {
+  note: Note;
+  editing: boolean;
+  setEditing: (on: boolean) => void;
+  onSave: (text: string) => void;
+}) {
+  const { note, editing, setEditing, onSave } = props;
+  const cancelled = useRef(false);
+  if (note.transcript === null) return null;
+  if (editing) {
+    return (
+      <textarea
+        aria-label="Transcript"
+        autoFocus
+        defaultValue={note.transcript}
+        maxLength={100_000}
+        onBlur={(e) => {
+          setEditing(false);
+          if (cancelled.current) cancelled.current = false;
+          else if (e.currentTarget.value !== note.transcript) onSave(e.currentTarget.value);
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          cancelled.current = true;
+          e.currentTarget.blur();
+        }}
+        className="mt-2 block w-full resize-none rounded-md border border-input bg-background px-2 py-1 text-xs leading-relaxed outline-none [field-sizing:content] focus:border-ring"
+      />
+    );
+  }
+  return (
+    <button
+      aria-label="Show transcript"
+      title="Click to edit"
+      onClick={() => setEditing(true)}
+      className="mt-2 flex w-full items-start gap-2 text-left text-xs leading-relaxed text-muted-foreground hover:text-foreground"
+    >
+      {note.transcriptLang && (
+        <span className="mt-px shrink-0 rounded bg-muted px-1 text-[10px] font-medium uppercase">
+          {note.transcriptLang}
+        </span>
+      )}
+      {note.transcript === '' ? (
+        <span className="italic">No speech detected</span>
+      ) : (
+        <span className="line-clamp-2 whitespace-pre-line">{note.transcript}</span>
+      )}
+    </button>
+  );
+}
+
+function JobLine({ status, onRetry }: { status: JobStatus; onRetry: () => void }) {
+  if (status.state === 'queued') return <div className="mt-1.5 text-xs text-muted-foreground">Queued</div>;
+  if (status.state === 'running')
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        Transcribing…
+      </div>
+    );
+  return (
+    <div className="mt-1.5 flex items-center gap-2 text-xs">
+      <span className="text-destructive" title={status.error}>
+        Failed
+      </span>
+      <button onClick={onRetry} className="text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+        Retry
+      </button>
+    </div>
+  );
+}
+
+const LANGUAGE_NAMES: Record<string, string> = Object.fromEntries(TRANSCRIBE_LANGUAGES.map((l) => [l.code, l.name]));
+
+/** Transcribe now with the last language, or pick another from the arrow. Shown on hover, like the star. */
+function TranscribeButton(props: {
+  ready: boolean;
+  language: TranscribeLanguage;
+  onTranscribe: (language?: TranscribeLanguage) => void;
+  onSetup: () => void;
+}) {
+  const { ready, language, onTranscribe, onSetup } = props;
+  const reveal =
+    'opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100';
+  if (!ready) {
+    return (
+      <button
+        onClick={onSetup}
+        className={`${reveal} flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground`}
+      >
+        <AudioLines className="size-3.5" />
+        Set up transcription
+      </button>
+    );
+  }
+  return (
+    <div className={`${reveal} flex h-8 items-center rounded-md border text-xs text-muted-foreground`}>
+      <button
+        aria-label="Transcribe"
+        title={language === 'auto' ? 'Transcribe (auto-detect language)' : `Transcribe (${LANGUAGE_NAMES[language]})`}
+        onClick={() => onTranscribe()}
+        className="flex h-full items-center gap-1.5 rounded-l-md px-2 hover:bg-accent hover:text-foreground"
+      >
+        <AudioLines className="size-3.5" />
+        Transcribe
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label="Transcription language"
+            className="grid h-full place-items-center rounded-r-md border-l px-1 hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown className="size-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="max-h-80 w-44 overflow-y-auto">
+          {[{ code: 'auto' as const, name: 'Auto-detect' }, ...TRANSCRIBE_LANGUAGES].map((l) => (
+            <DropdownMenuCheckboxItem
+              key={l.code}
+              checked={language === l.code}
+              onSelect={() => onTranscribe(l.code)}
+            >
+              {l.name}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }

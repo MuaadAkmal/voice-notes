@@ -8,6 +8,7 @@ import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
+import { TranscriptionPage } from './TranscriptionPage';
 import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
@@ -18,7 +19,8 @@ export type View =
   | { kind: 'starred' }
   | { kind: 'folder'; id: string }
   | { kind: 'page'; id: string }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'transcription' };
 
 const api = window.dashboardApi;
 
@@ -35,7 +37,9 @@ export function App() {
   const [pages, setPages] = useState<Page[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
-  const [backTo, setBackTo] = useState<Exclude<View, { kind: 'page' } | { kind: 'settings' }>>({ kind: 'inbox' });
+  const [backTo, setBackTo] = useState<
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' }>
+  >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
   const loadNotes = useCallback(() => api.listNotes().then(setNotes), []);
@@ -63,7 +67,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings') setBackTo(view);
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription') setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
   };
@@ -105,6 +109,8 @@ export function App() {
               <HomePage pages={pages} onOpenPage={openPage} />
             ) : view.kind === 'settings' ? (
               <SettingsPage />
+            ) : view.kind === 'transcription' ? (
+              <TranscriptionPage />
             ) : view.kind === 'page' ? (
               <PageView
                 key={view.id}

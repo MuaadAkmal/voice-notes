@@ -14,10 +14,14 @@ import { PageRow } from './PageRow';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useHomeWidgets } from './useHomeWidgets';
+import { useTranscription } from './useTranscription';
 
 const api = window.dashboardApi;
 
-export type NotesView = Exclude<View, { kind: 'home' } | { kind: 'settings' } | { kind: 'page' }>;
+export type NotesView = Exclude<
+  View,
+  { kind: 'home' } | { kind: 'settings' } | { kind: 'page' } | { kind: 'transcription' }
+>;
 type Props = {
   view: NotesView;
   filter: NoteFilter;
@@ -59,6 +63,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const filtering = isFiltering(filter);
   const shows = useMemo(() => distinctShows(notes ?? []), [notes]);
   const home = useHomeWidgets();
+  const transcription = useTranscription();
 
   useEffect(() => {
     const load = () => api.getSettings().then((s) => setHotkeyLabel(s.hotkeyLabel));
@@ -117,6 +122,10 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   }, []);
 
   const order = visible?.map(itemId) ?? [];
+  // Selected voice notes that can be transcribed (pages and missing audio can't).
+  const selectedAudio = (visible ?? []).flatMap((i) =>
+    i.type === 'audio' && selected.has(i.note.id) && i.note.status === 'ok' ? [i.note.id] : [],
+  );
 
   const select = (id: string, e: React.MouseEvent) => {
     if (e.shiftKey && anchor.current) {
@@ -320,6 +329,18 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
           <span className="font-medium">{selected.size} selected</span>
           <span className="text-muted-foreground/70">Drag onto a folder to move</span>
           <span className="flex-1" />
+          {selectedAudio.length > 0 && (
+            <button
+              className="rounded-md px-2 py-1 hover:bg-accent"
+              onClick={() =>
+                transcription.ready
+                  ? transcription.transcribe(selectedAudio)
+                  : onNavigate({ kind: 'transcription' })
+              }
+            >
+              Transcribe ({selectedAudio.length})
+            </button>
+          )}
           <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>
             Delete
           </button>
@@ -375,6 +396,16 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                     onReveal={() => api.revealNote(note.id)}
                     onToggleStar={() => api.starNotes([note.id], !note.starred).catch((e) => toast(cleanIpcError(e)))}
                     onSetShow={(show) => api.setShow(note.id, show).catch((e) => toast(cleanIpcError(e)))}
+                    transcription={transcription.status[note.id]}
+                    transcriptionReady={transcription.ready}
+                    transcribeLanguage={transcription.language}
+                    onTranscribe={(language) => transcription.transcribe([note.id], language)}
+                    onRetranscribe={async () => {
+                      const ok = await confirm({ title: 'Replace the current transcript?', confirmLabel: 'Re-transcribe' });
+                      if (ok) transcription.transcribe([note.id]);
+                    }}
+                    onSetupTranscription={() => onNavigate({ kind: 'transcription' })}
+                    onEditTranscript={(text) => api.setTranscript(note.id, text).catch((e) => toast(cleanIpcError(e)))}
                   />
                 );
               })}
