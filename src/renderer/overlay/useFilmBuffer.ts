@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { anyAudible } from '../../shared/audio-level';
 import { RingBuffer } from '../../shared/ring-buffer';
-import { openSystemAudio } from './capture';
+import { clipOpened, openSystemAudio } from './capture';
 import { encodeWebmOpus } from './encode';
 import workletUrl from './ring-worklet.js?url';
 
@@ -87,6 +87,7 @@ export function useFilmBuffer(): void {
     /** Is sound coming out of the speakers? From the live buffer if film mode is on, else a short loopback sample. */
     const probe = async (): Promise<boolean> => {
       if (film) return anyAudible(film.ring.latest((SAMPLE_RATE * PROBE_MS) / 1000), WINDOW);
+      await clipOpened(); // never compete with the mic that's starting this very note
       const stream = await openSystemAudio();
       const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
       try {

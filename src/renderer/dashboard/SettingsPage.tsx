@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
-import type { AudioDevice, RecordingSource, Settings, Theme } from '../../shared/channels';
+import { type AudioDevice, type RecordingSource, REWIND_SECONDS, type RewindSeconds, type Settings, type Theme } from '../../shared/channels';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -96,6 +96,37 @@ export function SettingsPage() {
               ))}
             </SelectContent>
           </Select>
+        </Row>
+
+        <Row
+          title="Film mode"
+          hint="Keeps the last minute of system audio in memory (never written to disk) so the rewind hotkey can save the line you just heard. Turns off when the app restarts."
+        >
+          <Switch aria-label="Film mode" checked={settings.filmMode} onCheckedChange={(v) => update({ filmMode: v })} />
+        </Row>
+
+        <Row title="Rewind" hint="In film mode, saves this much of what just played.">
+          <Kbd>Alt+Win+Shift</Kbd>
+          <Select value={String(settings.rewindSeconds)} onValueChange={(v) => update({ rewindSeconds: Number(v) as RewindSeconds })}>
+            <SelectTrigger className="w-32" aria-label="Rewind length">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {REWIND_SECONDS.map((s) => (
+                <SelectItem key={s} value={String(s)}>
+                  Last {s} s
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Row>
+
+        <Row title="Pause media while recording" hint="For microphone notes: pauses the film if something is playing and resumes it when you stop.">
+          <Switch
+            aria-label="Pause media while recording"
+            checked={settings.autoPause}
+            onCheckedChange={(v) => update({ autoPause: v })}
+          />
         </Row>
 
         <Row title="Microphone">

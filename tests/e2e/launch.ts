@@ -8,7 +8,12 @@ import type { Folder, Note } from '../../src/shared/channels';
 // packaged builds disable the Node inspector fuse that Playwright needs.
 export type Hooks = {
   gesture: { toggle(): void; escape(): void };
-  store: { list(): Note[]; absolutePath(n: Note): string; folders: { list(): Folder[] } };
+  store: {
+    list(): Note[];
+    absolutePath(n: Note): string;
+    rename(id: string, title: string): Note;
+    folders: { list(): Folder[] };
+  };
   rewind(): void;
   setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
   mediaPresses(): number;

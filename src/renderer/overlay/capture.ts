@@ -6,3 +6,16 @@ export async function openSystemAudio(): Promise<MediaStream> {
   if (audio.length === 0) throw new Error('no loopback audio track');
   return new MediaStream(audio);
 }
+
+let opening: Promise<unknown> = Promise.resolve();
+
+/**
+ * Marks the clip being opened right now. Opening loopback capture at the same moment slows the mic
+ * down enough to lose the first words, so the auto-pause probe waits for this first.
+ */
+export function trackOpening<T>(p: Promise<T>): Promise<T> {
+  opening = p.catch(() => undefined);
+  return p;
+}
+
+export const clipOpened = (): Promise<unknown> => opening;

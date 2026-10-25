@@ -47,7 +47,7 @@ type Props = {
   view: View;
   onSelect: (v: View) => void;
   folders: Folder[];
-  counts: { inbox: number; all: number };
+  counts: { inbox: number; all: number; starred: number };
 };
 
 export function Sidebar({ view, onSelect, folders, counts }: Props) {
@@ -284,6 +284,13 @@ export function Sidebar({ view, onSelect, folders, counts }: Props) {
           active={view.kind === 'all'}
           onClick={() => onSelect({ kind: 'all' })}
           icon="M4 6h16M4 12h16M4 18h10"
+        />
+        <NavItem
+          label="Starred"
+          count={counts.starred}
+          active={view.kind === 'starred'}
+          onClick={() => onSelect({ kind: 'starred' })}
+          icon="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z"
         />
 
         <div

@@ -63,3 +63,20 @@ test('auto-pause never presses the media key for a system-audio note', async () 
   await t.record(800);
   expect(await t.hooks((h) => h.mediaPresses())).toBe(0);
 });
+
+test('auto-pause presses play/pause around a mic note while something is playing', async () => {
+  // Under fake media devices, loopback hears the fake input too: a steady tone stands in for a film.
+  t = await launch({ fakeAudioFile: 'tests/e2e/fixtures/tone.wav' });
+  await t.hooks((h) => h.gesture.toggle());
+  await expect.poll(() => t.hooks((h) => h.mediaPresses()), { timeout: 4000 }).toBe(1);
+  await t.hooks((h) => h.gesture.toggle());
+  await expect.poll(() => t.hooks((h) => h.mediaPresses())).toBe(2);
+  await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
+});
+
+test('auto-pause stays off when the setting is off', async () => {
+  t = await launch({ fakeAudioFile: 'tests/e2e/fixtures/tone.wav' });
+  await t.dashboard.evaluate(() => window.dashboardApi.setSettings({ autoPause: false }));
+  await t.record(1200);
+  expect(await t.hooks((h) => h.mediaPresses())).toBe(0);
+});

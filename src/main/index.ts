@@ -24,7 +24,8 @@ log.initialize();
 registerNoteScheme();
 
 const HIDDEN_ARG = '--hidden'; // passed by the login item so startup stays silent
-const PROBE_TIMEOUT_MS = 1000; // no answer from the overlay counts as "nothing playing"
+// No answer counts as "nothing playing". The probe waits for the note's mic to open, then samples ~300 ms.
+const PROBE_TIMEOUT_MS = 2000;
 let isQuitting = false;
 let dashboard: BrowserWindow | null = null;
 

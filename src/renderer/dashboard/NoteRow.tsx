@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MoreHorizontal, Volume2 } from 'lucide-react';
+import { Clapperboard, History, MoreHorizontal, Star, Volume2 } from 'lucide-react';
 import type { Note } from '../../shared/channels';
 import { formatDuration } from '../../shared/format';
 import {
@@ -23,6 +23,8 @@ type Props = {
   onRename: (title: string) => void;
   onReveal: () => void;
   onDelete: () => void;
+  onToggleStar: () => void;
+  onSetShow: (show: string | null) => void;
 };
 
 const timeOf = (ts: number) =>
@@ -30,10 +32,12 @@ const timeOf = (ts: number) =>
 
 export function NoteRow(props: Props) {
   const { note, selected, folderLabel, onSelect, onDragStart, onDragEnd } = props;
-  const { playing, positionMs, onTogglePlay, onRename, onReveal, onDelete } = props;
+  const { playing, positionMs, onTogglePlay, onRename, onReveal, onDelete, onToggleStar, onSetShow } = props;
   const [editing, setEditing] = useState(false);
-  const renameFromMenu = useRef(false);
+  const [editingShow, setEditingShow] = useState(false);
+  const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
+  const showInput = useRef<HTMLInputElement>(null);
   const missing = note.status === 'missing';
   // MediaRecorder WebM has no duration header (<audio>.duration is Infinity), so progress uses the stored length.
   const progress = note.durationMs > 0 ? Math.min(1, Math.max(0, positionMs / note.durationMs)) : 0;
@@ -41,6 +45,15 @@ export function NoteRow(props: Props) {
   useEffect(() => {
     if (editing) input.current?.select();
   }, [editing]);
+  useEffect(() => {
+    if (editingShow) showInput.current?.select();
+  }, [editingShow]);
+
+  const commitShow = (value: string) => {
+    setEditingShow(false);
+    const show = value.trim();
+    if (show !== (note.show ?? '')) onSetShow(show || null);
+  };
 
   const commit = (value: string) => {
     setEditing(false);
@@ -50,7 +63,7 @@ export function NoteRow(props: Props) {
 
   return (
     <li
-      draggable={!editing}
+      draggable={!editing && !editingShow}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       onClick={(e) => {
@@ -105,7 +118,42 @@ export function NoteRow(props: Props) {
           </button>
         )}
         <div className="mt-1.5 flex items-center gap-3">
-          {note.source !== 'mic' && (
+          {note.kind === 'rewind' && (
+            <span
+              title="Rewind: the last seconds of system audio, saved in film mode"
+              className="flex items-center gap-1 rounded bg-sky-500/10 px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-300"
+            >
+              <History className="size-3" />
+              Rewind
+            </span>
+          )}
+          {editingShow ? (
+            <input
+              ref={showInput}
+              aria-label="Show"
+              defaultValue={note.show ?? ''}
+              placeholder="Show or film"
+              maxLength={120}
+              onBlur={(e) => commitShow(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitShow(e.currentTarget.value);
+                if (e.key === 'Escape') setEditingShow(false);
+              }}
+              className="w-48 rounded border border-input bg-background px-1.5 py-0.5 text-[11px] outline-none focus:border-ring"
+            />
+          ) : (
+            note.show && (
+              <button
+                onClick={() => setEditingShow(true)}
+                title={note.windowTitle ? `Recorded over: ${note.windowTitle}\nClick to edit` : 'Click to edit'}
+                className="flex max-w-48 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <Clapperboard className="size-3 shrink-0" />
+                <span className="truncate">{note.show}</span>
+              </button>
+            )
+          )}
+          {note.source !== 'mic' && note.kind !== 'rewind' && (
             <span title={note.source === 'both' ? 'Mic + system audio' : 'System audio'} className="text-muted-foreground">
               <Volume2 className="size-3.5" aria-label="Includes system audio" />
             </span>
@@ -127,6 +175,16 @@ export function NoteRow(props: Props) {
         </div>
       </div>
 
+      <button
+        aria-label={note.starred ? 'Unstar' : 'Star'}
+        aria-pressed={note.starred}
+        onClick={onToggleStar}
+        className={`grid h-8 w-8 place-items-center rounded-md transition-opacity hover:bg-accent ${
+          note.starred ? 'text-amber-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+        }`}
+      >
+        <Star className="size-4" fill={note.starred ? 'currentColor' : 'none'} />
+      </button>
       <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{formatDuration(note.durationMs)}</span>
       <span className="w-12 text-right text-xs tabular-nums text-muted-foreground/70">{timeOf(note.createdAt)}</span>
 
@@ -144,20 +202,29 @@ export function NoteRow(props: Props) {
           className="w-44"
           // Returning focus to the trigger would immediately blur (and commit) the rename input.
           onCloseAutoFocus={(e) => {
-            if (renameFromMenu.current) {
+            if (editFromMenu.current) {
               e.preventDefault();
-              renameFromMenu.current = false;
+              editFromMenu.current = false;
             }
           }}
         >
           <DropdownMenuItem
             onSelect={() => {
-              renameFromMenu.current = true;
+              editFromMenu.current = true;
               setEditing(true);
             }}
           >
             Rename
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              editFromMenu.current = true;
+              setEditingShow(true);
+            }}
+          >
+            {note.show ? 'Edit show' : 'Add show'}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onToggleStar}>{note.starred ? 'Unstar' : 'Star'}</DropdownMenuItem>
           {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RecordingSource } from '../../shared/channels';
-import { openSystemAudio } from './capture';
+import { openSystemAudio, trackOpening } from './capture';
 
 const MIME = 'audio/webm;codecs=opus';
 const BITRATE = 32_000;
@@ -143,7 +143,7 @@ export function useRecorder(): AnalyserNode | null {
       starting.current = true;
       let clip: Clip | null = null;
       try {
-        clip = await openClip(deviceId, source);
+        clip = await trackOpening(openClip(deviceId, source));
         const opened = clip;
         const rec = new MediaRecorder(clip.stream, { mimeType: MIME, audioBitsPerSecond: BITRATE });
         const chunks: Blob[] = [];

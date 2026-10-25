@@ -7,7 +7,12 @@ import { Sidebar } from './Sidebar';
 import { ToastProvider } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
-export type View = { kind: 'inbox' } | { kind: 'all' } | { kind: 'folder'; id: string } | { kind: 'settings' };
+export type View =
+  | { kind: 'inbox' }
+  | { kind: 'all' }
+  | { kind: 'starred' }
+  | { kind: 'folder'; id: string }
+  | { kind: 'settings' };
 
 const api = window.dashboardApi;
 
@@ -38,6 +43,7 @@ export function App() {
   const counts = {
     inbox: notes?.filter((n) => n.folderId === null).length ?? 0,
     all: notes?.length ?? 0,
+    starred: notes?.filter((n) => n.starred).length ?? 0,
   };
 
   return (

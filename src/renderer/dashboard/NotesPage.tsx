@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search, Star, X } from 'lucide-react';
 import type { Folder, Note } from '../../shared/channels';
+import { distinctShows, filterNotes, isFiltering, NO_FILTER, type NoteFilter, type SourceFilter } from '../../shared/search';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
 import type { View } from './App';
@@ -14,6 +17,14 @@ type NotesView = Exclude<View, { kind: 'settings' }>;
 type Props = { view: NotesView; notes: Note[] | null; folders: Folder[]; onNavigate: (v: View) => void };
 
 const viewKey = (v: NotesView) => (v.kind === 'folder' ? v.id : v.kind);
+// Radix Select can't hold an empty value; this stands for "no filter".
+const ANY = '__any';
+const SOURCE_FILTERS: { value: SourceFilter; label: string }[] = [
+  { value: 'mic', label: 'Microphone' },
+  { value: 'system', label: 'System audio' },
+  { value: 'both', label: 'Mic + system' },
+  { value: 'rewind', label: 'Rewinds' },
+];
 
 export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   const toast = useToast();
@@ -22,8 +33,12 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<NoteFilter>(NO_FILTER);
   const anchor = useRef<string | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const filtering = isFiltering(filter);
+  const shows = useMemo(() => distinctShows(notes ?? []), [notes]);
 
   useEffect(() => {
     const load = () => api.getSettings().then((s) => setHotkeyLabel(s.hotkeyLabel));
@@ -31,12 +46,15 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
     return api.onSettingsChanged(load);
   }, []);
 
+  // Any search or filter looks across every folder.
   const visible = useMemo(() => {
     if (!notes) return null;
+    if (filtering) return filterNotes(notes, filter);
+    if (view.kind === 'starred') return notes.filter((n) => n.starred);
     if (view.kind === 'inbox') return notes.filter((n) => n.folderId === null);
     if (view.kind === 'folder') return notes.filter((n) => n.folderId === view.id);
     return notes;
-  }, [notes, view]);
+  }, [notes, view, filter, filtering]);
 
   const clearSelection = () => {
     setSelected(new Set());
@@ -45,6 +63,8 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
 
   // Selection belongs to one view; drop it on navigation and after a successful drag-move.
   useEffect(clearSelection, [viewKey(view)]);
+  // Navigating somewhere is a new question: drop the search.
+  useEffect(() => setFilter(NO_FILTER), [viewKey(view)]);
   useEffect(() => onDropped(clearSelection), []);
   // Notes that left this view (moved, deleted) leave the selection too.
   useEffect(() => {
@@ -62,7 +82,13 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   }, [visible, playingId]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && clearSelection();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clearSelection();
+      if (e.ctrlKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        searchInput.current?.focus();
+      }
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -129,7 +155,16 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   };
 
   const path = view.kind === 'folder' ? folderPath(view.id, folders) : [];
-  const title = view.kind === 'inbox' ? 'Inbox' : view.kind === 'all' ? 'All notes' : (path.at(-1)?.name ?? '');
+  const title = filtering
+    ? 'Search'
+    : view.kind === 'inbox'
+      ? 'Inbox'
+      : view.kind === 'all'
+        ? 'All notes'
+        : view.kind === 'starred'
+          ? 'Starred'
+          : (path.at(-1)?.name ?? '');
+  const showFolders = filtering || view.kind === 'all' || view.kind === 'starred';
   const labelFor = (n: Note) => folderPath(n.folderId, folders).map((f) => f.name).join(' › ') || 'Inbox';
 
   return (
@@ -151,12 +186,91 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
           </nav>
         )}
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {view.kind !== 'folder' && (
+        {filtering ? (
           <p className="mt-1 text-sm text-muted-foreground">
-            Hold <Kbd>{hotkeyLabel}</Kbd> anywhere to record. New notes land in Inbox.
+            {visible?.length ?? 0} {visible?.length === 1 ? 'note' : 'notes'} across all folders
           </p>
+        ) : (
+          (view.kind === 'inbox' || view.kind === 'all') && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Hold <Kbd>{hotkeyLabel}</Kbd> anywhere to record. New notes land in Inbox.
+            </p>
+          )
         )}
       </header>
+
+      <div className="mb-6 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-48 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            ref={searchInput}
+            type="search"
+            aria-label="Search notes"
+            placeholder="Search titles and shows…"
+            value={filter.query}
+            onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && filter.query) {
+                e.stopPropagation();
+                setFilter((f) => ({ ...f, query: '' }));
+              }
+            }}
+            className="h-9 w-full rounded-md border border-input bg-transparent pr-3 pl-8 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+          />
+        </div>
+        <Select
+          value={filter.show ?? ANY}
+          onValueChange={(v) => setFilter((f) => ({ ...f, show: v === ANY ? null : v }))}
+          disabled={shows.length === 0 && filter.show === null}
+        >
+          <SelectTrigger className="w-40" aria-label="Filter by show">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY}>All shows</SelectItem>
+            {shows.map(({ show, count }) => (
+              <SelectItem key={show} value={show}>
+                {show} <span className="text-muted-foreground">{count}</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={filter.source ?? ANY}
+          onValueChange={(v) => setFilter((f) => ({ ...f, source: v === ANY ? null : (v as SourceFilter) }))}
+        >
+          <SelectTrigger className="w-34" aria-label="Filter by source">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY}>Any source</SelectItem>
+            {SOURCE_FILTERS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <button
+          aria-label="Starred only"
+          aria-pressed={filter.starred}
+          title="Starred only"
+          onClick={() => setFilter((f) => ({ ...f, starred: !f.starred }))}
+          className="grid h-9 w-9 place-items-center rounded-md border border-input text-muted-foreground shadow-xs transition-colors hover:bg-accent hover:text-foreground aria-pressed:border-amber-500/50 aria-pressed:bg-amber-500/10 aria-pressed:text-amber-500"
+        >
+          <Star className="size-4" fill={filter.starred ? 'currentColor' : 'none'} />
+        </button>
+        {filtering && (
+          <button
+            aria-label="Clear filters"
+            title="Clear filters"
+            onClick={() => setFilter(NO_FILTER)}
+            className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
 
       <audio
         ref={audio}
@@ -180,7 +294,7 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
       )}
 
       {visible === null ? null : visible.length === 0 ? (
-        <EmptyState view={view} hotkeyLabel={hotkeyLabel} />
+        <EmptyState view={view} hotkeyLabel={hotkeyLabel} filtering={filtering} />
       ) : (
         groupByDay(visible, Date.now()).map((group) => (
           <section key={group.label} className="mb-8">
@@ -191,7 +305,7 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
                   key={note.id}
                   note={note}
                   selected={selected.has(note.id)}
-                  folderLabel={view.kind === 'all' ? labelFor(note) : undefined}
+                  folderLabel={showFolders ? labelFor(note) : undefined}
                   playing={playingId === note.id}
                   positionMs={playingId === note.id ? positionMs : 0}
                   onSelect={(e) => select(note, e)}
@@ -201,6 +315,8 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
                   onRename={(t) => api.renameNote(note.id, t).catch((e) => toast(cleanIpcError(e)))}
                   onReveal={() => api.revealNote(note.id)}
                   onDelete={() => remove([note.id])}
+                  onToggleStar={() => api.starNotes([note.id], !note.starred).catch((e) => toast(cleanIpcError(e)))}
+                  onSetShow={(show) => api.setShow(note.id, show).catch((e) => toast(cleanIpcError(e)))}
                 />
               ))}
             </ul>
@@ -211,10 +327,20 @@ export function NotesPage({ view, notes, folders, onNavigate }: Props) {
   );
 }
 
-function EmptyState({ view, hotkeyLabel }: { view: NotesView; hotkeyLabel: string }) {
+function EmptyState({ view, hotkeyLabel, filtering }: { view: NotesView; hotkeyLabel: string; filtering: boolean }) {
   return (
     <div className="rounded-2xl border border-dashed bg-card px-8 py-14 text-center">
-      {view.kind === 'folder' ? (
+      {filtering ? (
+        <>
+          <p className="text-[15px] font-medium">No notes match</p>
+          <p className="mt-1 text-sm text-muted-foreground">Try fewer words, or clear the filters.</p>
+        </>
+      ) : view.kind === 'starred' ? (
+        <>
+          <p className="text-[15px] font-medium">No starred notes</p>
+          <p className="mt-1 text-sm text-muted-foreground">Star the phrases you want to come back to.</p>
+        </>
+      ) : view.kind === 'folder' ? (
         <>
           <p className="text-[15px] font-medium">No notes here</p>
           <p className="mt-1 text-sm text-muted-foreground">Drag notes onto this folder in the sidebar.</p>
