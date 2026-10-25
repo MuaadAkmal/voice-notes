@@ -126,7 +126,7 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   // ---- drag & drop -------------------------------------------------------
   const accepts = (key: DropKey): boolean => {
     const d = getDragging();
-    if (!d) return false;
+    if (!d || d.kind === 'widget') return false;
     if (d.kind === 'notes') return key !== 'root';
     if (key === 'inbox') return false;
     if (key === 'root') return folders.find((f) => f.id === d.id)?.parentId !== null;

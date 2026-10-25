@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FileText, MoreHorizontal, Star } from 'lucide-react';
 import type { Page } from '../../shared/channels';
 import { snippet } from '../../shared/markdown-snippet';
+import { HOME_FULL } from './useHomeWidgets';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +22,10 @@ type Props = {
   onRename: (title: string) => void;
   onDelete: () => void;
   onToggleStar: () => void;
+  pinned: boolean;
+  /** Home has no room for another widget: Pin is disabled (Unpin still works). */
+  homeFull: boolean;
+  onTogglePin: () => void;
 };
 
 const timeOf = (ts: number) =>
@@ -41,7 +46,8 @@ export function PageRow(props: Props) {
     onDragStart,
     onDragEnd,
   } = props;
-  const { onRename, onDelete, onToggleStar } = props;
+  const { onRename, onDelete, onToggleStar, pinned, homeFull, onTogglePin } =
+    props;
   const [editing, setEditing] = useState(false);
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
@@ -174,6 +180,15 @@ export function PageRow(props: Props) {
           <DropdownMenuItem onSelect={onToggleStar}>
             {page.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
+          {/* A disabled item shows no tooltip, so the wrapper carries it. */}
+          <span title={!pinned && homeFull ? HOME_FULL : undefined}>
+            <DropdownMenuItem
+              disabled={!pinned && homeFull}
+              onSelect={onTogglePin}
+            >
+              {pinned ? 'Unpin from Home' : 'Pin to Home'}
+            </DropdownMenuItem>
+          </span>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
             Delete

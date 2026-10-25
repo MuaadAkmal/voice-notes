@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pin, PinOff } from 'lucide-react';
 import type { Page } from '../../shared/channels';
 import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
+import { canAdd, isPinned } from '../../shared/home-widgets';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { useToast } from './Toast';
+import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
 
 const api = window.dashboardApi;
 const SAVE_DELAY_MS = 500;
@@ -30,6 +32,9 @@ export function PageView({ page, fresh, onBack }: Props) {
   const [title, setTitle] = useState(shown.title);
   const titleInput = useRef<HTMLInputElement>(null);
   const editorHost = useRef<HTMLDivElement>(null);
+  const home = useHomeWidgets();
+  const pinned = isPinned(home.widgets ?? [], shown.id);
+  const pinDisabled = home.widgets === null || (!pinned && !canAdd(home.widgets));
 
   const onSaveError = () => {
     setStatus('error');
@@ -105,12 +110,27 @@ export function PageView({ page, fresh, onBack }: Props) {
           >
             <ArrowLeft className="size-4" />
           </button>
-          <span
-            aria-live="polite"
-            className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
-          >
-            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : 'Saved'}
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              aria-live="polite"
+              className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+            >
+              {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : 'Saved'}
+            </span>
+            {/* A disabled button shows no tooltip, so the wrapper carries it. */}
+            <span title={pinDisabled && home.widgets ? HOME_FULL : undefined}>
+              <button
+                aria-label={pinned ? 'Unpin from Home' : 'Pin to Home'}
+                title={pinned ? 'Unpin from Home' : 'Pin to Home'}
+                aria-pressed={pinned}
+                disabled={pinDisabled}
+                onClick={() => home.togglePin(shown.id)}
+                className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              >
+                {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+              </button>
+            </span>
+          </div>
         </div>
         <input
           ref={titleInput}

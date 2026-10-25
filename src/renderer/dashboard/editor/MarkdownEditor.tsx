@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import {
   EditorSelection,
   EditorState,
+  Prec,
   type Extension,
 } from '@codemirror/state';
 import {
@@ -195,9 +196,11 @@ async function insertImages(
 type Props = {
   value: string;
   onChange: (body: string) => void;
-  onBlur: () => void;
+  onBlur?: () => void;
   onError: (message: string) => void;
   autoFocus?: boolean;
+  /** Not editable and no cursor, so everything renders as preview; checkboxes still toggle (onChange). */
+  readOnly?: boolean;
 };
 
 /** CodeMirror markdown editor. Uncontrolled: `value` is read on mount; remount (change `key`) to load other text. */
@@ -207,6 +210,7 @@ export function MarkdownEditor({
   onBlur,
   onError,
   autoFocus,
+  readOnly,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onChange, onBlur, onError });
@@ -227,13 +231,25 @@ export function MarkdownEditor({
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString());
             if (update.focusChanged && !update.view.hasFocus)
-              callbacks.current.onBlur();
+              callbacks.current.onBlur?.();
           }),
+          // Built-in paste, drop and typing honour readOnly; the checkbox's own dispatch is not blocked by either.
+          readOnly
+            ? [
+                EditorView.editable.of(false),
+                EditorState.readOnly.of(true),
+                // No room left below the text for typing into.
+                Prec.highest(
+                  EditorView.theme({ '.cm-content': { padding: '0' } }),
+                ),
+              ]
+            : [],
           EditorView.domEventHandlers({
             paste(event, view) {
               const data = event.clipboardData;
               // Apps like Word put a picture of copied text on the clipboard too; text wins.
               if (
+                view.state.readOnly ||
                 !data ||
                 data.files.length === 0 ||
                 data.getData('text/plain') !== ''
@@ -250,7 +266,8 @@ export function MarkdownEditor({
             },
             drop(event, view) {
               const files = event.dataTransfer?.files;
-              if (!files || files.length === 0) return false;
+              if (view.state.readOnly || !files || files.length === 0)
+                return false;
               event.preventDefault();
               const pos =
                 view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
@@ -264,7 +281,7 @@ export function MarkdownEditor({
     });
     if (autoFocus) view.focus();
     return () => view.destroy();
-    // Uncontrolled: the initial value and autoFocus are read once; a new page remounts via `key`.
+    // Uncontrolled: the initial value, autoFocus and readOnly are read once; a new page remounts via `key`.
   }, []);
 
   return <div ref={host} className="markdown-editor" />;

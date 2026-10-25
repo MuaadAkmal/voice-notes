@@ -104,3 +104,117 @@ test('home: default view and quick add', async () => {
     ),
   ).toBe(true);
 });
+
+const cards = () => page.locator('main section');
+const cardTitles = () => page.locator('main section h2');
+const pageBody = (title: string) =>
+  t
+    .hooks((h) => h.store.pages.list())
+    .then((ps) => ps.find((p) => p.title === title)?.body ?? null);
+
+test('home: pin a page', async () => {
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  await page.getByRole('button', { name: 'New text note' }).click();
+  await expect(page.getByLabel('Title')).toBeFocused();
+  await page.keyboard.type('Shortcuts');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('# Keys');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('- [ ] Ctrl+K link');
+  await expect
+    .poll(() => pageBody('Shortcuts'))
+    .toBe('# Keys\n- [ ] Ctrl+K link');
+  await page.getByRole('button', { name: 'Back' }).click();
+
+  const row = page.locator('li[aria-selected]', { hasText: 'Shortcuts' });
+  await row.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Pin to Home' }).click();
+  await page.locator('aside').getByRole('button', { name: 'Home' }).click();
+
+  const card = cards().filter({
+    has: page.getByRole('heading', { name: 'Shortcuts' }),
+  });
+  await expect(card.locator('.cm-line.cm-md-h1')).toHaveText('Keys');
+  await expect(card.locator('.cm-content')).not.toContainText('#');
+  const box = card.locator('.cm-content input[type=checkbox]');
+  await expect(box).toBeVisible();
+  await setTheme('light');
+  await shot('4-pinned-light');
+  await setTheme('dark');
+  await shot('4-pinned-dark');
+
+  await box.click();
+  await expect
+    .poll(() => pageBody('Shortcuts'))
+    .toBe('# Keys\n- [x] Ctrl+K link');
+  await expect(card.locator('.cm-content input[type=checkbox]')).toBeChecked();
+
+  await card.getByRole('button', { name: 'Shortcuts' }).click();
+  await expect(page.getByLabel('Title')).toHaveValue('Shortcuts');
+  const unpin = page.getByRole('button', { name: 'Unpin from Home' });
+  await expect(unpin).toBeVisible();
+  await unpin.click();
+  await expect(page.getByRole('button', { name: 'Pin to Home' })).toBeVisible();
+  expect(
+    await page.evaluate(() =>
+      window.dashboardApi.getSettings().then((s) => s.homeWidgets),
+    ),
+  ).toEqual([]);
+});
+
+test('home: reorder persists and delete prunes', async () => {
+  // Seed two pages and a widget for each: a quick-add box, then a pinned page.
+  const ids = await page.evaluate(async () => {
+    const api = window.dashboardApi;
+    const make = async (title: string, body: string) => {
+      const p = await api.createPage(null);
+      await api.renamePage(p.id, title);
+      await api.setPageBody(p.id, body);
+      return p.id;
+    };
+    const words = await make('New words', '');
+    const keys = await make('Shortcuts', '# Keys\n- [ ] Ctrl+K link');
+    await api.setSettings({
+      homeWidgets: [
+        {
+          id: crypto.randomUUID(),
+          type: 'quick-add',
+          pageId: words,
+          label: 'Learned today',
+        },
+        { id: crypto.randomUUID(), type: 'page', pageId: keys },
+      ],
+    });
+    return { words, keys };
+  });
+  await expect(cardTitles()).toHaveText(['Learned today', 'Shortcuts']);
+
+  await cards().nth(1).locator('header').dragTo(cards().nth(0));
+  await expect(cardTitles()).toHaveText(['Shortcuts', 'Learned today']);
+  await setTheme('light');
+  await shot('5-reordered-light');
+  await setTheme('dark');
+  await shot('5-reordered-dark');
+
+  await t.close();
+  t = await launch({ userData: t.userData });
+  page = t.dashboard;
+  await expect(cardTitles()).toHaveText(['Shortcuts', 'Learned today']);
+
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const row = page.locator('li[aria-selected]', { hasText: 'Shortcuts' });
+  await row.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page
+    .getByRole('alertdialog')
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  await expect(row).toHaveCount(0);
+
+  await page.locator('aside').getByRole('button', { name: 'Home' }).click();
+  await expect(cardTitles()).toHaveText(['Learned today']);
+  const widgets = await page.evaluate(() =>
+    window.dashboardApi.getSettings().then((s) => s.homeWidgets),
+  );
+  expect(widgets.map((w) => w.pageId)).toEqual([ids.words]);
+});

@@ -30,13 +30,15 @@ const INLINE_MARKS = new Set([
  * What the live preview replaces for `state`: markup of every node the selection doesn't touch
  * (block nodes by line, inline nodes by range), plus widgets for task markers, tables, images and
  * rules. Only nodes overlapping `from`–`to` are visited. Sorted by `from`; adjacent hides are merged.
+ * A read-only state has no cursor to edit at, so everything renders.
  */
 export function previewSpans(
   state: EditorState,
   from = 0,
   to = state.doc.length,
 ): PreviewSpan[] {
-  const { doc, selection } = state;
+  const { doc } = state;
+  const ranges = state.readOnly ? [] : state.selection.ranges;
   const out: PreviewSpan[] = [];
   const hide = (a: number, b: number) => {
     if (b > a) out.push({ from: a, to: b, kind: 'hide' });
@@ -45,12 +47,12 @@ export function previewSpans(
   const touchesLines = (a: number, b: number) => {
     const start = doc.lineAt(a).from;
     const end = doc.lineAt(b).to;
-    return selection.ranges.some((r) => r.from <= end && r.to >= start);
+    return ranges.some((r) => r.from <= end && r.to >= start);
   };
   const touches = (a: number, b: number) =>
-    selection.ranges.some((r) => r.from <= b && r.to >= a);
+    ranges.some((r) => r.from <= b && r.to >= a);
   const inside = (a: number, b: number) =>
-    selection.ranges.some((r) => r.from < b && r.to > a);
+    ranges.some((r) => r.from < b && r.to > a);
   // Block nodes can end after their trailing newline; widgets must stop at the last line's end.
   const trimEnd = (a: number, b: number) => {
     while (b > a && doc.sliceString(b - 1, b) === '\n') b--;

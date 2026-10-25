@@ -28,6 +28,24 @@ describe('previewSpans', () => {
     expect(spans('# Hi\n\ntext', 3).filter((s) => s.from < 4)).toEqual([]);
   });
 
+  it('renders everything in a read-only state, wherever the selection is', () => {
+    const state = EditorState.create({
+      doc: '# Hi\n- [ ] **a**',
+      selection: EditorSelection.single(0),
+      extensions: [
+        markdown({ base: markdownLanguage }),
+        EditorState.readOnly.of(true),
+      ],
+    });
+    ensureSyntaxTree(state, state.doc.length);
+    expect(previewSpans(state).map((s) => [s.kind, s.from, s.to])).toEqual([
+      ['hide', 0, 2],
+      ['checkbox', 7, 10],
+      ['hide', 11, 13],
+      ['hide', 14, 16],
+    ]);
+  });
+
   it('hides emphasis marks unless the cursor touches the node', () => {
     expect(hides(spans('a **b** c', 0))).toEqual([
       [2, 4],

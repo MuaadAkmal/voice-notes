@@ -5,6 +5,7 @@ import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, ty
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
+import { canAdd, isPinned } from '../../shared/home-widgets';
 import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems } from '../../shared/items';
 import type { View } from './App';
 import { NOTES_MIME, onDropped, setCountDragImage, setDragging } from './dnd';
@@ -12,6 +13,7 @@ import { NoteRow } from './NoteRow';
 import { PageRow } from './PageRow';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
+import { useHomeWidgets } from './useHomeWidgets';
 
 const api = window.dashboardApi;
 
@@ -56,6 +58,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const searchInput = useRef<HTMLInputElement>(null);
   const filtering = isFiltering(filter);
   const shows = useMemo(() => distinctShows(notes ?? []), [notes]);
+  const home = useHomeWidgets();
 
   useEffect(() => {
     const load = () => api.getSettings().then((s) => setHotkeyLabel(s.hotkeyLabel));
@@ -353,6 +356,9 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                       onOpen={() => onOpenPage(page.id)}
                       onRename={(t) => api.renamePage(page.id, t).catch((e) => toast(cleanIpcError(e)))}
                       onToggleStar={() => api.starPages([page.id], !page.starred).catch((e) => toast(cleanIpcError(e)))}
+                      pinned={isPinned(home.widgets ?? [], page.id)}
+                      homeFull={!canAdd(home.widgets ?? [])}
+                      onTogglePin={() => home.togglePin(page.id)}
                     />
                   );
                 }

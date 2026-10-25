@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import type { HomeWidget, Page } from '../../shared/channels';
-import { cleanIpcError } from '../../shared/format';
 import {
   addWidget,
   canAdd,
+  moveWidget,
   removeWidget,
   renameWidget,
 } from '../../shared/home-widgets';
 import { AddWidgetDialog } from './AddWidgetDialog';
-import { useToast } from './Toast';
+import { getDragging, setDragging, WIDGET_MIME } from './dnd';
+import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
+import { PageWidget } from './widgets/PageWidget';
 import { QuickAddWidget } from './widgets/QuickAddWidget';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,48 +22,52 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const api = window.dashboardApi;
-const FULL = 'Home is full (24 widgets)';
-
 type Props = {
   pages: Page[] | null;
   onOpenPage: (id: string) => void;
 };
 
 export function HomePage({ pages, onOpenPage }: Props) {
-  const toast = useToast();
-  const [widgets, setWidgets] = useState<HomeWidget[] | null>(null);
-  // The latest list (from settings:changed, or our own pending write); every edit starts from it.
-  const latest = useRef<HomeWidget[]>([]);
-  const apply = (ws: HomeWidget[]) => {
-    latest.current = ws;
-    setWidgets(ws);
-  };
-  const load = () => api.getSettings().then((s) => apply(s.homeWidgets));
+  const { widgets, save, run } = useHomeWidgets();
+  // The card a widget is being dragged over.
+  const [dropId, setDropId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{
     open: boolean;
     type: HomeWidget['type'];
   }>({ open: false, type: 'quick-add' });
 
-  useEffect(() => {
-    load();
-    return api.onSettingsChanged(load);
-  }, []);
-
-  /** Applies `update` to the latest list and saves it. Rejects on failure (after reloading). */
-  const save = async (update: (cur: HomeWidget[]) => HomeWidget[]) => {
-    // Taken as the latest at once, so a second edit before this one lands builds on it.
-    const next = update(latest.current);
-    latest.current = next;
-    try {
-      apply((await api.setSettings({ homeWidgets: next })).homeWidgets);
-    } catch (e) {
-      load();
-      throw e;
-    }
+  // Another card being dragged (by its header) can drop here; it takes this card's position.
+  const draggedWidget = (overId: string) => {
+    const d = getDragging();
+    return d?.kind === 'widget' && d.id !== overId ? d.id : null;
   };
-  const run = (update: (cur: HomeWidget[]) => HomeWidget[]) =>
-    save(update).catch((e) => toast(cleanIpcError(e)));
+  const dropProps = (id: string) => ({
+    onDragEnter: (e: React.DragEvent) => {
+      if (!draggedWidget(id)) return;
+      e.preventDefault();
+      setDropId(id);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!draggedWidget(id)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+        setDropId((d) => (d === id ? null : d));
+    },
+    onDrop: (e: React.DragEvent) => {
+      const moved = draggedWidget(id);
+      setDropId(null);
+      if (!moved) return;
+      e.preventDefault();
+      setDragging(null);
+      run((cur) => {
+        const to = cur.findIndex((w) => w.id === id);
+        return to < 0 ? cur : moveWidget(cur, moved, to);
+      });
+    },
+  });
 
   const openDialog = (type: HomeWidget['type']) =>
     setDialog({ open: true, type });
@@ -81,7 +87,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
           Home
         </h1>
         {/* A disabled button shows no tooltip, so the wrapper carries it. */}
-        <span title={full ? FULL : undefined}>
+        <span title={full ? HOME_FULL : undefined}>
           <Button
             variant="outline"
             size="sm"
@@ -120,6 +126,9 @@ export function HomePage({ pages, onOpenPage }: Props) {
           {shown.map(({ widget, page }) => (
             <WidgetCard
               key={widget.id}
+              id={widget.id}
+              dropping={dropId === widget.id}
+              dropProps={dropProps(widget.id)}
               title={widget.type === 'quick-add' ? widget.label : page.title}
               onTitleClick={
                 widget.type === 'page' ? () => onOpenPage(page.id) : undefined
@@ -139,6 +148,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
                   onOpenPage={onOpenPage}
                 />
               )}
+              {widget.type === 'page' && <PageWidget page={page} />}
             </WidgetCard>
           ))}
         </div>
@@ -156,6 +166,10 @@ export function HomePage({ pages, onOpenPage }: Props) {
 }
 
 type CardProps = {
+  id: string;
+  /** Another card is being dragged over this one. */
+  dropping: boolean;
+  dropProps: React.HTMLAttributes<HTMLElement>;
   title: string;
   /** Page widgets: the title opens the page. */
   onTitleClick?: () => void;
@@ -167,6 +181,9 @@ type CardProps = {
 };
 
 function WidgetCard({
+  id,
+  dropping,
+  dropProps,
   title,
   onTitleClick,
   onOpenPage,
@@ -177,6 +194,7 @@ function WidgetCard({
   const [editing, setEditing] = useState(false);
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
+  const card = useRef<HTMLElement>(null);
   // Set once Enter or Escape has ended the edit, so the unmount blur can't commit again.
   const closed = useRef(false);
 
@@ -193,8 +211,29 @@ function WidgetCard({
   };
 
   return (
-    <section className="min-w-0 rounded-2xl border bg-card p-5">
-      <header className="mb-3 flex items-center gap-2">
+    <section
+      ref={card}
+      {...dropProps}
+      className={`min-w-0 rounded-2xl border bg-card p-5 transition-shadow ${dropping ? 'ring-2 ring-ring' : ''}`}
+    >
+      {/* The header is the drag handle; the whole card is the drag image. */}
+      <header
+        draggable={!editing}
+        onDragStart={(e) => {
+          setDragging({ kind: 'widget', id });
+          e.dataTransfer.setData(WIDGET_MIME, id);
+          e.dataTransfer.effectAllowed = 'move';
+          const rect = card.current?.getBoundingClientRect();
+          if (card.current && rect)
+            e.dataTransfer.setDragImage(
+              card.current,
+              e.clientX - rect.left,
+              e.clientY - rect.top,
+            );
+        }}
+        onDragEnd={() => setDragging(null)}
+        className="mb-3 flex cursor-grab items-center gap-2 active:cursor-grabbing"
+      >
         {editing ? (
           <input
             ref={input}
