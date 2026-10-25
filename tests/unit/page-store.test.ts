@@ -48,7 +48,9 @@ it('setBody and rename bump updatedAt and list orders by it', () => {
   expect(store.pages.rename(b.id, 'Beta').updatedAt).toBe(T0 + 3);
   expect(store.pages.list().map((p) => p.id)).toEqual([b.id, a.id]);
   expect(() => store.pages.rename(randomUUID(), 'x')).toThrow('Page not found');
-  expect(() => store.pages.setBody(randomUUID(), 'x')).toThrow('Page not found');
+  expect(() => store.pages.setBody(randomUUID(), 'x')).toThrow(
+    'Page not found',
+  );
 });
 
 it('move and setStarred ignore unknown ids', () => {
@@ -56,7 +58,9 @@ it('move and setStarred ignore unknown ids', () => {
   const folder = store.folders.create('Ideas', null);
   store.pages.move([a.id, randomUUID()], folder.id);
   expect(store.pages.get(a.id)?.folderId).toBe(folder.id);
-  expect(() => store.pages.move([a.id], randomUUID())).toThrow('Folder not found');
+  expect(() => store.pages.move([a.id], randomUUID())).toThrow(
+    'Folder not found',
+  );
   store.pages.setStarred([a.id, randomUUID()], true);
   expect(store.pages.get(a.id)?.starred).toBe(true);
 });
@@ -66,11 +70,13 @@ it('saveImage writes the file and returns a vn-image url', async () => {
   const url = await store.pages.saveImage(bytes, 'png');
   expect(url).toMatch(/^vn-image:\/\/[0-9a-f-]{36}\.png$/);
   const file = url.slice('vn-image://'.length);
-  expect(fs.readFileSync(path.join(store.imagesDir, file))).toEqual(Buffer.from(bytes));
-  expect(store.pages.imagePath(file)).toBe(path.join(store.imagesDir, file));
-  await expect(store.pages.saveImage(new Uint8Array(MAX_IMAGE_BYTES + 1), 'png')).rejects.toThrow(
-    'Image too large',
+  expect(fs.readFileSync(path.join(store.imagesDir, file))).toEqual(
+    Buffer.from(bytes),
   );
+  expect(store.pages.imagePath(file)).toBe(path.join(store.imagesDir, file));
+  await expect(
+    store.pages.saveImage(new Uint8Array(MAX_IMAGE_BYTES + 1), 'png'),
+  ).rejects.toThrow('Image too large');
 });
 
 it('deleteMany keeps images still referenced by another page', async () => {
@@ -83,7 +89,8 @@ it('deleteMany keeps images still referenced by another page', async () => {
   store.pages.setBody(b.id, `text ![](${url})`);
   store.pages.setBody(c.id, `![](${url2})`);
   await store.pages.deleteMany([a.id, c.id]);
-  const file = (u: string) => path.join(store.imagesDir, u.slice('vn-image://'.length));
+  const file = (u: string) =>
+    path.join(store.imagesDir, u.slice('vn-image://'.length));
   expect(fs.existsSync(file(url))).toBe(true);
   expect(fs.existsSync(file(url2))).toBe(false);
   expect(store.pages.list().map((p) => p.id)).toEqual([b.id]);

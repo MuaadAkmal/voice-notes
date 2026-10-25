@@ -30,7 +30,7 @@ export const pages = sqliteTable('pages', {
   syncedAt: integer('synced_at'),
 });
 
-export const folders =sqliteTable('folders', {
+export const folders = sqliteTable('folders', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   parentId: text('parent_id'),

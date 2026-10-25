@@ -5,7 +5,11 @@ import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { desc, eq, inArray } from 'drizzle-orm';
 import type { Page } from '../../shared/channels';
-import { MAX_IMAGE_BYTES, imageRefs, type ImageExt } from '../../shared/page-images';
+import {
+  MAX_IMAGE_BYTES,
+  imageRefs,
+  type ImageExt,
+} from '../../shared/page-images';
 import type { FolderStore } from './folder-store';
 import { pages } from './schema';
 
@@ -31,7 +35,8 @@ export class PageStore {
   ) {}
 
   create(folderId: string | null): Page {
-    if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
+    if (folderId && !this.folders.get(folderId))
+      throw new Error('Folder not found');
     const ts = this.now();
     const page: Page = {
       id: randomUUID(),
@@ -47,7 +52,11 @@ export class PageStore {
   }
 
   list(): Page[] {
-    return this.db.select(columns).from(pages).orderBy(desc(pages.updatedAt)).all();
+    return this.db
+      .select(columns)
+      .from(pages)
+      .orderBy(desc(pages.updatedAt))
+      .all();
   }
 
   get(id: string): Page | undefined {
@@ -64,13 +73,22 @@ export class PageStore {
 
   /** folderId null = Inbox. Unknown page ids are ignored. */
   move(ids: string[], folderId: string | null): void {
-    if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
-    this.db.update(pages).set({ folderId, updatedAt: this.now() }).where(inArray(pages.id, ids)).run();
+    if (folderId && !this.folders.get(folderId))
+      throw new Error('Folder not found');
+    this.db
+      .update(pages)
+      .set({ folderId, updatedAt: this.now() })
+      .where(inArray(pages.id, ids))
+      .run();
   }
 
   /** Unknown page ids are ignored. */
   setStarred(ids: string[], starred: boolean): void {
-    this.db.update(pages).set({ starred, updatedAt: this.now() }).where(inArray(pages.id, ids)).run();
+    this.db
+      .update(pages)
+      .set({ starred, updatedAt: this.now() })
+      .where(inArray(pages.id, ids))
+      .run();
   }
 
   /** Deletes the rows, then the image files no remaining page references. */
@@ -85,8 +103,10 @@ export class PageStore {
       }
     })();
     if (!doomed.size) return;
-    for (const page of this.list()) for (const file of imageRefs(page.body)) doomed.delete(file);
-    for (const file of doomed) await fs.promises.rm(this.imagePath(file), { force: true });
+    for (const page of this.list())
+      for (const file of imageRefs(page.body)) doomed.delete(file);
+    for (const file of doomed)
+      await fs.promises.rm(this.imagePath(file), { force: true });
   }
 
   /** Writes <uuid>.<ext> via tmp + fsync + rename and returns its vn-image:// url. */
@@ -110,7 +130,10 @@ export class PageStore {
     return path.join(this.imagesDir, file);
   }
 
-  private update(id: string, patch: Partial<Pick<Page, 'title' | 'body'>>): Page {
+  private update(
+    id: string,
+    patch: Partial<Pick<Page, 'title' | 'body'>>,
+  ): Page {
     const updated = this.db
       .update(pages)
       .set({ ...patch, updatedAt: this.now() })
