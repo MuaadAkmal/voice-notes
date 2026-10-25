@@ -1,4 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { launch, type TestApp } from './launch';
 
 let t: TestApp;
@@ -170,4 +172,76 @@ test('pages: deleted while open falls back', async () => {
   await expect(page.getByRole('heading', { name: 'Inbox' })).toBeVisible();
   await page.waitForTimeout(500);
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+});
+
+test('pages: paste an image', async () => {
+  await newPage('Pics');
+  const png = readFileSync(join(__dirname, 'fixtures', 'pixel.png'));
+  await t.app.evaluate(async ({ clipboard, ClipboardItem }, b64) => {
+    const blob = new Blob([Buffer.from(b64, 'base64')], { type: 'image/png' });
+    await clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+  }, png.toString('base64'));
+  await page.keyboard.press('Control+V');
+  await expect
+    .poll(body)
+    .toMatch(/^!\[\]\(vn-image:\/\/[0-9a-f-]{36}\.png\)$/);
+  await page.keyboard.press('Enter');
+
+  const img = page.locator('.cm-content img[src^="vn-image://"]');
+  await expect(img).toBeVisible();
+  await expect
+    .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth))
+    .toBe(4);
+  const dir = join(t.userData, 'images');
+  expect(readdirSync(dir)).toHaveLength(1);
+
+  const id = await t.hooks((h) => h.store.pages.list()[0].id);
+  await t.app.evaluate(async (_e, id) => {
+    const h = (globalThis as any).__voiceNotes;
+    await h.store.pages.deleteMany([id]);
+  }, id);
+  expect(readdirSync(dir)).toHaveLength(0);
+});
+
+test('pages: code highlighting', async () => {
+  await newPage('Code');
+  await page.keyboard.type('```js');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('const x = 1');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('```');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('plain');
+
+  const colours = await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector('.cm-content')!,
+      NodeFilter.SHOW_TEXT,
+    );
+    let token: Element | null = null;
+    let plain: Element | null = null;
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (n.textContent === 'const') token = n.parentElement;
+      if (n.textContent === 'plain') plain = n.parentElement;
+    }
+    return [token, plain].map((el) => el && getComputedStyle(el).color);
+  });
+  expect(colours[0]).toBeTruthy();
+  expect(colours[1]).toBeTruthy();
+  expect(colours[0]).not.toBe(colours[1]);
+  await shot('5-code');
+});
+
+test('pages: links open externally', async () => {
+  await newPage('Links');
+  await page.keyboard.type('[site](https://example.com)');
+  await page.keyboard.press('Enter');
+  const url = page.url();
+  await page.locator('.cm-content').getByText('site').click({
+    modifiers: ['Control'],
+  });
+  await expect
+    .poll(() => t.hooks((h) => h.openedExternal))
+    .toEqual(['https://example.com/']);
+  expect(page.url()).toBe(url);
 });

@@ -106,20 +106,23 @@ const insertLink: Command = (view) => {
 };
 
 /** Ctrl+click on a link opens it in the default browser (main allows only http/https/mailto). */
-const linkClick = EditorView.domEventHandlers({
-  mousedown(event, view) {
-    if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-    const url = pos === null ? null : linkAt(view.state, pos);
-    if (!url) return false;
-    event.preventDefault();
-    void api.openExternal(url);
-    return true;
-  },
-});
+const linkClick = (onError: (message: string) => void) =>
+  EditorView.domEventHandlers({
+    mousedown(event, view) {
+      if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      const url = pos === null ? null : linkAt(view.state, pos);
+      if (!url) return false;
+      event.preventDefault();
+      api.openExternal(url).catch(() => onError("Couldn't open link"));
+      return true;
+    },
+  });
 
 /** Markdown (GFM + fenced-code highlighting), live preview, theme and keymaps. */
-export function markdownExtensions(): Extension[] {
+export function markdownExtensions(
+  onError: (message: string) => void,
+): Extension[] {
   return [
     history(),
     drawSelection(),
@@ -129,7 +132,7 @@ export function markdownExtensions(): Extension[] {
     markdown({ base: markdownLanguage, codeLanguages: languages }),
     livePreview(),
     markdownTheme(),
-    linkClick,
+    linkClick(onError),
     keymap.of([
       { key: 'Mod-b', run: toggleMarker('**') },
       { key: 'Mod-i', run: toggleMarker('*') },
@@ -206,7 +209,7 @@ export function MarkdownEditor({
       state: EditorState.create({
         doc: value,
         extensions: [
-          markdownExtensions(),
+          markdownExtensions(onError),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString());

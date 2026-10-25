@@ -274,6 +274,7 @@ async function boot(): Promise<void> {
     return { ...settings };
   }
 
+  const openedExternal: string[] = [];
   registerDashboardIpc({
     getDashboard: () => dashboard,
     store,
@@ -284,6 +285,7 @@ async function boot(): Promise<void> {
     notesChanged: () => toDashboard(Ch.NotesChanged),
     foldersChanged: () => toDashboard(Ch.FoldersChanged),
     pagesChanged: () => toDashboard(Ch.PagesChanged),
+    openedExternal,
   });
 
   app.on('before-quit', () => {
@@ -303,6 +305,7 @@ async function boot(): Promise<void> {
       rewind, // what Alt+Win+Shift does
       setForeground: (fn: typeof foregroundWindow) => (foreground = fn),
       mediaPresses: () => mediaPresses,
+      openedExternal, // URLs the dashboard asked to open in the browser
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
     };
   }

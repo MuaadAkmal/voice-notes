@@ -120,6 +120,8 @@ type DashboardDeps = {
   notesChanged: () => void;
   foldersChanged: () => void;
   pagesChanged: () => void;
+  /** Test hook: URLs the OpenExternal handler would have opened. */
+  openedExternal: string[];
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -212,7 +214,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   });
   handle(Ch.PagesSaveImage, SaveImageSchema, ({ bytes, ext }) => pages.saveImage(bytes, ext));
   handle(Ch.OpenExternal, ExternalUrlSchema, async (url) => {
-    await shell.openExternal(url);
+    const href = new URL(url).href;
+    // Under test, only record: a real call would launch the developer's browser.
+    if (process.env.VOICE_NOTES_TEST === '1') d.openedExternal.push(href);
+    else await shell.openExternal(href);
   });
   const folders = d.store.folders;
   handle(Ch.FoldersList, none, () => folders.list());

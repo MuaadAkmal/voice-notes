@@ -19,6 +19,7 @@ export type Hooks = {
   setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
   mediaPresses(): number;
   pagesChanged(): void;
+  openedExternal: string[];
 };
 
 export type TestApp = {
