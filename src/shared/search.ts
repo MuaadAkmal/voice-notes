@@ -24,6 +24,9 @@ export function filterNotes(notes: Note[], f: NoteFilter): Note[] {
   });
 }
 
+/** Searchable text of a page body: images dropped entirely, links reduced to their text. */
+const searchableBody = (body: string) => body.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+
 /** Like filterNotes over the merged list. Pages have no show or source, so those filters exclude them. */
 export function filterItems(items: Item[], f: NoteFilter): Item[] {
   const words = normalize(f.query).split(/\s+/).filter(Boolean);
@@ -37,7 +40,7 @@ export function filterItems(items: Item[], f: NoteFilter): Item[] {
     if (i.type === 'audio') return audio.has(i.note);
     if (f.show !== null || f.source !== null) return false;
     if (f.starred && !i.page.starred) return false;
-    const haystack = normalize(`${i.page.title} ${i.page.body}`);
+    const haystack = normalize(`${i.page.title} ${searchableBody(i.page.body)}`);
     return words.every((w) => haystack.includes(w));
   });
 }

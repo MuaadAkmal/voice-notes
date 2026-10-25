@@ -71,13 +71,13 @@ export class PageStore {
     return this.update(id, { body });
   }
 
-  /** folderId null = Inbox. Unknown page ids are ignored. */
+  /** folderId null = Inbox. Unknown page ids are ignored. Like starring, it leaves updatedAt (the sort time) alone. */
   move(ids: string[], folderId: string | null): void {
     if (folderId && !this.folders.get(folderId))
       throw new Error('Folder not found');
     this.db
       .update(pages)
-      .set({ folderId, updatedAt: this.now() })
+      .set({ folderId })
       .where(inArray(pages.id, ids))
       .run();
   }
@@ -86,7 +86,7 @@ export class PageStore {
   setStarred(ids: string[], starred: boolean): void {
     this.db
       .update(pages)
-      .set({ starred, updatedAt: this.now() })
+      .set({ starred })
       .where(inArray(pages.id, ids))
       .run();
   }

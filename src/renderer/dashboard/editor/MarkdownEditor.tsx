@@ -23,6 +23,12 @@ import { livePreview } from './live-preview';
 import { linkAt } from './preview-spans';
 import { markdownTheme } from './theme';
 import { checkImageFile } from './image-input';
+import {
+  anchorPos,
+  holdAnchor,
+  insertAnchors,
+  releaseAnchor,
+} from './insert-anchor';
 
 const api = window.dashboardApi;
 
@@ -151,32 +157,38 @@ async function insertImages(
   pos: number,
   onError: (message: string) => void,
 ) {
-  for (const file of files) {
-    const checked = checkImageFile(file);
-    if ('error' in checked) {
-      onError(checked.error);
-      continue;
+  // The anchor follows the text if the user keeps typing while files are saved.
+  const anchor = holdAnchor(view, pos);
+  try {
+    for (const file of files) {
+      const checked = checkImageFile(file);
+      if ('error' in checked) {
+        onError(checked.error);
+        continue;
+      }
+      let url: string;
+      try {
+        url = await api.savePageImage(
+          new Uint8Array(await file.arrayBuffer()),
+          checked.ext,
+        );
+      } catch {
+        onError("Couldn't save image");
+        continue;
+      }
+      if (!view.dom.isConnected) return; // the editor was closed while saving
+      const at = anchorPos(view.state, anchor);
+      if (at === undefined) return;
+      const insert = `![](${url})`;
+      view.dispatch({
+        changes: { from: at, insert },
+        selection: { anchor: at + insert.length },
+        scrollIntoView: true,
+        userEvent: 'input.paste',
+      });
     }
-    let url: string;
-    try {
-      url = await api.savePageImage(
-        new Uint8Array(await file.arrayBuffer()),
-        checked.ext,
-      );
-    } catch {
-      onError("Couldn't save image");
-      continue;
-    }
-    // The user may have kept typing while the file was saved; never insert past the end.
-    const at = Math.min(pos, view.state.doc.length);
-    const insert = `![](${url})`;
-    view.dispatch({
-      changes: { from: at, insert },
-      selection: { anchor: at + insert.length },
-      scrollIntoView: true,
-      userEvent: 'input.paste',
-    });
-    pos = at + insert.length;
+  } finally {
+    releaseAnchor(view, anchor);
   }
 }
 
@@ -210,6 +222,7 @@ export function MarkdownEditor({
         doc: value,
         extensions: [
           markdownExtensions(onError),
+          insertAnchors(),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString());

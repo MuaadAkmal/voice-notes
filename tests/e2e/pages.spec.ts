@@ -134,6 +134,13 @@ test('pages: folders, search, delete', async () => {
   await expect(hit.getByText('Spanish', { exact: true })).toBeVisible();
   await shot('3-search');
 
+  // The row's icon button opens the page; Back keeps the search.
+  await hit.getByRole('button', { name: 'Open' }).click();
+  await expect(page.getByLabel('Title')).toHaveValue('Spanish words');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByLabel('Search notes')).toHaveValue('hola');
+  await expect(hit).toBeVisible();
+
   await t.record(800);
   await page.getByRole('button', { name: /^All notes/ }).click();
   const rows = page.locator('li[aria-selected]');
@@ -156,6 +163,14 @@ test('pages: folders, search, delete', async () => {
     )
     .toBe(0);
   await expect(rows).toHaveCount(0);
+});
+
+test('pages: Open button from Inbox', async () => {
+  await newPage('Reachable');
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+  await page.locator('li[aria-selected]', { hasText: 'Reachable' }).getByRole('button', { name: 'Open' }).click();
+  await expect(page.getByLabel('Title')).toHaveValue('Reachable');
 });
 
 test('pages: deleted while open falls back', async () => {

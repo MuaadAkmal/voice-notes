@@ -26,10 +26,15 @@ export function PageView({ page, fresh, onBack }: Props) {
   const shown = last.current;
   const gone = useRef(false);
 
-  const [status, setStatus] = useState<'saved' | 'saving'>('saved');
+  const [status, setStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [title, setTitle] = useState(shown.title);
   const titleInput = useRef<HTMLInputElement>(null);
   const editorHost = useRef<HTMLDivElement>(null);
+
+  const onSaveError = () => {
+    setStatus('error');
+    toast("Couldn't save");
+  };
 
   const [saver] = useState(() => {
     const s: DebouncedSaver<string> = new DebouncedSaver<string>(
@@ -38,12 +43,12 @@ export function PageView({ page, fresh, onBack }: Props) {
         if (!s.pending) setStatus('saved');
       },
       SAVE_DELAY_MS,
-      () => toast("Couldn't save"),
+      onSaveError,
     );
     return s;
   });
   const flush = () => {
-    if (!gone.current) saver.flush().catch(() => toast("Couldn't save"));
+    if (!gone.current) saver.flush().catch(onSaveError);
   };
   const flushRef = useRef(flush);
   flushRef.current = flush;
@@ -100,8 +105,11 @@ export function PageView({ page, fresh, onBack }: Props) {
           >
             <ArrowLeft className="size-4" />
           </button>
-          <span aria-live="polite" className="text-xs text-muted-foreground">
-            {status === 'saving' ? 'Saving…' : 'Saved'}
+          <span
+            aria-live="polite"
+            className={`text-xs ${status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+          >
+            {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : 'Saved'}
           </span>
         </div>
         <input

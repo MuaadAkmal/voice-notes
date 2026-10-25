@@ -65,6 +65,15 @@ it('move and setStarred ignore unknown ids', () => {
   expect(store.pages.get(a.id)?.starred).toBe(true);
 });
 
+it('move and setStarred leave updatedAt alone', () => {
+  const a = store.pages.create(null);
+  const folder = store.folders.create('Ideas', null);
+  clock = T0 + 5000;
+  store.pages.move([a.id], folder.id);
+  store.pages.setStarred([a.id], true);
+  expect(store.pages.get(a.id)).toMatchObject({ folderId: folder.id, starred: true, updatedAt: T0 });
+});
+
 it('saveImage writes the file and returns a vn-image url', async () => {
   const bytes = new Uint8Array([1, 2, 3]);
   const url = await store.pages.saveImage(bytes, 'png');

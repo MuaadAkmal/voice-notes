@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { FilePlus, Search, Star, X } from 'lucide-react';
 import type { Folder, Note, Page } from '../../shared/channels';
 import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, type SourceFilter } from '../../shared/search';
@@ -18,7 +18,8 @@ const api = window.dashboardApi;
 export type NotesView = Exclude<View, { kind: 'settings' } | { kind: 'page' }>;
 type Props = {
   view: NotesView;
-  navSeq: number;
+  filter: NoteFilter;
+  setFilter: Dispatch<SetStateAction<NoteFilter>>;
   notes: Note[] | null;
   pages: Page[] | null;
   folders: Folder[];
@@ -43,14 +44,13 @@ function splitIds(ids: string[], items: Item[]): { noteIds: string[]; pageIds: s
   return { noteIds: ids.filter((id) => !pages.has(id)), pageIds: ids.filter((id) => pages.has(id)) };
 }
 
-export function NotesPage({ view, navSeq, notes, pages, folders, onNavigate, onOpenPage, onNewPage }: Props) {
+export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNavigate, onOpenPage, onNewPage }: Props) {
   const toast = useToast();
   const confirm = useConfirm();
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState<NoteFilter>(NO_FILTER);
   const anchor = useRef<string | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
@@ -81,8 +81,6 @@ export function NotesPage({ view, navSeq, notes, pages, folders, onNavigate, onO
 
   // Selection belongs to one view; drop it on navigation and after a successful drag-move.
   useEffect(clearSelection, [viewKey(view)]);
-  // Navigating somewhere is a new question: drop the search.
-  useEffect(() => setFilter(NO_FILTER), [viewKey(view), navSeq]);
   // The chosen show vanished (its last note was renamed or deleted): stop filtering on it.
   useEffect(() => {
     if (filter.show !== null && !shows.some((s) => s.show === filter.show)) setFilter((f) => ({ ...f, show: null }));

@@ -88,6 +88,21 @@ it('filterItems excludes pages when a show or source filter is set', () => {
   expect(itemIds(filterItems(items, { ...NO_FILTER, source: 'mic' }))).toEqual([]);
 });
 
+it('filterItems ignores image urls and link destinations in page bodies', () => {
+  const uuid = '0123456789abcdef0123456789abcdef0123';
+  const withMedia: Item[] = [
+    { type: 'page', page: page('img', { body: `![cat](vn-image://${uuid}.png)` }) },
+    { type: 'page', page: page('lnk', { body: '[site](https://example.com)' }) },
+  ];
+  const find = (query: string) => itemIds(filterItems(withMedia, { ...NO_FILTER, query }));
+  expect(find('png')).toEqual([]);
+  expect(find('vn-image')).toEqual([]);
+  expect(find('0123456789')).toEqual([]);
+  expect(find('cat')).toEqual([]);
+  expect(find('site')).toEqual(['lnk']);
+  expect(find('example')).toEqual([]);
+});
+
 it('distinctShows lists each show once, sorted, with counts', () => {
   expect(distinctShows(notes)).toEqual([
     { show: 'Dark', count: 1 },

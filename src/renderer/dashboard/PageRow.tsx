@@ -30,7 +30,7 @@ const timeOf = (ts: number) =>
     hour12: false,
   });
 
-/** A text page in the notes list. Click selects; double-click or Enter opens. */
+/** A text page in the notes list. Click selects; the icon button, double-click or Enter opens. */
 export function PageRow(props: Props) {
   const {
     page,
@@ -81,9 +81,13 @@ export function PageRow(props: Props) {
           : 'hover:bg-accent/50'
       }`}
     >
-      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground">
+      <button
+        aria-label="Open"
+        onClick={onOpen}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground transition-transform hover:scale-105 hover:text-foreground"
+      >
         <FileText className="size-4" />
-      </span>
+      </button>
 
       <div className="min-w-0 flex-1">
         {editing ? (

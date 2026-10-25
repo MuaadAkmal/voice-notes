@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Folder, Note, Page } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
+import { NO_FILTER, type NoteFilter } from '../../shared/search';
 import { Logo } from './Logo';
 import { NotesPage, type NotesView } from './NotesPage';
 import { PageView } from './PageView';
@@ -22,11 +23,11 @@ const api = window.dashboardApi;
 export function App() {
   const toast = useToast();
   const [view, setView] = useState<View>({ kind: 'inbox' });
-  // Bumped on every sidebar click, even on the current view, so NotesPage can drop its search.
-  const [navSeq, setNavSeq] = useState(0);
+  // Lives here so the search survives opening a page and coming Back; navigating elsewhere drops it.
+  const [filter, setFilter] = useState<NoteFilter>(NO_FILTER);
   const navigate = (v: View) => {
     setView(v);
-    setNavSeq((n) => n + 1);
+    setFilter(NO_FILTER);
   };
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
@@ -55,14 +56,14 @@ export function App() {
 
   // The folder or page being viewed was deleted (here or elsewhere): fall back to Inbox.
   useEffect(() => {
-    if (view.kind === 'folder' && !folders.some((f) => f.id === view.id)) setView({ kind: 'inbox' });
-    if (view.kind === 'page' && pages && !pages.some((p) => p.id === view.id)) setView({ kind: 'inbox' });
+    if (view.kind === 'folder' && !folders.some((f) => f.id === view.id)) navigate({ kind: 'inbox' });
+    if (view.kind === 'page' && pages && !pages.some((p) => p.id === view.id)) navigate({ kind: 'inbox' });
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
     if (view.kind !== 'page' && view.kind !== 'settings') setBackTo(view);
     setFreshPageId(fresh ? id : null);
-    navigate({ kind: 'page', id });
+    setView({ kind: 'page', id });
   };
 
   const newPage = (folderId: string | null) =>
@@ -71,6 +72,7 @@ export function App() {
       .then((page) => {
         // Known before the PagesChanged reload lands, so the fallback above doesn't bounce the new page.
         setPages((prev) => [page, ...(prev ?? []).filter((p) => p.id !== page.id)]);
+        setFilter(NO_FILTER);
         openPage(page.id, true);
       })
       .catch((e) => toast(cleanIpcError(e)));
@@ -104,12 +106,13 @@ export function App() {
                 key={view.id}
                 page={pages?.find((p) => p.id === view.id)}
                 fresh={freshPageId === view.id}
-                onBack={() => navigate(backTo)}
+                onBack={() => setView(backTo)}
               />
             ) : (
               <NotesPage
                 view={view}
-                navSeq={navSeq}
+                filter={filter}
+                setFilter={setFilter}
                 notes={notes}
                 pages={pages}
                 folders={folders}
