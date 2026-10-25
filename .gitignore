@@ -150,3 +150,7 @@ out/
 .superpowers/
 test-results/
 playwright-report/
+
+# local agent files and design docs (kept locally, not published)
+.claude/
+docs/superpowers/
