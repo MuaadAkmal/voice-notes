@@ -10,6 +10,7 @@ const hooks: TestApp['hooks'] = (fn) => t.hooks(fn);
 test.beforeEach(async () => {
   t = await launch();
   dashboard = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
 });
 
 test.afterEach(async () => {

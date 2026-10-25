@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Folder, Note, Page } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import { NO_FILTER, type NoteFilter } from '../../shared/search';
+import { HomePage } from './HomePage';
 import { Logo } from './Logo';
-import { NotesPage, type NotesView } from './NotesPage';
+import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
@@ -11,6 +12,7 @@ import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
 export type View =
+  | { kind: 'home' }
   | { kind: 'inbox' }
   | { kind: 'all' }
   | { kind: 'starred' }
@@ -22,7 +24,7 @@ const api = window.dashboardApi;
 
 export function App() {
   const toast = useToast();
-  const [view, setView] = useState<View>({ kind: 'inbox' });
+  const [view, setView] = useState<View>({ kind: 'home' });
   // Lives here so the search survives opening a page and coming Back; navigating elsewhere drops it.
   const [filter, setFilter] = useState<NoteFilter>(NO_FILTER);
   const navigate = (v: View) => {
@@ -33,7 +35,7 @@ export function App() {
   const [pages, setPages] = useState<Page[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
-  const [backTo, setBackTo] = useState<NotesView>({ kind: 'inbox' });
+  const [backTo, setBackTo] = useState<Exclude<View, { kind: 'page' } | { kind: 'settings' }>>({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
   const loadNotes = useCallback(() => api.listNotes().then(setNotes), []);
@@ -99,7 +101,9 @@ export function App() {
         <div className="flex min-h-0 flex-1">
           <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} onNewPage={newPage} />
           <main className="flex-1 overflow-y-auto">
-            {view.kind === 'settings' ? (
+            {view.kind === 'home' ? (
+              <HomePage pages={pages} onOpenPage={openPage} />
+            ) : view.kind === 'settings' ? (
               <SettingsPage />
             ) : view.kind === 'page' ? (
               <PageView

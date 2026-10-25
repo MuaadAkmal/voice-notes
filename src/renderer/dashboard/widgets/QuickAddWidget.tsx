@@ -1,0 +1,72 @@
+import { useState } from 'react';
+import type { HomeWidget, Page } from '../../../shared/channels';
+import { cleanIpcError } from '../../../shared/format';
+import { todayEntries } from '../../../shared/learn-log';
+import { useToast } from '../Toast';
+
+const api = window.dashboardApi;
+
+type Props = {
+  widget: Extract<HomeWidget, { type: 'quick-add' }>;
+  page: Page;
+  onOpenPage: (id: string) => void;
+};
+
+/** "Learned today" box: each entry is appended to the page under today's heading. */
+export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
+  const toast = useToast();
+  const [text, setText] = useState('');
+  const entries = todayEntries(page.body, new Date());
+
+  const submit = () => {
+    const entry = text.trim();
+    if (!entry) return;
+    setText('');
+    api.appendPageEntry(page.id, entry).catch((e) => {
+      // Give the text back unless something new was typed meanwhile.
+      setText((cur) => cur || entry);
+      toast(cleanIpcError(e));
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        onClick={() => onOpenPage(page.id)}
+        className="-mt-2 self-start truncate text-xs text-muted-foreground hover:text-foreground hover:underline"
+      >
+        {page.title}
+      </button>
+      <input
+        aria-label={`Add entry to ${widget.label}`}
+        placeholder="Type and press Enter"
+        value={text}
+        maxLength={500}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+        }}
+        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
+      />
+      <div>
+        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+          Today
+        </p>
+        {entries.length === 0 ? (
+          <p className="text-sm text-muted-foreground/70">Nothing yet today</p>
+        ) : (
+          <ul className="flex flex-col gap-1 text-sm">
+            {entries.map((entry, i) => (
+              <li key={i} className="break-words">
+                {entry}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

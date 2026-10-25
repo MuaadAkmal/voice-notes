@@ -15,7 +15,7 @@ import { useConfirm } from './ConfirmDialog';
 
 const api = window.dashboardApi;
 
-export type NotesView = Exclude<View, { kind: 'settings' } | { kind: 'page' }>;
+export type NotesView = Exclude<View, { kind: 'home' } | { kind: 'settings' } | { kind: 'page' }>;
 type Props = {
   view: NotesView;
   filter: NoteFilter;

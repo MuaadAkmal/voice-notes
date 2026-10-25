@@ -21,6 +21,7 @@ const recordOver = async (title: string, noteTitle: string) => {
 test('search across folders, filter by show, star a note', async () => {
   t = await launch();
   const d = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
   await recordOver('La Casa de Papel | Netflix - Google Chrome', '¿Qué pasó?');
   await recordOver('Dark | Netflix - Google Chrome', 'gracias');
   await recordOver('La Casa de Papel | Netflix - Google Chrome', 'tranquilo');
@@ -60,6 +61,7 @@ test('search across folders, filter by show, star a note', async () => {
 test('edit a note\'s show label from its menu', async () => {
   t = await launch();
   const d = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
   await recordOver('Some Video - YouTube - Google Chrome', 'hola');
   const row = d.locator('li[aria-selected]').first();
   await expect(row.getByText('Some Video')).toBeVisible();

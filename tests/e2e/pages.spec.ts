@@ -23,6 +23,7 @@ async function setTheme(theme: 'light' | 'dark') {
 test.beforeEach(async () => {
   t = await launch();
   page = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
 });
 
 test.afterEach(async () => {
@@ -83,6 +84,7 @@ test('pages: create, write markdown, persists', async () => {
   await t.close();
   t = await launch({ userData: t.userData });
   page = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
   expect(await body()).toBe(saved);
   const row = page.locator('li[aria-selected]', { hasText: 'Spanish words' });
   await expect(row).toBeVisible();

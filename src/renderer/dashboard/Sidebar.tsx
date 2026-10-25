@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { House } from 'lucide-react';
 import type { Folder } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { cleanIpcError } from '../../shared/format';
@@ -275,6 +276,12 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
     <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3 pt-3">
         <NavItem
+          label="Home"
+          active={view.kind === 'home'}
+          onClick={() => onSelect({ kind: 'home' })}
+          icon={<House className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
+        <NavItem
           label="Inbox"
           count={counts.inbox}
           active={view.kind === 'inbox'}
@@ -336,7 +343,8 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
 
 type NavItemProps = {
   label: string;
-  icon: string;
+  /** An SVG path, or a ready icon element. */
+  icon: string | React.ReactNode;
   active: boolean;
   onClick: () => void;
   count?: number;
@@ -348,13 +356,18 @@ function NavItem({ label, icon, active, onClick, count, extra = '', ...drop }: N
     <button
       {...drop}
       onClick={onClick}
+      aria-current={active ? 'page' : undefined}
       className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${
         active ? 'bg-background font-medium shadow-sm ring-1 ring-border' : 'text-sidebar-foreground/75 hover:bg-sidebar-accent'
       } ${extra}`}
     >
-      <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8}>
-        <path d={icon} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      {typeof icon === 'string' ? (
+        <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8}>
+          <path d={icon} strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        icon
+      )}
       <span className="flex-1">{label}</span>
       {count !== undefined && <span className="text-xs tabular-nums text-muted-foreground/70">{count}</span>}
     </button>

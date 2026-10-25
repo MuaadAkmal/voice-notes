@@ -9,6 +9,7 @@ const shot = (name: string) => page.screenshot({ path: `.superpowers/shots/folde
 test.beforeEach(async () => {
   t = await launch();
   page = t.dashboard;
+  await t.dashboard.getByRole('button', { name: /^Inbox/ }).click(); // Home is the default view
 });
 
 test.afterEach(async () => {
