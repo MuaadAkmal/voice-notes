@@ -159,3 +159,10 @@ export const Ch = {
   SettingsChanged: 'settings:changed',
   FoldersChanged: 'folders:changed',
 } as const;
+
+/** A voice note's transcription job; a note with no entry has none (or it finished). */
+export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'failed'; error: string };
+export type StatusMap = Record<string, JobStatus>;
+/** What the dashboard may know about the saved API key. */
+export type KeyInfo = { saved: boolean; last4: string };
+export type TestResult = { ok: true; ms: number; language: string | null } | { ok: false; error: string };
