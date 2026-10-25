@@ -65,6 +65,28 @@ it('film mode defaults: off, 15 s rewind, auto-pause on; rewindSeconds only allo
   expect(loadSettings(file)).toMatchObject({ rewindSeconds: 30, autoPause: false });
 });
 
+it('homeWidgets defaults to [] and falls back to it when invalid', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const pageId = '22222222-2222-4222-8222-222222222222';
+  expect(DEFAULT_SETTINGS.homeWidgets).toEqual([]);
+  const good = [
+    { id, type: 'quick-add', pageId, label: 'Words' },
+    { id: pageId, type: 'page', pageId: id },
+  ];
+  fs.writeFileSync(file, JSON.stringify({ homeWidgets: good }));
+  expect(loadSettings(file).homeWidgets).toEqual(good);
+  const bad: unknown[] = [
+    [{ id: 'nope', type: 'page', pageId }],
+    [{ id, type: 'quick-add', pageId, label: 'x'.repeat(61) }],
+    [{ id, type: 'chart', pageId }],
+    Array.from({ length: 25 }, () => ({ id, type: 'page', pageId })),
+  ];
+  for (const homeWidgets of bad) {
+    fs.writeFileSync(file, JSON.stringify({ homeWidgets }));
+    expect(loadSettings(file).homeWidgets).toEqual([]);
+  }
+});
+
 it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);

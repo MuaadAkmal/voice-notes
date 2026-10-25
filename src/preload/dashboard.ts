@@ -43,6 +43,8 @@ const dashboardApi = {
   createPage: (folderId: string | null): Promise<Page> => ipcRenderer.invoke(Ch.PagesCreate, { folderId }),
   renamePage: (id: string, title: string): Promise<Page> => ipcRenderer.invoke(Ch.PagesRename, { id, title }),
   setPageBody: (id: string, body: string): Promise<Page> => ipcRenderer.invoke(Ch.PagesSetBody, { id, body }),
+  appendPageEntry: (id: string, text: string): Promise<Page> =>
+    ipcRenderer.invoke(Ch.PagesAppendEntry, { id, text }),
   movePages: async (ids: string[], folderId: string | null): Promise<void> => {
     for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.PagesMove, { ids: batch, folderId });
   },

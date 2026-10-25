@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, she
 import log from 'electron-log/main';
 import { z } from 'zod';
 import {
+  AppendEntrySchema,
   type AudioDevice,
   AudioPayloadSchema,
   Ch,
@@ -27,6 +28,7 @@ import {
   type Settings,
   SettingsPatchSchema,
 } from '../shared/ipc';
+import { pruneWidgets } from '../shared/home-widgets';
 import type { HotkeyService } from './hotkey/service';
 import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
@@ -200,6 +202,11 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
     return page;
   });
+  handle(Ch.PagesAppendEntry, AppendEntrySchema, ({ id, text }) => {
+    const page = pages.appendEntry(id, text);
+    d.pagesChanged();
+    return page;
+  });
   handle(Ch.PagesMove, MoveNotesSchema, ({ ids, folderId }) => {
     pages.move(ids, folderId);
     d.pagesChanged();
@@ -210,6 +217,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   });
   handle(Ch.PagesDeleteMany, IdListSchema, async (ids) => {
     await pages.deleteMany(ids);
+    // Widgets of deleted pages go too; updateSettings emits settings:changed.
+    const current = d.getSettings().homeWidgets;
+    const pruned = pruneWidgets(current, ids);
+    if (pruned.length !== current.length) d.updateSettings({ homeWidgets: pruned });
     d.pagesChanged();
   });
   handle(Ch.PagesSaveImage, SaveImageSchema, ({ bytes, ext }) => pages.saveImage(bytes, ext));

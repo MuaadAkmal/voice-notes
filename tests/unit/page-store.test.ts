@@ -36,6 +36,18 @@ it('create puts an Untitled empty page in the folder', () => {
   expect(() => store.pages.create(randomUUID())).toThrow('Folder not found');
 });
 
+it('appendEntry appends to the current body', () => {
+  const a = store.pages.create(null);
+  clock = new Date(2026, 9, 25, 9, 0).getTime();
+  store.pages.setBody(a.id, '# W\n');
+  clock += 5;
+  const updated = store.pages.appendEntry(a.id, 'hola');
+  expect(updated.body).toBe('# W\n\n## 25 Oct 2026\n- hola\n');
+  expect(updated.updatedAt).toBe(clock);
+  expect(store.pages.get(a.id)?.body).toBe(updated.body);
+  expect(() => store.pages.appendEntry(randomUUID(), 'x')).toThrow('Page not found');
+});
+
 it('setBody and rename bump updatedAt and list orders by it', () => {
   const a = store.pages.create(null);
   clock = T0 + 1;

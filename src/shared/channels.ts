@@ -46,6 +46,11 @@ export type Page = {
   updatedAt: number;
 };
 
+/** A card on the Home page. quick-add appends entries to pageId; page shows pageId's body. */
+export type HomeWidget =
+  | { id: string; type: 'quick-add'; pageId: string; label: string }
+  | { id: string; type: 'page'; pageId: string };
+
 export type Settings = {
   hotkey: number[]; // uiohook keycodes
   hotkeyLabel: string;
@@ -59,6 +64,7 @@ export type Settings = {
   filmMode: boolean; // keep a rolling system-audio buffer for rewind; forced off at every launch
   rewindSeconds: RewindSeconds;
   autoPause: boolean; // pause playing media while recording a mic note
+  homeWidgets: HomeWidget[]; // Home page cards, in order (at most 24)
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -136,6 +142,7 @@ export const Ch = {
   PagesSetBody: 'pages:set-body', // { id, body }
   PagesMove: 'pages:move', // { ids, folderId }
   PagesStar: 'pages:star', // { ids, starred }
+  PagesAppendEntry: 'pages:append-entry', // { id, text }
   PagesDeleteMany: 'pages:delete-many', // string[]
   PagesSaveImage: 'pages:save-image', // { bytes, ext } → vn-image:// url
   OpenExternal: 'app:open-external', // http(s)/mailto url

@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   filmMode: false,
   rewindSeconds: 15,
   autoPause: true,
+  homeWidgets: [],
 };
 
 function readRaw(file: string): Record<string, unknown> {

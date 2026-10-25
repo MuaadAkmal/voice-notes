@@ -5,6 +5,7 @@ import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { desc, eq, inArray } from 'drizzle-orm';
 import type { Page } from '../../shared/channels';
+import { appendEntry } from '../../shared/learn-log';
 import {
   MAX_IMAGE_BYTES,
   imageRefs,
@@ -69,6 +70,17 @@ export class PageStore {
 
   setBody(id: string, body: string): Page {
     return this.update(id, { body });
+  }
+
+  /** Adds `text` as a bullet under today's heading (see shared/learn-log), atomically. */
+  appendEntry(id: string, text: string): Page {
+    return this.sqlite.transaction(() => {
+      const page = this.get(id);
+      if (!page) throw new Error('Page not found');
+      return this.update(id, {
+        body: appendEntry(page.body, text, new Date(this.now())),
+      });
+    })();
   }
 
   /** folderId null = Inbox. Unknown page ids are ignored. Like starring, it leaves updatedAt (the sort time) alone. */

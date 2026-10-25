@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AppendEntrySchema,
   CreatePageSchema,
   ExternalUrlSchema,
   SaveImageSchema,
@@ -53,6 +54,14 @@ describe('page IPC schemas', () => {
       'not a url',
     ])
       expect(ExternalUrlSchema.safeParse(bad).success, bad).toBe(false);
+  });
+
+  it('appends a trimmed entry of 1 to 500 chars', () => {
+    expect(AppendEntrySchema.parse({ id, text: '  hola  ' }).text).toBe('hola');
+    expect(AppendEntrySchema.safeParse({ id, text: '' }).success).toBe(false);
+    expect(AppendEntrySchema.safeParse({ id, text: '   ' }).success).toBe(false);
+    expect(AppendEntrySchema.safeParse({ id, text: 'a'.repeat(500) }).success).toBe(true);
+    expect(AppendEntrySchema.safeParse({ id, text: 'a'.repeat(501) }).success).toBe(false);
   });
 
   it('creates a page in the inbox or a folder', () => {

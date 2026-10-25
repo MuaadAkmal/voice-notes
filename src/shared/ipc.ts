@@ -1,11 +1,22 @@
 import { z } from 'zod';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
+import { MAX_HOME_WIDGETS } from './home-widgets';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
 
 export * from './channels';
 
 const SourceSchema = z.enum(['mic', 'system', 'both']);
+
+const HomeWidgetSchema = z.discriminatedUnion('type', [
+  z.object({
+    id: z.uuid(),
+    type: z.literal('quick-add'),
+    pageId: z.uuid(),
+    label: z.string().trim().min(1).max(60),
+  }),
+  z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid() }),
+]);
 
 export const SettingsFieldSchemas = {
   hotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
@@ -20,6 +31,7 @@ export const SettingsFieldSchemas = {
   filmMode: z.boolean(),
   rewindSeconds: z.union(REWIND_SECONDS.map((n) => z.literal(n))),
   autoPause: z.boolean(),
+  homeWidgets: z.array(HomeWidgetSchema).max(MAX_HOME_WIDGETS),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -58,6 +70,7 @@ export const SetShowSchema = z.object({
 
 export const CreatePageSchema = z.object({ folderId: IdSchema.nullable() });
 export const SetBodySchema = z.object({ id: IdSchema, body: z.string().max(5 * 1024 * 1024) });
+export const AppendEntrySchema = z.object({ id: IdSchema, text: z.string().trim().min(1).max(500) });
 export const SaveImageSchema = z.object({
   bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength <= MAX_IMAGE_BYTES, 'Image too large'),
   ext: z.enum(IMAGE_EXTS),
