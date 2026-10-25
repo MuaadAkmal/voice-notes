@@ -130,7 +130,17 @@ export const Ch = {
   NotesDeleteMany: 'notes:delete-many',
   NotesStar: 'notes:star', // { ids, starred }
   NotesSetShow: 'notes:set-show', // { id, show: string | null }
+  PagesList: 'pages:list',
+  PagesCreate: 'pages:create', // { folderId }
+  PagesRename: 'pages:rename', // { id, title }
+  PagesSetBody: 'pages:set-body', // { id, body }
+  PagesMove: 'pages:move', // { ids, folderId }
+  PagesStar: 'pages:star', // { ids, starred }
+  PagesDeleteMany: 'pages:delete-many', // string[]
+  PagesSaveImage: 'pages:save-image', // { bytes, ext } → vn-image:// url
+  OpenExternal: 'app:open-external', // http(s)/mailto url
   // main → dashboard
+  PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
   FoldersChanged: 'folders:changed',

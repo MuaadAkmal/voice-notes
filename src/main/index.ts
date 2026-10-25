@@ -8,7 +8,7 @@ import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
 import { AutoPause } from './media/auto-pause';
-import { registerNoteProtocol, registerNoteScheme } from './protocol';
+import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
 import { loadSettings, REWIND_HOTKEY, saveSettings } from './settings';
 import { foregroundWindow, pressPlayPause } from './win32';
@@ -55,6 +55,7 @@ async function boot(): Promise<void> {
   const store = NoteStore.open(userData);
   log.info('[store] reconcile', await store.reconcile());
   registerNoteProtocol(store);
+  registerImageProtocol(store);
 
   const overlay = createOverlayWindow(() => settings.pillPosition);
   // Only the overlay records; the dashboard just plays files through note://.
@@ -282,6 +283,7 @@ async function boot(): Promise<void> {
     getDevices: () => devices,
     notesChanged: () => toDashboard(Ch.NotesChanged),
     foldersChanged: () => toDashboard(Ch.FoldersChanged),
+    pagesChanged: () => toDashboard(Ch.PagesChanged),
   });
 
   app.on('before-quit', () => {

@@ -1,5 +1,6 @@
 import { BrowserWindow, nativeImage, nativeTheme, screen } from 'electron';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { PillPosition } from '../shared/channels';
 import { resolveOverlayBounds } from './overlay-position';
 // The packaged exe carries the icon already; dev runs electron.exe, so set it on the window too.
@@ -35,6 +36,17 @@ function loadRenderer(win: BrowserWindow, devUrl: string | undefined, name: stri
     win.loadURL(devUrl);
   } else {
     win.loadFile(path.join(__dirname, `../renderer/${name}/index.html`));
+  }
+}
+
+/** True when `url` is the app page itself (hash and query aside), e.g. a dev-server reload. */
+function isAppUrl(url: string, appUrl: string): boolean {
+  try {
+    const a = new URL(url);
+    const b = new URL(appUrl);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch {
+    return false;
   }
 }
 
@@ -105,6 +117,14 @@ export function createDashboardWindow(): BrowserWindow {
     titleBarStyle: 'hidden',
     titleBarOverlay: { ...titleBarColors(), height: TITLEBAR_HEIGHT },
     webPreferences: secureWebPreferences('dashboard.cjs'),
+  });
+  // The dashboard renders user markdown: it never opens windows or leaves its own page (links go through openExternal).
+  const appUrl = DASHBOARD_VITE_DEV_SERVER_URL
+    ? DASHBOARD_VITE_DEV_SERVER_URL
+    : pathToFileURL(path.join(__dirname, `../renderer/${DASHBOARD_VITE_NAME}/index.html`)).toString();
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isAppUrl(url, appUrl)) event.preventDefault();
   });
   loadRenderer(win, DASHBOARD_VITE_DEV_SERVER_URL, DASHBOARD_VITE_NAME);
   return win;

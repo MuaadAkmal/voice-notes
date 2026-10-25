@@ -9,7 +9,11 @@ import {
   DragSchema,
   OverlayTitleSchema,
   CreateFolderSchema,
+  CreatePageSchema,
   ErrorSchema,
+  ExternalUrlSchema,
+  SaveImageSchema,
+  SetBodySchema,
   IdListSchema,
   IdSchema,
   MoveFolderSchema,
@@ -115,6 +119,7 @@ type DashboardDeps = {
   getDevices: () => AudioDevice[];
   notesChanged: () => void;
   foldersChanged: () => void;
+  pagesChanged: () => void;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -167,13 +172,48 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.notesChanged();
   });
 
-  // Folder mutations can change note placement and counts, so both views refresh.
+  // Folder mutations can change note and page placement and counts, so all views refresh.
   const folderMutation = <T>(fn: () => T): T => {
     const result = fn();
     d.foldersChanged();
     d.notesChanged();
+    d.pagesChanged();
     return result;
   };
+
+  const pages = d.store.pages;
+  handle(Ch.PagesList, none, () => pages.list());
+  handle(Ch.PagesCreate, CreatePageSchema, ({ folderId }) => {
+    const page = pages.create(folderId);
+    d.pagesChanged();
+    return page;
+  });
+  handle(Ch.PagesRename, RenameSchema, ({ id, title }) => {
+    const page = pages.rename(id, title);
+    d.pagesChanged();
+    return page;
+  });
+  handle(Ch.PagesSetBody, SetBodySchema, ({ id, body }) => {
+    const page = pages.setBody(id, body);
+    d.pagesChanged();
+    return page;
+  });
+  handle(Ch.PagesMove, MoveNotesSchema, ({ ids, folderId }) => {
+    pages.move(ids, folderId);
+    d.pagesChanged();
+  });
+  handle(Ch.PagesStar, StarNotesSchema, ({ ids, starred }) => {
+    pages.setStarred(ids, starred);
+    d.pagesChanged();
+  });
+  handle(Ch.PagesDeleteMany, IdListSchema, async (ids) => {
+    await pages.deleteMany(ids);
+    d.pagesChanged();
+  });
+  handle(Ch.PagesSaveImage, SaveImageSchema, ({ bytes, ext }) => pages.saveImage(bytes, ext));
+  handle(Ch.OpenExternal, ExternalUrlSchema, async (url) => {
+    await shell.openExternal(url);
+  });
   const folders = d.store.folders;
   handle(Ch.FoldersList, none, () => folders.list());
   handle(Ch.FoldersCreate, CreateFolderSchema, ({ name, parentId }) =>

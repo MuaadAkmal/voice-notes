@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
+import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
+
 export * from './channels';
 
 const SourceSchema = z.enum(['mic', 'system', 'both']);
@@ -53,4 +55,19 @@ export const SetShowSchema = z.object({
   id: IdSchema,
   show: z.string().trim().max(120).nullable().transform((s) => s || null),
 });
+
+export const CreatePageSchema = z.object({ folderId: IdSchema.nullable() });
+export const SetBodySchema = z.object({ id: IdSchema, body: z.string().max(5 * 1024 * 1024) });
+export const SaveImageSchema = z.object({
+  bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength <= MAX_IMAGE_BYTES, 'Image too large'),
+  ext: z.enum(IMAGE_EXTS),
+});
+const EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+export const ExternalUrlSchema = z.string().max(4096).refine((s) => {
+  try {
+    return EXTERNAL_PROTOCOLS.has(new URL(s).protocol);
+  } catch {
+    return false;
+  }
+}, 'Unsupported link');
 export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });

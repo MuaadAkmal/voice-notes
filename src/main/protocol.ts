@@ -1,12 +1,15 @@
 import { net, protocol } from 'electron';
 import { pathToFileURL } from 'node:url';
 import { IdSchema } from '../shared/ipc';
+import { IMAGE_FILE_RE } from '../shared/page-images';
 import type { NoteStore } from './store/note-store';
 
 /** Must run before app 'ready'. */
 export function registerNoteScheme(): void {
+  const privileges = { standard: true, secure: true, stream: true, supportFetchAPI: true };
   protocol.registerSchemesAsPrivileged([
-    { scheme: 'note', privileges: { standard: true, secure: true, stream: true, supportFetchAPI: true } },
+    { scheme: 'note', privileges },
+    { scheme: 'vn-image', privileges },
   ]);
 }
 
@@ -17,5 +20,14 @@ export function registerNoteProtocol(store: NoteStore): void {
     const note = id.success ? store.get(id.data) : undefined;
     if (!note || note.status !== 'ok') return new Response('Not found', { status: 404 });
     return net.fetch(pathToFileURL(store.absolutePath(note)).toString(), { headers: req.headers });
+  });
+}
+
+/** vn-image://<uuid>.<ext> serves a page image from <userData>/images; any other name is a 404. */
+export function registerImageProtocol(store: NoteStore): void {
+  protocol.handle('vn-image', (req) => {
+    const file = new URL(req.url).hostname;
+    if (!IMAGE_FILE_RE.test(file)) return new Response('Not found', { status: 404 });
+    return net.fetch(pathToFileURL(store.pages.imagePath(file)).toString());
   });
 }
