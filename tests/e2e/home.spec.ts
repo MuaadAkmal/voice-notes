@@ -76,4 +76,31 @@ test('home: default view and quick add', async () => {
   await expect(page.getByLabel('Title')).toHaveValue('New words');
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
+
+  // Rename the box from its ⋯ menu; Escape cancels a second rename.
+  const rename = async (label: string, key: 'Enter' | 'Escape') => {
+    await page.getByRole('button', { name: 'Widget options' }).click();
+    await page.getByRole('menuitem', { name: 'Rename' }).click();
+    const field = page.getByLabel('Label');
+    await expect(field).toBeFocused();
+    await field.fill(label);
+    await field.press(key);
+    await expect(field).toBeHidden();
+  };
+  await rename('Words', 'Enter');
+  await expect(page.getByLabel('Add entry to Words')).toBeVisible();
+  await rename('Nope', 'Escape');
+  await page.waitForTimeout(300);
+  await expect(page.getByLabel('Add entry to Words')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nope' })).toHaveCount(0);
+
+  // Remove: back to the empty state; the page itself stays.
+  await page.getByRole('button', { name: 'Widget options' }).click();
+  await page.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect(page.getByText('Nothing on Home yet')).toBeVisible();
+  expect(
+    await t.hooks((h) =>
+      h.store.pages.list().some((p) => p.title === 'New words'),
+    ),
+  ).toBe(true);
 });

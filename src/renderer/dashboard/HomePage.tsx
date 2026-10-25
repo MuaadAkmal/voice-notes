@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import type { HomeWidget, Page } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
-import { addWidget, canAdd } from '../../shared/home-widgets';
+import {
+  addWidget,
+  canAdd,
+  removeWidget,
+  renameWidget,
+} from '../../shared/home-widgets';
 import { AddWidgetDialog } from './AddWidgetDialog';
 import { useToast } from './Toast';
 import { QuickAddWidget } from './widgets/QuickAddWidget';
@@ -25,24 +30,38 @@ type Props = {
 
 export function HomePage({ pages, onOpenPage }: Props) {
   const toast = useToast();
-  // Always the latest list from settings:changed; every edit starts from it.
   const [widgets, setWidgets] = useState<HomeWidget[] | null>(null);
+  // The latest list (from settings:changed, or our own pending write); every edit starts from it.
+  const latest = useRef<HomeWidget[]>([]);
+  const apply = (ws: HomeWidget[]) => {
+    latest.current = ws;
+    setWidgets(ws);
+  };
+  const load = () => api.getSettings().then((s) => apply(s.homeWidgets));
   const [dialog, setDialog] = useState<{
     open: boolean;
     type: HomeWidget['type'];
   }>({ open: false, type: 'quick-add' });
 
   useEffect(() => {
-    const load = () => api.getSettings().then((s) => setWidgets(s.homeWidgets));
     load();
     return api.onSettingsChanged(load);
   }, []);
 
-  const save = (next: HomeWidget[]) =>
-    api
-      .setSettings({ homeWidgets: next })
-      .then((s) => setWidgets(s.homeWidgets))
-      .catch((e) => toast(cleanIpcError(e)));
+  /** Applies `update` to the latest list and saves it. Rejects on failure (after reloading). */
+  const save = async (update: (cur: HomeWidget[]) => HomeWidget[]) => {
+    // Taken as the latest at once, so a second edit before this one lands builds on it.
+    const next = update(latest.current);
+    latest.current = next;
+    try {
+      apply((await api.setSettings({ homeWidgets: next })).homeWidgets);
+    } catch (e) {
+      load();
+      throw e;
+    }
+  };
+  const run = (update: (cur: HomeWidget[]) => HomeWidget[]) =>
+    save(update).catch((e) => toast(cleanIpcError(e)));
 
   const openDialog = (type: HomeWidget['type']) =>
     setDialog({ open: true, type });
@@ -108,17 +127,10 @@ export function HomePage({ pages, onOpenPage }: Props) {
               onOpenPage={() => onOpenPage(page.id)}
               onRename={
                 widget.type === 'quick-add'
-                  ? (label) =>
-                      save(
-                        widgets.map((w) =>
-                          w.id === widget.id && w.type === 'quick-add'
-                            ? { ...w, label }
-                            : w,
-                        ),
-                      )
+                  ? (label) => run((cur) => renameWidget(cur, widget.id, label))
                   : undefined
               }
-              onRemove={() => save(widgets.filter((w) => w.id !== widget.id))}
+              onRemove={() => run((cur) => removeWidget(cur, widget.id))}
             >
               {widget.type === 'quick-add' && (
                 <QuickAddWidget
@@ -137,7 +149,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
         initialType={dialog.type}
         pages={pages ?? []}
         onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
-        onAdd={(w) => save(addWidget(widgets, w))}
+        onAdd={(w) => save((cur) => addWidget(cur, w))}
       />
     </div>
   );
@@ -165,12 +177,16 @@ function WidgetCard({
   const [editing, setEditing] = useState(false);
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
+  // Set once Enter or Escape has ended the edit, so the unmount blur can't commit again.
+  const closed = useRef(false);
 
   useEffect(() => {
-    if (editing) input.current?.select();
+    if (editing) closed.current = false;
   }, [editing]);
 
   const commit = (value: string) => {
+    if (closed.current) return;
+    closed.current = true;
     setEditing(false);
     const label = value.trim();
     if (label && label !== title) onRename?.(label);
@@ -188,7 +204,10 @@ function WidgetCard({
             onBlur={(e) => commit(e.currentTarget.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit(e.currentTarget.value);
-              if (e.key === 'Escape') setEditing(false);
+              if (e.key === 'Escape') {
+                closed.current = true;
+                setEditing(false);
+              }
             }}
             className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-0.5 font-display text-[15px] font-semibold outline-none focus:border-ring"
           />
@@ -215,11 +234,13 @@ function WidgetCard({
           <DropdownMenuContent
             align="end"
             className="w-40"
-            // Returning focus to the trigger would immediately blur (and commit) the rename input.
+            // Focus the rename input once the menu has closed; while it is open the menu holds focus,
+            // and returning focus to the trigger would blur (and commit) the input.
             onCloseAutoFocus={(e) => {
               if (editFromMenu.current) {
                 e.preventDefault();
                 editFromMenu.current = false;
+                input.current?.select();
               }
             }}
           >

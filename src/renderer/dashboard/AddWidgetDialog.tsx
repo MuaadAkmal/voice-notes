@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { HomeWidget, Page } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import { useToast } from './Toast';
@@ -29,7 +29,8 @@ type Props = {
   initialType: WidgetType;
   pages: Page[];
   onOpenChange: (open: boolean) => void;
-  onAdd: (w: HomeWidget) => void;
+  /** Saves the widget; the dialog stays open until it resolves. */
+  onAdd: (w: HomeWidget) => Promise<void>;
 };
 
 const inputClass =
@@ -48,6 +49,8 @@ export function AddWidgetDialog({
   const [newName, setNewName] = useState('New words');
   const [label, setLabel] = useState('Learned today');
   const [busy, setBusy] = useState(false);
+  // The page made by "New page…", kept across retries so a failed rename or save doesn't make another.
+  const created = useRef<string | null>(null);
 
   // Each opening starts fresh, preset to the type the caller asked for.
   useEffect(() => {
@@ -57,6 +60,7 @@ export function AddWidgetDialog({
     setNewName('New words');
     setLabel('Learned today');
     setBusy(false);
+    created.current = null;
   }, [open]);
 
   const creating = pageId === NEW_PAGE;
@@ -72,12 +76,12 @@ export function AddWidgetDialog({
     try {
       let target = pageId;
       if (creating) {
-        const page = await api.createPage(null);
-        await api.renamePage(page.id, newName.trim());
-        target = page.id;
+        created.current ??= (await api.createPage(null)).id;
+        await api.renamePage(created.current, newName.trim());
+        target = created.current;
       }
       const id = crypto.randomUUID();
-      onAdd(
+      await onAdd(
         type === 'quick-add'
           ? { id, type, pageId: target, label: label.trim() }
           : { id, type, pageId: target },

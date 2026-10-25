@@ -8,6 +8,8 @@ import {
   moveWidget,
   pinPage,
   pruneWidgets,
+  removeWidget,
+  renameWidget,
   unpinPage,
 } from '../../src/shared/home-widgets';
 
@@ -79,5 +81,28 @@ describe('home widget helpers', () => {
   it('moveWidget with an unknown id is a no-op', () => {
     const ws = [page('a', p1), page('b', p2)];
     expect(moveWidget(ws, 'zzz', 0)).toEqual(ws);
+  });
+});
+
+describe('renameWidget / removeWidget', () => {
+  it('renames only the matching quick-add widget', () => {
+    const ws = [quick('a', p1), quick('b', p2), page('c', p1)];
+    expect(renameWidget(ws, 'b', 'Tricks')).toEqual([
+      quick('a', p1),
+      { ...quick('b', p2), label: 'Tricks' },
+      page('c', p1),
+    ]);
+  });
+
+  it('leaves page widgets and unknown ids alone', () => {
+    const ws = [quick('a', p1), page('c', p1)];
+    expect(renameWidget(ws, 'c', 'X')).toEqual(ws);
+    expect(renameWidget(ws, 'zz', 'X')).toEqual(ws);
+  });
+
+  it('removes by widget id', () => {
+    const ws = [quick('a', p1), page('c', p1)];
+    expect(removeWidget(ws, 'a')).toEqual([page('c', p1)]);
+    expect(removeWidget(ws, 'zz')).toEqual(ws);
   });
 });

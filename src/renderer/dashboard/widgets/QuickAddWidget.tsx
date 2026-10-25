@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { HomeWidget, Page } from '../../../shared/channels';
 import { cleanIpcError } from '../../../shared/format';
 import { todayEntries } from '../../../shared/learn-log';
@@ -18,15 +18,22 @@ export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
   const [text, setText] = useState('');
   const entries = todayEntries(page.body, new Date());
 
-  const submit = () => {
+  // One append at a time: a second Enter while one is in flight is ignored.
+  const pending = useRef(false);
+
+  const submit = async () => {
     const entry = text.trim();
-    if (!entry) return;
-    setText('');
-    api.appendPageEntry(page.id, entry).catch((e) => {
-      // Give the text back unless something new was typed meanwhile.
-      setText((cur) => cur || entry);
+    if (!entry || pending.current) return;
+    pending.current = true;
+    try {
+      await api.appendPageEntry(page.id, entry);
+      // Cleared only once saved, and only if the text wasn't changed meanwhile.
+      setText((cur) => (cur.trim() === entry ? '' : cur));
+    } catch (e) {
       toast(cleanIpcError(e));
-    });
+    } finally {
+      pending.current = false;
+    }
   };
 
   return (
