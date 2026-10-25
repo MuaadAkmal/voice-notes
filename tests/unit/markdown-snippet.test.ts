@@ -27,6 +27,11 @@ it('returns an empty string when nothing readable is left', () => {
   expect(snippet('---\n```\n```')).toBe('');
 });
 
+it('skips a language-tagged fence line', () => {
+  expect(snippet('```ts\nconst x = 1;\n```')).toBe('const x = 1;');
+  expect(snippet('~~~python\n~~~')).toBe('');
+});
+
 it('truncates to 120 chars ending in an ellipsis', () => {
   const out = snippet('a'.repeat(300));
   expect(out).toHaveLength(120);
