@@ -25,6 +25,7 @@ let saved: Note[];
 let failNext: boolean;
 let created: NewAudio[];
 let idles: number;
+let abandoned: number;
 let source: RecordingSource;
 let c: RecorderController;
 const audio = (durationMs: number): NewAudio => ({
@@ -44,6 +45,7 @@ beforeEach(() => {
   created = [];
   failNext = false;
   idles = 0;
+  abandoned = 0;
   source = 'mic';
   const overlay: OverlayPort = {
     start: (d, s) => calls.push(`start:${d}:${s}`),
@@ -67,6 +69,7 @@ beforeEach(() => {
     onSaved: (n) => saved.push(n),
     idleState: () => IDLE,
     onIdle: () => idles++,
+    onTitleAbandoned: () => abandoned++,
   });
 });
 afterEach(() => vi.useRealTimers());
@@ -255,6 +258,41 @@ describe('titling from the pill', () => {
     expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
     vi.advanceTimersByTime(1);
     expect(lastState()).toEqual(IDLE);
+  });
+
+  it('holdFlash reports whether a saved flash was showing', async () => {
+    expect(c.holdFlash()).toBe(false);
+    await save();
+    expect(c.holdFlash()).toBe(true);
+  });
+
+  it('titleCancelled after a new recording started leaves the recording pill alone', async () => {
+    await save();
+    c.holdFlash();
+    c.handleGesture('start');
+    const before = states.length;
+    c.titleCancelled();
+    expect(states.length).toBe(before);
+    expect(lastState()).toMatchObject({ kind: 'recording' });
+  });
+
+  it('titleDone after a new recording started does not flash over it', async () => {
+    await save();
+    c.holdFlash();
+    c.handleGesture('start');
+    c.titleDone();
+    vi.advanceTimersByTime(2000);
+    expect(lastState()).toMatchObject({ kind: 'recording' });
+  });
+
+  it('a held title that never finishes is abandoned after 15000ms', async () => {
+    await save();
+    c.holdFlash();
+    vi.advanceTimersByTime(14_999);
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+    vi.advanceTimersByTime(1);
+    expect(lastState()).toEqual(IDLE);
+    expect(abandoned).toBe(1);
   });
 
   it('a new recording can start while a title is being typed', async () => {

@@ -99,6 +99,7 @@ async function boot(): Promise<void> {
       idleState,
       // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
       onIdle: () => gesture.reset(),
+      onTitleAbandoned: () => releaseOverlayFocus(),
       onSaved: (note) => {
         log.info('[recorder] saved', note.id, note.durationMs, 'ms');
         toDashboard(Ch.NotesChanged);
@@ -130,8 +131,8 @@ async function boot(): Promise<void> {
     onDragEnd: () => updateSettings({ pillPosition: pillPositionOf(overlay) }),
     titles: {
       start: () => {
-        if (!controller.lastSavedId) return;
-        controller.holdFlash();
+        // Only take keyboard focus if the "Saved" pill is really on screen to type into.
+        if (!controller.holdFlash()) return;
         overlay.setFocusable(true);
         overlay.focus();
       },

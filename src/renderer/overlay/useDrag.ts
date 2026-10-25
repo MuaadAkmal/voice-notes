@@ -13,6 +13,12 @@ export function useDrag() {
   const swallowClick = useRef(false);
   const api = window.overlayApi;
 
+  const reset = () => {
+    if (dragging.current) api.dragEnd();
+    start.current = null;
+    dragging.current = false;
+  };
+
   return {
     onPointerDown: (e: React.PointerEvent) => {
       if (e.button !== 0) return;
@@ -22,6 +28,11 @@ export function useDrag() {
     },
     onPointerMove: (e: React.PointerEvent) => {
       if (!start.current) return;
+      // The button was released somewhere we didn't hear about: never drag on plain hover.
+      if (e.buttons === 0) {
+        reset();
+        return;
+      }
       if (!dragging.current && Math.hypot(e.screenX - start.current.x, e.screenY - start.current.y) > DRAG_THRESHOLD_PX) {
         dragging.current = true;
         // Capture only once it's a drag: capturing on press would retarget the click away from the pill's button.
@@ -35,6 +46,9 @@ export function useDrag() {
         last.current = { x: last.current.x + dx, y: last.current.y + dy };
       }
     },
+    // Capture lost mid-drag (alt-tab, display change): finish cleanly instead of leaving a stuck drag.
+    onPointerCancel: () => reset(),
+    onLostPointerCapture: () => reset(),
     onPointerUp: () => {
       if (dragging.current) {
         api.dragEnd();

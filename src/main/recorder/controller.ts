@@ -20,6 +20,8 @@ type ControllerOpts = {
   idleState: () => OverlayState;
   /** Fired when the controller returns to idle without a gesture asking it to (save, error, watchdog). */
   onIdle?: () => void;
+  /** A held title input timed out (e.g. the pill never got keyboard focus); main should release focus. */
+  onTitleAbandoned?: () => void;
   minMs?: number;
   maxMs?: number;
   savedMs?: number;
@@ -29,6 +31,7 @@ type ControllerOpts = {
 
 type State = 'idle' | 'recording' | 'stopping' | 'saving' | 'failed';
 
+const HOLD_MAX_MS = 15_000; // longest a title input may keep the saved flash up
 const TITLED_MS = 1000; // "Saved ✓" confirmation after a title is saved from the pill
 
 /**
@@ -76,19 +79,31 @@ export class RecorderController {
   }
 
   /** The user clicked "Add title": keep the saved state up until titleDone/titleCancelled. */
-  holdFlash(): void {
-    if (!this.savedState) return;
+  holdFlash(): boolean {
+    if (!this.savedState) return false;
     this.held = true;
     this.clearFlash();
+    // Don't wait forever: if the input never gets focus it can never blur or be submitted.
+    this.flashTimer = setTimeout(() => {
+      this.flashTimer = null;
+      this.endSaved();
+      this.overlay.setState(this.opts.idleState());
+      this.opts.onTitleAbandoned?.();
+    }, HOLD_MAX_MS);
+    return true;
   }
 
+  // Both are no-ops once the hold has ended (a new recording started, or it timed out), so a late
+  // blur from the closing input can't overwrite the recording pill.
   titleDone(): void {
+    if (!this.held) return;
     const noteId = this._lastSavedId;
     this.endSaved();
     if (noteId) this.flash({ kind: 'saved', noteId, titled: true }, TITLED_MS);
   }
 
   titleCancelled(): void {
+    if (!this.held) return;
     this.endSaved();
     this.overlay.setState(this.opts.idleState());
   }
