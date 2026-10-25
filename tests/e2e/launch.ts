@@ -20,6 +20,7 @@ export type Hooks = {
   mediaPresses(): number;
   pagesChanged(): void;
   openedExternal: string[];
+  transcription: { idle(): Promise<void> };
 };
 
 export type TestApp = {

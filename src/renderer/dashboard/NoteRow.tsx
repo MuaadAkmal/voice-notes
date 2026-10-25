@@ -357,12 +357,14 @@ function TranscribeButton(props: {
     'opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100';
   if (!ready) {
     return (
+      // Icon only: a wide invisible target would swallow clicks meant to select the row.
       <button
+        aria-label="Set up transcription"
+        title="Set up transcription"
         onClick={onSetup}
-        className={`${reveal} flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground`}
+        className={`${reveal} grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground`}
       >
-        <AudioLines className="size-3.5" />
-        Set up transcription
+        <AudioLines className="size-4" />
       </button>
     );
   }
