@@ -17,6 +17,9 @@ const NAMES: Record<number, string> = {
   [UiohookKey.Shift]: 'Shift',
 };
 const CAPTURE_TIMEOUT_MS = 10_000;
+// Media keys (play/pause, stop, prev, next). Auto-pause injects play/pause mid-hold, and its event
+// carries no modifier flags: it must not prune the held hotkey or count as a combo key.
+const MEDIA_KEYS = new Set([0xe022, 0xe024, 0xe010, 0xe019]);
 
 const canonical = (code: number) => CANONICAL[code] ?? code;
 
@@ -47,6 +50,10 @@ export class HotkeyService {
   private paused = false;
   private capture: ((keys: number[]) => void) | null = null;
   private captureMax = new Set<number>();
+  private rewindCombo: number[] = [];
+  private rewindListener: (() => void) | null = null;
+  /** Set when the rewind combo fires; holds off both combos until every key of them is released. */
+  private rewindLatch = false;
 
   constructor(
     private readonly gesture: HotkeyGesture,
@@ -66,6 +73,16 @@ export class HotkeyService {
   setCombo(keycodes: number[]): void {
     this.combo = keycodes.map(canonical);
     this.comboActive = false;
+  }
+
+  /** A second combo (a superset of the main one, e.g. Alt+Win+Shift) that fires onRewind once per press. */
+  setRewindCombo(keycodes: number[]): void {
+    this.rewindCombo = keycodes.map(canonical);
+    this.rewindLatch = false;
+  }
+
+  onRewind(listener: () => void): void {
+    this.rewindListener = listener;
   }
 
   setPaused(p: boolean): void {
@@ -111,6 +128,7 @@ export class HotkeyService {
   }
 
   private onKeyDown = (e: KeyEvent): void => {
+    if (MEDIA_KEYS.has(e.keycode)) return;
     const code = canonical(e.keycode);
     this.pruneStale(e, code);
     this.pressed.add(code);
@@ -123,6 +141,18 @@ export class HotkeyService {
       this.gesture.escape();
       return;
     }
+    // Rewind is checked first: it contains the main combo, whose hold may already have started.
+    if (!this.rewindLatch && this.rewindCombo.length > 0 && this.rewindCombo.every((k) => this.pressed.has(k))) {
+      this.rewindLatch = true;
+      if (this.comboActive) {
+        this.comboActive = false;
+        this.gesture.escape(); // discard the hold recording the first keys started
+        this.gesture.keyUp(); // and let the gesture see the key as released
+      }
+      this.rewindListener?.();
+      return;
+    }
+    if (this.rewindLatch) return;
     if (!this.comboActive && this.combo.length > 0 && this.combo.every((k) => this.pressed.has(k))) {
       this.comboActive = true;
       this.gesture.keyDown();
@@ -130,9 +160,13 @@ export class HotkeyService {
   };
 
   private onKeyUp = (e: KeyEvent): void => {
+    if (MEDIA_KEYS.has(e.keycode)) return;
     const code = canonical(e.keycode);
     this.pruneStale(e, code);
     this.pressed.delete(code);
+    if (this.rewindLatch && ![...this.rewindCombo, ...this.combo].some((k) => this.pressed.has(k))) {
+      this.rewindLatch = false;
+    }
     if (this.capture) {
       const done = this.capture;
       this.capture = null;

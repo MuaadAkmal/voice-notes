@@ -59,7 +59,8 @@ export type RecordingSource = 'mic' | 'system' | 'both';
 export type RecordingMode = 'hold' | 'handsfree';
 
 export type OverlayState =
-  | { kind: 'idle'; visible: boolean }
+  | { kind: 'idle'; visible: boolean; film?: true } // film: film mode is listening (rewind ready)
+  | { kind: 'busy'; message: string }
   | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource }
   // micOnly: 'both' was requested but system audio failed; titled: confirmation after a title was added
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }

@@ -1,11 +1,13 @@
 import type { GestureEvent } from '../hotkey/gesture';
 import type { NewAudio } from '../store/note-store';
-import type { Note, OverlayState, RecordingSource } from '../../shared/ipc';
+import type { Note, NoteContext, OverlayState, RecordingSource } from '../../shared/ipc';
 
 export interface OverlayPort {
   start(deviceId: string | null, source: RecordingSource): void;
   stop(): void;
   cancel(): void;
+  /** Encode and send back the last seconds of the film-mode buffer. */
+  rewind(seconds: number): void;
   setState(state: OverlayState): void;
 }
 
@@ -22,6 +24,12 @@ type ControllerOpts = {
   onIdle?: () => void;
   /** A held title input timed out (e.g. the pill never got keyboard focus); main should release focus. */
   onTitleAbandoned?: () => void;
+  /** Foreground window when a recording (or rewind) starts; null if unknown. */
+  getContext?: () => NoteContext | null;
+  getRewindSeconds?: () => number;
+  /** A live capture began / ended (stop, cancel, error, or the recorder ending itself): auto-pause hooks. */
+  onCaptureStart?: (source: RecordingSource) => void;
+  onCaptureEnd?: () => void;
   minMs?: number;
   maxMs?: number;
   savedMs?: number;
@@ -29,7 +37,7 @@ type ControllerOpts = {
   stopTimeoutMs?: number;
 };
 
-type State = 'idle' | 'recording' | 'stopping' | 'saving' | 'failed';
+type State = 'idle' | 'recording' | 'stopping' | 'rewinding' | 'saving' | 'failed';
 
 const HOLD_MAX_MS = 15_000; // longest a title input may keep the saved flash up
 const TITLED_MS = 1000; // "Saved ✓" confirmation after a title is saved from the pill
@@ -46,6 +54,8 @@ export class RecorderController {
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: NewAudio | null = null;
   private requestedSource: RecordingSource = 'mic';
+  private context: NoteContext | null = null;
+  private capturing = false;
   private _lastSavedId: string | null = null;
   /** The "Saved ✓ · Add title" state while it's on screen; null otherwise. */
   private savedState: OverlayState | null = null;
@@ -131,7 +141,10 @@ export class RecorderController {
         this._state = 'recording';
         this.startedAt = Date.now();
         this.requestedSource = this.opts.getSource();
+        this.context = this.opts.getContext?.() ?? null;
         this.overlay.start(this.opts.getDeviceId(), this.requestedSource);
+        this.capturing = true;
+        this.opts.onCaptureStart?.(this.requestedSource);
         this.overlay.setState({ kind: 'recording', mode: 'hold', startedAt: this.startedAt, source: this.requestedSource });
         this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
         break;
@@ -144,6 +157,7 @@ export class RecorderController {
         this.clearMax();
         this._state = 'stopping';
         this.overlay.stop();
+        this.endCapture();
         // If the overlay never answers (renderer crashed, recorder died), don't stay stuck in 'stopping'.
         this.stopTimer = setTimeout(() => this.onCaptureError('Recording lost'), this.stopTimeoutMs);
         break;
@@ -153,26 +167,52 @@ export class RecorderController {
         this.clearTimers();
         this._state = 'idle';
         this.overlay.cancel();
+        this.endCapture();
         this.overlay.setState(this.opts.idleState());
         break;
     }
   }
 
-  /** Accepted while 'stopping', or while 'recording' when the recorder ended on its own (e.g. mic unplugged). */
+  /** Save the last N seconds of the film-mode buffer. Only from idle; returns whether it started. */
+  rewind(): boolean {
+    if (this._state !== 'idle') return false;
+    this.endSaved();
+    this._state = 'rewinding';
+    this.requestedSource = 'system';
+    this.context = this.opts.getContext?.() ?? null;
+    const seconds = this.opts.getRewindSeconds?.() ?? 15;
+    this.overlay.setState({ kind: 'busy', message: `Saving last ${seconds} s…` });
+    this.overlay.rewind(seconds);
+    this.stopTimer = setTimeout(() => this.onCaptureError('Rewind failed'), this.stopTimeoutMs);
+    return true;
+  }
+
+  /**
+   * Accepted while 'stopping' or 'rewinding', or while 'recording' when the recorder ended on its own
+   * (e.g. mic unplugged).
+   */
   async onAudio(audio: NewAudio): Promise<void> {
-    if (this._state !== 'stopping' && this._state !== 'recording') return;
+    if (this._state !== 'stopping' && this._state !== 'recording' && this._state !== 'rewinding') return;
+    const kind = this._state === 'rewinding' ? 'rewind' : 'note';
+    this.endCapture();
     this.clearTimers();
     if (audio.durationMs < this.minMs) {
       this.toIdle();
       this.overlay.setState(this.opts.idleState());
       return;
     }
-    this.pending = audio;
+    this.pending = {
+      ...audio,
+      kind,
+      windowTitle: this.context?.windowTitle ?? null,
+      show: this.context?.show ?? null,
+    };
     await this.save();
   }
 
   onCaptureError(message: string): void {
-    if (this._state !== 'recording' && this._state !== 'stopping') return;
+    if (this._state !== 'recording' && this._state !== 'stopping' && this._state !== 'rewinding') return;
+    this.endCapture();
     this.clearTimers();
     this.toIdle();
     this.flash({ kind: 'error', message, retry: false }, this.errorMs);
@@ -218,6 +258,12 @@ export class RecorderController {
   private clearFlash(): void {
     if (this.flashTimer) clearTimeout(this.flashTimer);
     this.flashTimer = null;
+  }
+
+  private endCapture(): void {
+    if (!this.capturing) return;
+    this.capturing = false;
+    this.opts.onCaptureEnd?.();
   }
 
   private toIdle(): void {

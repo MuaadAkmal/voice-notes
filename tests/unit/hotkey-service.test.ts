@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { UiohookKey } from 'uiohook-napi';
 import type { HotkeyGesture } from '../../src/main/hotkey/gesture';
 import { HotkeyService, type KeyHook } from '../../src/main/hotkey/service';
@@ -43,4 +43,72 @@ it('releases an active combo whose key-up was swallowed', () => {
   down(Meta, { altKey: true, metaKey: true });
   down(Tab, {}); // both modifiers are physically up again
   expect(calls).toEqual(['down', 'up']);
+});
+
+describe('rewind combo (Alt+Win+Shift)', () => {
+  const { Shift } = UiohookKey;
+  const MEDIA_PLAY = 0xe022;
+  let rewinds: number;
+  let svc: HotkeyService;
+  beforeEach(() => {
+    hook = Object.assign(new EventEmitter(), { start: () => undefined, stop: () => undefined });
+    calls = [];
+    rewinds = 0;
+    const gesture = {
+      keyDown: () => calls.push('down'),
+      keyUp: () => calls.push('up'),
+      escape: () => calls.push('esc'),
+    } as unknown as HotkeyGesture;
+    svc = new HotkeyService(gesture, hook);
+    svc.setCombo([Alt, Meta]);
+    svc.setRewindCombo([Alt, Meta, Shift]);
+    svc.onRewind(() => calls.push('rewind'));
+    svc.start();
+  });
+
+  it('Shift first, then Alt+Win: rewinds without starting a recording', () => {
+    down(Shift, { shiftKey: true });
+    down(Alt, { shiftKey: true, altKey: true });
+    down(Meta, { shiftKey: true, altKey: true, metaKey: true });
+    up(Meta, { shiftKey: true, altKey: true });
+    expect(calls).toEqual(['rewind']);
+  });
+
+  it('Alt+Win then Shift: the hold that just started is cancelled, then it rewinds', () => {
+    down(Alt, { altKey: true });
+    down(Meta, { altKey: true, metaKey: true });
+    down(Shift, { altKey: true, metaKey: true, shiftKey: true });
+    expect(calls).toEqual(['down', 'esc', 'up', 'rewind']);
+  });
+
+  it('fires once per press, and Alt+Win still held after releasing Shift does not start a recording', () => {
+    down(Shift, { shiftKey: true });
+    down(Alt, { shiftKey: true, altKey: true });
+    down(Meta, { shiftKey: true, altKey: true, metaKey: true });
+    down(Meta, { shiftKey: true, altKey: true, metaKey: true }); // auto-repeat
+    up(Shift, { altKey: true, metaKey: true });
+    down(Meta, { altKey: true, metaKey: true }); // auto-repeat
+    expect(calls).toEqual(['rewind']);
+    up(Meta, { altKey: true });
+    up(Alt, {});
+    down(Alt, { altKey: true });
+    down(Meta, { altKey: true, metaKey: true });
+    expect(calls).toEqual(['rewind', 'down']);
+  });
+
+  it('ignores the play/pause key auto-pause injects, even mid-hold without modifier flags', () => {
+    down(Alt, { altKey: true });
+    down(Meta, { altKey: true, metaKey: true });
+    down(MEDIA_PLAY, {});
+    up(MEDIA_PLAY, {});
+    expect(calls).toEqual(['down']);
+  });
+
+  it('paused: no rewind', () => {
+    svc.setPaused(true);
+    down(Shift, { shiftKey: true });
+    down(Alt, { shiftKey: true, altKey: true });
+    down(Meta, { shiftKey: true, altKey: true, metaKey: true });
+    expect(calls).toEqual([]);
+  });
 });

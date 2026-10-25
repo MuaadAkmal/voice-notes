@@ -11,16 +11,16 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 // Vite bundles everything except these natives, so they are copied into the package by hand.
 const NATIVE_MODULES = ['better-sqlite3', 'uiohook-napi', 'node-gyp-build'];
 const SKIP_DIRS = new Set(['deps', 'src', 'libuiohook', 'obj', 'docs']);
+// koffi keeps its loader JS under src/, so it's copied whole (≈2 MB), plus its prebuilt binary package.
+const WHOLE_MODULES = ['koffi', '@koromix/koffi-win32-x64'];
 
 const config: ForgeConfig = {
   hooks: {
     packageAfterCopy: async (_config, buildPath) => {
-      for (const name of NATIVE_MODULES) {
-        await fs.cp(path.resolve('node_modules', name), path.join(buildPath, 'node_modules', name), {
-          recursive: true,
-          filter: (src) => !SKIP_DIRS.has(path.basename(src)),
-        });
-      }
+      const copy = (name: string, filter?: (src: string) => boolean) =>
+        fs.cp(path.resolve('node_modules', name), path.join(buildPath, 'node_modules', name), { recursive: true, filter });
+      for (const name of NATIVE_MODULES) await copy(name, (src) => !SKIP_DIRS.has(path.basename(src)));
+      for (const name of WHOLE_MODULES) await copy(name);
     },
   },
   packagerConfig: {
