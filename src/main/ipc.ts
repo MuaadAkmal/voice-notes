@@ -222,12 +222,16 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
   });
   handle(Ch.PagesDeleteMany, IdListSchema, async (ids) => {
-    await pages.deleteMany(ids);
-    // Widgets of deleted pages go too; updateSettings emits settings:changed.
-    const current = d.getSettings().homeWidgets;
-    const pruned = pruneWidgets(current, ids);
-    if (pruned.length !== current.length) d.updateSettings({ homeWidgets: pruned });
-    d.pagesChanged();
+    try {
+      await pages.deleteMany(ids);
+    } finally {
+      // The rows are gone even if removing an image file threw, so prune and notify regardless.
+      // Widgets of deleted pages go too; updateSettings emits settings:changed.
+      const current = d.getSettings().homeWidgets;
+      const pruned = pruneWidgets(current, ids);
+      if (pruned.length !== current.length) d.updateSettings({ homeWidgets: pruned });
+      d.pagesChanged();
+    }
   });
   handle(Ch.PagesSaveImage, SaveImageSchema, ({ bytes, ext }) => pages.saveImage(bytes, ext));
   handle(Ch.OpenExternal, ExternalUrlSchema, async (url) => {

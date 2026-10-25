@@ -5,6 +5,7 @@ import {
   addWidget,
   canAdd,
   isPinned,
+  keepExisting,
   moveWidget,
   pinPage,
   pruneWidgets,
@@ -70,6 +71,13 @@ describe('home widget helpers', () => {
     const ws = [quick('a', p1), page('b', p1), page('c', p2), quick('d', p2)];
     expect(pruneWidgets(ws, [p1])).toEqual([page('c', p2), quick('d', p2)]);
     expect(pruneWidgets(ws, [])).toEqual(ws);
+  });
+
+  it('keepExisting drops widgets whose page is not in the list (orphans)', () => {
+    const ws = [quick('a', p1), page('b', p1), page('c', p2)];
+    expect(keepExisting(ws, [p2])).toEqual([page('c', p2)]);
+    expect(keepExisting(ws, [p1, p2])).toEqual(ws);
+    expect(keepExisting(ws, [])).toEqual([]);
   });
 
   it('moveWidget moves to the start and to the end', () => {

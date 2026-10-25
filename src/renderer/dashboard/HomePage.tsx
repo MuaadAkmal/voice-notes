@@ -100,7 +100,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
         </span>
       </header>
 
-      {widgets.length === 0 ? (
+      {pages && shown.length === 0 ? (
         <div className="rounded-2xl border border-dashed bg-card px-8 py-14 text-center">
           <p className="font-display text-[15px] font-medium">
             Nothing on Home yet

@@ -3,6 +3,7 @@ import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
 import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
@@ -54,6 +55,13 @@ async function boot(): Promise<void> {
   nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
   const store = NoteStore.open(userData);
   log.info('[store] reconcile', await store.reconcile());
+  // Widgets whose page no longer exists (deleted while pruning failed, or removed outside the app).
+  const liveWidgets = keepExisting(
+    settings.homeWidgets,
+    store.pages.list().map((p) => p.id),
+  );
+  if (liveWidgets.length !== settings.homeWidgets.length)
+    Object.assign(settings, saveSettings(settingsFile, { homeWidgets: liveWidgets }));
   registerNoteProtocol(store);
   registerImageProtocol(store);
 

@@ -45,6 +45,15 @@ export const pruneWidgets = (
   return ws.filter((w) => !gone.has(w.pageId));
 };
 
+/** Keeps only widgets whose page is in `pageIds`; the rest are orphans. */
+export const keepExisting = (
+  ws: HomeWidget[],
+  pageIds: string[],
+): HomeWidget[] => {
+  const live = new Set(pageIds);
+  return ws.filter((w) => live.has(w.pageId));
+};
+
 /** Moves widget `id` so it ends up at `toIndex` (clamped); unknown id is a no-op. */
 export const moveWidget = (
   ws: HomeWidget[],
