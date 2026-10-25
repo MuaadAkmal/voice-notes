@@ -16,6 +16,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   recordingSource: 'mic',
   pillPosition: null,
+  filmMode: false,
+  rewindSeconds: 15,
+  autoPause: true,
 };
 
 function readRaw(file: string): Record<string, unknown> {

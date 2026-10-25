@@ -57,6 +57,14 @@ it('pillPosition defaults to null and rejects malformed values', () => {
   expect(loadSettings(file).pillPosition).toEqual({ displayId: 2, x: 10, y: 20 });
 });
 
+it('film mode defaults: off, 15 s rewind, auto-pause on; rewindSeconds only allows the listed lengths', () => {
+  expect(DEFAULT_SETTINGS).toMatchObject({ filmMode: false, rewindSeconds: 15, autoPause: true });
+  fs.writeFileSync(file, JSON.stringify({ rewindSeconds: 20 }));
+  expect(loadSettings(file).rewindSeconds).toBe(15);
+  fs.writeFileSync(file, JSON.stringify({ rewindSeconds: 30, autoPause: false }));
+  expect(loadSettings(file)).toMatchObject({ rewindSeconds: 30, autoPause: false });
+});
+
 it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);

@@ -12,7 +12,20 @@ export type Note = {
   syncedAt: number | null;
   folderId: string | null; // null = Inbox
   source: RecordingSource; // what was captured
+  kind: NoteKind;
+  windowTitle: string | null; // foreground window when recording started
+  show: string | null; // cleaned-up label from windowTitle, editable
+  starred: boolean;
 };
+
+/** 'rewind': the last N seconds of system audio, saved from the film-mode buffer. */
+export type NoteKind = 'note' | 'rewind';
+
+/** Where a note was recorded from: the foreground window, and the show label derived from it. */
+export type NoteContext = { windowTitle: string; show: string | null };
+
+export const REWIND_SECONDS = [10, 15, 30, 60] as const;
+export type RewindSeconds = (typeof REWIND_SECONDS)[number];
 
 export type Folder = {
   id: string;
@@ -32,6 +45,9 @@ export type Settings = {
   theme: Theme;
   recordingSource: RecordingSource;
   pillPosition: PillPosition | null; // null = bottom-centre of the primary display
+  filmMode: boolean; // keep a rolling system-audio buffer for rewind; forced off at every launch
+  rewindSeconds: RewindSeconds;
+  autoPause: boolean; // pause playing media while recording a mic note
 };
 
 /** Overlay window top-left, relative to that display's work area. */

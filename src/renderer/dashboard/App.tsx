@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Folder, Note } from '../../shared/channels';
+import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
@@ -46,9 +47,7 @@ export function App() {
         {/* Draggable strip replacing the native title bar; caption buttons are drawn over its right end. */}
         <div className="app-drag flex h-10 shrink-0">
           <div className="flex w-60 items-center gap-2 border-r border-sidebar-border bg-sidebar px-5">
-            <span className="grid h-5 w-5 place-items-center rounded-full bg-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-            </span>
+            <Logo className="h-4 w-auto" />
             <span className="text-[13px] font-semibold tracking-tight">Voice Notes</span>
           </div>
         </div>

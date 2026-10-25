@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_BATCH, type Settings } from './channels';
+import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
 export * from './channels';
 
@@ -15,6 +15,9 @@ export const SettingsFieldSchemas = {
   theme: z.enum(['system', 'light', 'dark']),
   recordingSource: SourceSchema,
   pillPosition: z.object({ displayId: z.number().int(), x: z.number().int(), y: z.number().int() }).nullable(),
+  filmMode: z.boolean(),
+  rewindSeconds: z.union(REWIND_SECONDS.map((n) => z.literal(n))),
+  autoPause: z.boolean(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

@@ -4,13 +4,21 @@ import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { desc, eq, inArray } from 'drizzle-orm';
-import type { Note, RecordingSource } from '../../shared/ipc';
+import type { Note, NoteKind, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { notes } from './schema';
 
-export type NewAudio = { bytes: Buffer; durationMs: number; mimeType: string; source: RecordingSource };
+export type NewAudio = {
+  bytes: Buffer;
+  durationMs: number;
+  mimeType: string;
+  source: RecordingSource;
+  kind?: NoteKind;
+  windowTitle?: string | null;
+  show?: string | null;
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORPHAN_MIME = 'audio/webm;codecs=opus';
@@ -65,6 +73,10 @@ export class NoteStore {
       syncedAt: null,
       folderId: null,
       source: audio.source,
+      kind: audio.kind ?? 'note',
+      windowTitle: audio.windowTitle ?? null,
+      show: audio.show ?? null,
+      starred: false,
     };
     this.db.insert(notes).values(note).run();
     return note;
@@ -82,6 +94,23 @@ export class NoteStore {
     const updated = this.db
       .update(notes)
       .set({ title, updatedAt: this.now() })
+      .where(eq(notes.id, id))
+      .returning()
+      .get();
+    if (!updated) throw new Error('Note not found');
+    return updated;
+  }
+
+  /** Unknown note ids are ignored. */
+  setStarred(ids: string[], starred: boolean): void {
+    this.db.update(notes).set({ starred, updatedAt: this.now() }).where(inArray(notes.id, ids)).run();
+  }
+
+  /** null clears the label (the raw window title is kept). */
+  setShow(id: string, show: string | null): Note {
+    const updated = this.db
+      .update(notes)
+      .set({ show, updatedAt: this.now() })
       .where(eq(notes.id, id))
       .returning()
       .get();

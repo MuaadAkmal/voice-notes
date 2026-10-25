@@ -1,7 +1,9 @@
-import { BrowserWindow, nativeTheme, screen } from 'electron';
+import { BrowserWindow, nativeImage, nativeTheme, screen } from 'electron';
 import path from 'node:path';
 import type { PillPosition } from '../shared/channels';
 import { resolveOverlayBounds } from './overlay-position';
+// The packaged exe carries the icon already; dev runs electron.exe, so set it on the window too.
+import appIcon from '../../assets/icon.png?inline';
 
 const OVERLAY_WIDTH = 320; // compact pill: glyph + waveform + timer (+ discard ×)
 const OVERLAY_HEIGHT = 80;
@@ -96,6 +98,7 @@ export function createDashboardWindow(): BrowserWindow {
     minWidth: 720,
     minHeight: 480,
     title: 'Voice Notes',
+    icon: nativeImage.createFromDataURL(appIcon),
     autoHideMenuBar: true,
     backgroundColor: titleBarColors().color,
     // Frameless look like Wispr Flow, but keep native caption buttons (and Windows 11 snap layouts).

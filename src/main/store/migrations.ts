@@ -26,6 +26,11 @@ export const MIGRATIONS: string[] = [
    ALTER TABLE notes ADD COLUMN folder_id TEXT REFERENCES folders(id);
    CREATE INDEX notes_folder ON notes (folder_id);`,
   `ALTER TABLE notes ADD COLUMN source TEXT NOT NULL DEFAULT 'mic' CHECK (source IN ('mic', 'system', 'both'));`,
+  `ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'note' CHECK (kind IN ('note', 'rewind'));
+   ALTER TABLE notes ADD COLUMN window_title TEXT;
+   ALTER TABLE notes ADD COLUMN show TEXT;
+   ALTER TABLE notes ADD COLUMN starred INTEGER NOT NULL DEFAULT 0;
+   CREATE INDEX notes_show ON notes (show);`,
 ];
 
 export function migrate(db: Database.Database): void {

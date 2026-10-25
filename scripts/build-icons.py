@@ -53,12 +53,12 @@ def tile(px: int, margin: float, glyph_h: float) -> Image.Image:
 
 def main() -> None:
     sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
-    # Small sizes drop the margin so the glyph stays legible.
-    icons = [tile(n, 0.0 if n <= 32 else 0.04, 0.62) for n in sizes]
+    # Small sizes drop the margin and enlarge the glyph so it stays legible.
+    icons = [tile(n, 0.0, 0.8) if n <= 32 else tile(n, 0.04, 0.74) for n in sizes]
     icons[-1].save(ASSETS / "icon.ico", sizes=[(n, n) for n in sizes], append_images=icons[:-1])
-    tile(512, 0.04, 0.62).save(ASSETS / "icon.png")
-    tile(16, 0.0, 0.62).save(ASSETS / "tray-16.png")
-    tile(32, 0.0, 0.62).save(ASSETS / "tray-32.png")
+    tile(512, 0.04, 0.74).save(ASSETS / "icon.png")
+    tile(16, 0.0, 0.8).save(ASSETS / "tray-16.png")
+    tile(32, 0.0, 0.8).save(ASSETS / "tray-32.png")
 
 
 if __name__ == "__main__":

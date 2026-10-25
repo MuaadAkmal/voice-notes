@@ -189,3 +189,58 @@ it('migrates a v2 database: existing notes get source mic', async () => {
   expect(upgraded.get(id)?.source).toBe('mic');
   upgraded.close();
 });
+it('new notes default to kind note, unstarred, no context', async () => {
+  const n = await store.create(audio());
+  expect(n).toMatchObject({ kind: 'note', starred: false, windowTitle: null, show: null });
+  expect(store.get(n.id)).toEqual(n);
+});
+
+it('create stores kind and window context', async () => {
+  const n = await store.create({
+    ...audio(),
+    source: 'system',
+    kind: 'rewind',
+    windowTitle: 'La Casa de Papel | Netflix - Google Chrome',
+    show: 'La Casa de Papel',
+  });
+  expect(store.get(n.id)).toMatchObject({
+    kind: 'rewind',
+    windowTitle: 'La Casa de Papel | Netflix - Google Chrome',
+    show: 'La Casa de Papel',
+  });
+});
+
+it('setStarred stars and unstars many notes', async () => {
+  const a = await store.create(audio());
+  const b = await store.create(audio());
+  clock += 10;
+  store.setStarred([a.id, b.id, randomUUID()], true);
+  expect(store.get(a.id)).toMatchObject({ starred: true, updatedAt: T0 + 10 });
+  expect(store.get(b.id)?.starred).toBe(true);
+  store.setStarred([a.id], false);
+  expect(store.get(a.id)?.starred).toBe(false);
+});
+
+it('setShow edits and clears the show label', async () => {
+  const n = await store.create(audio());
+  expect(store.setShow(n.id, 'Dark').show).toBe('Dark');
+  expect(store.setShow(n.id, null).show).toBeNull();
+  expect(() => store.setShow(randomUUID(), 'x')).toThrow('Note not found');
+});
+
+it('migrates a v3 database: existing notes get kind note, unstarred', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-v3-'));
+  fs.mkdirSync(path.join(dir, 'recordings'));
+  const db = new Database(path.join(dir, 'voice-notes.sqlite'));
+  MIGRATIONS.slice(0, 3).forEach((sql) => db.exec(sql));
+  db.pragma('user_version = 3');
+  const id = randomUUID();
+  fs.writeFileSync(path.join(dir, 'recordings', `${id}.webm`), 'x');
+  db.prepare(
+    `INSERT INTO notes VALUES (?, 'old', ?, 1000, 1, 'audio/webm;codecs=opus', 'ok', 1, 1, NULL, NULL, 'system')`,
+  ).run(id, `recordings/${id}.webm`);
+  db.close();
+  const upgraded = NoteStore.open(dir);
+  expect(upgraded.get(id)).toMatchObject({ source: 'system', kind: 'note', starred: false, show: null, windowTitle: null });
+  upgraded.close();
+});

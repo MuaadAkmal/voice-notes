@@ -17,6 +17,10 @@ const fakeNote = (a: NewAudio): Note => ({
   syncedAt: null,
   folderId: null,
   source: a.source,
+  kind: a.kind ?? 'note',
+  windowTitle: a.windowTitle ?? null,
+  show: a.show ?? null,
+  starred: false,
 });
 
 let calls: string[];

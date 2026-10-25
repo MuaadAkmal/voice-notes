@@ -15,6 +15,10 @@ const note = (id: string, createdAt: number): Note => ({
   syncedAt: null,
   folderId: null,
   source: 'mic',
+  kind: 'note',
+  windowTitle: null,
+  show: null,
+  starred: false,
 });
 
 it('groups notes by day, preserving input order within a group', () => {

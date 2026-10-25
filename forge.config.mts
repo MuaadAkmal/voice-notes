@@ -26,9 +26,10 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     name: 'Voice Notes',
+    icon: 'assets/icon', // Packager appends .ico on Windows
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({}), new MakerZIP({}, ['win32'])],
+  makers: [new MakerSquirrel({ setupIcon: 'assets/icon.ico' }), new MakerZIP({}, ['win32'])],
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new VitePlugin({

@@ -1,5 +1,9 @@
 /// <reference types="@electron-forge/plugin-vite/forge-vite-env" />
 declare module '*.css';
+declare module '*.png?inline' {
+  const dataUrl: string;
+  export default dataUrl;
+}
 
 // Injected by Forge's Vite plugin, one pair per renderer in forge.config.mts.
 declare const OVERLAY_VITE_DEV_SERVER_URL: string | undefined;

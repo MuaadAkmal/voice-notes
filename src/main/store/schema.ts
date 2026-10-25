@@ -13,6 +13,10 @@ export const notes = sqliteTable('notes', {
   syncedAt: integer('synced_at'),
   folderId: text('folder_id'),
   source: text('source', { enum: ['mic', 'system', 'both'] }).notNull().default('mic'),
+  kind: text('kind', { enum: ['note', 'rewind'] }).notNull().default('note'),
+  windowTitle: text('window_title'),
+  show: text('show'),
+  starred: integer('starred', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const folders = sqliteTable('folders', {
