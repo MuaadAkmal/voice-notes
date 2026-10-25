@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import type { Note, Page } from '../../src/shared/channels';
 import {
+  untranscribedIds,
   itemFolderId,
   itemId,
   itemStarred,
@@ -90,4 +91,17 @@ it('itemFolderId and itemStarred read the right field for both types', () => {
   expect(itemFolderId(p)).toBe('f2');
   expect(itemStarred(a)).toBe(true);
   expect(itemStarred(p)).toBe(false);
+});
+
+it('bulk transcribe picks selected voice notes with no transcript and readable audio', () => {
+  const items: Item[] = [
+    { type: 'audio', note: note('new', 1) },
+    { type: 'audio', note: note('done', 2, { transcript: 'hola' }) },
+    { type: 'audio', note: note('silent', 3, { transcript: '' }) },
+    { type: 'audio', note: note('gone', 4, { status: 'missing' }) },
+    { type: 'audio', note: note('other', 5) },
+    { type: 'page', page: page('p', 6) },
+  ];
+  const selected = new Set(['new', 'done', 'silent', 'gone', 'p']);
+  expect(untranscribedIds(items, selected)).toEqual(['new']);
 });

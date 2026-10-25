@@ -121,3 +121,26 @@ test('transcribes a note through an OpenAI-compatible server', async () => {
   await expect(failed).toBeHidden();
   await expect(row.getByText('hola mundo', { exact: true })).toBeVisible();
 });
+
+test('before setup, Transcribe actions lead to the Transcription page', async () => {
+  await t.record(1200);
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const row = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('button', { name: 'Play' }) });
+  await row.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Set up transcription' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Transcription' }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  await row.click({ position: { x: 120, y: 20 } });
+  await page
+    .getByRole('button', { name: 'Set up transcription', exact: true })
+    .last()
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Transcription' }),
+  ).toBeVisible();
+});

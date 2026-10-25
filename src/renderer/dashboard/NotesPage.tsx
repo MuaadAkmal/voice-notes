@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
 import { canAdd, isPinned } from '../../shared/home-widgets';
-import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems } from '../../shared/items';
+import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems, untranscribedIds } from '../../shared/items';
 import type { View } from './App';
 import { NOTES_MIME, onDropped, setCountDragImage, setDragging } from './dnd';
 import { NoteRow } from './NoteRow';
@@ -122,10 +122,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   }, []);
 
   const order = visible?.map(itemId) ?? [];
-  // Selected voice notes that can be transcribed (pages and missing audio can't).
-  const selectedAudio = (visible ?? []).flatMap((i) =>
-    i.type === 'audio' && selected.has(i.note.id) && i.note.status === 'ok' ? [i.note.id] : [],
-  );
+  const selectedAudio = untranscribedIds(visible ?? [], selected);
 
   const select = (id: string, e: React.MouseEvent) => {
     if (e.shiftKey && anchor.current) {
@@ -338,7 +335,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                   : onNavigate({ kind: 'transcription' })
               }
             >
-              Transcribe ({selectedAudio.length})
+              {transcription.ready ? `Transcribe (${selectedAudio.length})` : 'Set up transcription'}
             </button>
           )}
           <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>

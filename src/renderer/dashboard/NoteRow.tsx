@@ -255,11 +255,14 @@ export function NoteRow(props: Props) {
             {note.show ? 'Edit show' : 'Add show'}
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onToggleStar}>{note.starred ? 'Unstar' : 'Star'}</DropdownMenuItem>
-          {transcriptionReady && canTranscribe && (
-            <DropdownMenuItem onSelect={note.transcript === null ? () => onTranscribe() : onRetranscribe}>
-              {note.transcript === null ? 'Transcribe' : 'Re-transcribe'}
-            </DropdownMenuItem>
-          )}
+          {canTranscribe &&
+            (transcriptionReady ? (
+              <DropdownMenuItem onSelect={note.transcript === null ? () => onTranscribe() : onRetranscribe}>
+                {note.transcript === null ? 'Transcribe' : 'Re-transcribe'}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={onSetupTranscription}>Set up transcription</DropdownMenuItem>
+            ))}
           {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>

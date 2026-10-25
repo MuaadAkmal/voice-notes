@@ -21,3 +21,11 @@ export function mergeItems(notes: Note[], pages: Page[]): Item[] {
   ];
   return items.sort((a, b) => itemTime(b) - itemTime(a)); // stable: ties keep notes first
 }
+
+/** Selected voice notes the bulk Transcribe should send: never one that already has a (possibly edited) transcript. */
+export const untranscribedIds = (items: Item[], selected: ReadonlySet<string>): string[] =>
+  items.flatMap((i) =>
+    i.type === 'audio' && selected.has(i.note.id) && i.note.status === 'ok' && i.note.transcript === null
+      ? [i.note.id]
+      : [],
+  );
