@@ -99,4 +99,34 @@ export const ExternalUrlSchema = z.string().max(4096).refine((s) => {
     return false;
   }
 }, 'Unsupported link');
+export const TranscriptionEnqueueSchema = z.object({
+  ids: IdListSchema,
+  language: z.enum(LANGUAGE_CODES),
+});
+export const TranscriptionTestSchema = z.object({
+  baseUrl: z
+    .string()
+    .max(2048)
+    .refine((s) => normaliseBaseUrl(s) !== null, 'Invalid URL'),
+  model: z.string().trim().min(1).max(200),
+});
+export const SetKeySchema = z.object({ key: z.string().trim().min(1).max(500) });
+export const SetTranscriptSchema = z.object({
+  id: IdSchema,
+  text: z.string().max(100_000),
+});
+// Generous: about 1.9 MB of WAV per minute of audio.
+const MAX_WAV_BYTES = 1024 * 1024 * 1024;
+export const WavReplySchema = z.union([
+  z.object({
+    requestId: z.number().int().positive(),
+    bytes: z
+      .instanceof(Uint8Array)
+      .refine((b) => b.byteLength <= MAX_WAV_BYTES, 'Audio too large'),
+  }),
+  z.object({
+    requestId: z.number().int().positive(),
+    error: z.string().max(200),
+  }),
+]);
 export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });

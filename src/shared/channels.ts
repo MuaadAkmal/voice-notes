@@ -153,11 +153,21 @@ export const Ch = {
   PagesDeleteMany: 'pages:delete-many', // string[]
   PagesSaveImage: 'pages:save-image', // { bytes, ext } → vn-image:// url
   OpenExternal: 'app:open-external', // http(s)/mailto url
+  NotesSetTranscript: 'notes:set-transcript', // { id, text } → Note
+  TranscriptionGetStatus: 'transcription:get-status', // → StatusMap
+  TranscriptionEnqueue: 'transcription:enqueue', // { ids, language }
+  TranscriptionTest: 'transcription:test', // { baseUrl, model } → TestResult
+  TranscriptionKeyInfo: 'transcription:key-info', // → KeyInfo
+  TranscriptionSetKey: 'transcription:set-key', // { key } → KeyInfo
+  TranscriptionRemoveKey: 'transcription:remove-key', // → KeyInfo
+  TranscriptionWav: 'transcription:wav', // { requestId, bytes } | { requestId, error }
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
   FoldersChanged: 'folders:changed',
+  TranscriptionStatus: 'transcription:status', // StatusMap
+  TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
 
 /** A voice note's transcription job; a note with no entry has none (or it finished). */

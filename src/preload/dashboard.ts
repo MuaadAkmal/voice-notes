@@ -1,7 +1,19 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { type AudioDevice, Ch, type Folder, MAX_BATCH, type Note, type Page, type Settings } from '../shared/channels';
+import {
+  type AudioDevice,
+  Ch,
+  type Folder,
+  type KeyInfo,
+  MAX_BATCH,
+  type Note,
+  type Page,
+  type Settings,
+  type StatusMap,
+  type TestResult,
+} from '../shared/channels';
 import { chunk } from '../shared/format';
 import type { ImageExt } from '../shared/page-images';
+import type { TranscribeLanguage } from '../shared/transcription';
 
 const subscribe = (channel: string, cb: () => void) => {
   const listener = () => cb();
@@ -10,6 +22,18 @@ const subscribe = (channel: string, cb: () => void) => {
     ipcRenderer.off(channel, listener);
   };
 };
+
+/** Like subscribe, for channels that carry a payload. */
+const subscribeWith = <T>(channel: string, cb: (payload: T) => void) => {
+  const listener = (_e: unknown, payload: T) => cb(payload);
+  ipcRenderer.on(channel, listener);
+  return () => {
+    ipcRenderer.off(channel, listener);
+  };
+};
+
+type WavRequest = { requestId: number; bytes: Uint8Array; mimeType: string };
+type WavReply = { requestId: number; bytes: Uint8Array } | { requestId: number; error: string };
 
 const dashboardApi = {
   listNotes: (): Promise<Note[]> => ipcRenderer.invoke(Ch.NotesList),
@@ -59,6 +83,19 @@ const dashboardApi = {
   savePageImage: (bytes: Uint8Array, ext: ImageExt): Promise<string> =>
     ipcRenderer.invoke(Ch.PagesSaveImage, { bytes, ext }),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(Ch.OpenExternal, url),
+  setTranscript: (id: string, text: string): Promise<Note> => ipcRenderer.invoke(Ch.NotesSetTranscript, { id, text }),
+  getTranscriptionStatus: (): Promise<StatusMap> => ipcRenderer.invoke(Ch.TranscriptionGetStatus),
+  transcribeNotes: async (ids: string[], language: TranscribeLanguage): Promise<void> => {
+    for (const batch of chunk(ids, MAX_BATCH)) await ipcRenderer.invoke(Ch.TranscriptionEnqueue, { ids: batch, language });
+  },
+  testTranscription: (baseUrl: string, model: string): Promise<TestResult> =>
+    ipcRenderer.invoke(Ch.TranscriptionTest, { baseUrl, model }),
+  getKeyInfo: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionKeyInfo),
+  setKey: (key: string): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionSetKey, { key }),
+  removeKey: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionRemoveKey),
+  sendWav: (reply: WavReply): Promise<void> => ipcRenderer.invoke(Ch.TranscriptionWav, reply),
+  onTranscriptionStatus: (cb: (status: StatusMap) => void) => subscribeWith(Ch.TranscriptionStatus, cb),
+  onNeedWav: (cb: (req: WavRequest) => void) => subscribeWith(Ch.TranscriptionNeedWav, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),
   onFoldersChanged: (cb: () => void) => subscribe(Ch.FoldersChanged, cb),

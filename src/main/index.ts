@@ -14,6 +14,9 @@ import { RecorderController } from './recorder/controller';
 import { loadSettings, REWIND_HOTKEY, saveSettings } from './settings';
 import { foregroundWindow, pressPlayPause } from './win32';
 import { NoteStore } from './store/note-store';
+import { safeStorageCipher, Secrets } from './transcription/secrets';
+import { TranscriptionService } from './transcription/service';
+import { WavBridge } from './transcription/wav-bridge';
 import { createTray } from './tray';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
@@ -282,6 +285,24 @@ async function boot(): Promise<void> {
     return { ...settings };
   }
 
+  const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
+  const wavBridge = new WavBridge();
+  const transcription = new TranscriptionService({
+    store,
+    getSettings: () => ({ ...settings }),
+    secrets,
+    toWav: (bytes, mimeType) =>
+      wavBridge.request((requestId) => {
+        if (!dashboard || dashboard.isDestroyed()) return false;
+        dashboard.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
+        return true;
+      }),
+    notesChanged: () => toDashboard(Ch.NotesChanged),
+    onStatus: (status) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
+    },
+  });
+
   const openedExternal: string[] = [];
   registerDashboardIpc({
     getDashboard: () => dashboard,
@@ -294,6 +315,9 @@ async function boot(): Promise<void> {
     foldersChanged: () => toDashboard(Ch.FoldersChanged),
     pagesChanged: () => toDashboard(Ch.PagesChanged),
     openedExternal,
+    transcription,
+    secrets,
+    wavBridge,
   });
 
   app.on('before-quit', () => {
@@ -315,6 +339,7 @@ async function boot(): Promise<void> {
       mediaPresses: () => mediaPresses,
       openedExternal, // URLs the dashboard asked to open in the browser
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
+      transcription, // idle(): wait for queued transcriptions
     };
   }
 

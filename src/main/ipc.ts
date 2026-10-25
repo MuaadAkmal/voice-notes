@@ -28,12 +28,21 @@ import {
   RenameSchema,
   type Settings,
   SettingsPatchSchema,
+  SetKeySchema,
+  SetTranscriptSchema,
+  TranscriptionEnqueueSchema,
+  TranscriptionTestSchema,
+  WavReplySchema,
 } from '../shared/ipc';
+import { normaliseBaseUrl } from '../shared/transcription';
 import { pruneWidgets } from '../shared/home-widgets';
 import type { HotkeyService } from './hotkey/service';
 import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
 import type { RecorderController } from './recorder/controller';
+import type { Secrets } from './transcription/secrets';
+import type { TranscriptionService } from './transcription/service';
+import type { WavBridge } from './transcription/wav-bridge';
 
 type OverlayDeps = {
   overlay: BrowserWindow;
@@ -125,6 +134,9 @@ type DashboardDeps = {
   pagesChanged: () => void;
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
+  transcription: TranscriptionService;
+  secrets: Secrets;
+  wavBridge: WavBridge;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -240,6 +252,29 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     if (process.env.VOICE_NOTES_TEST === '1') d.openedExternal.push(href);
     else await shell.openExternal(href);
   });
+  handle(Ch.NotesSetTranscript, SetTranscriptSchema, ({ id, text }) => {
+    const note = d.store.editTranscript(id, text);
+    d.notesChanged();
+    return note;
+  });
+  handle(Ch.TranscriptionGetStatus, none, () => d.transcription.status());
+  handle(Ch.TranscriptionEnqueue, TranscriptionEnqueueSchema, ({ ids, language }) =>
+    d.transcription.enqueue(ids, language),
+  );
+  handle(Ch.TranscriptionTest, TranscriptionTestSchema, ({ baseUrl, model }) =>
+    // The schema already rejected URLs that don't normalise.
+    d.transcription.test(normaliseBaseUrl(baseUrl) ?? baseUrl, model),
+  );
+  handle(Ch.TranscriptionKeyInfo, none, () => d.secrets.info('server'));
+  handle(Ch.TranscriptionSetKey, SetKeySchema, ({ key }) => {
+    d.secrets.set('server', key);
+    return d.secrets.info('server');
+  });
+  handle(Ch.TranscriptionRemoveKey, none, () => {
+    d.secrets.remove('server');
+    return d.secrets.info('server');
+  });
+  handle(Ch.TranscriptionWav, WavReplySchema, (reply) => d.wavBridge.settle(reply.requestId, reply));
   const folders = d.store.folders;
   handle(Ch.FoldersList, none, () => folders.list());
   handle(Ch.FoldersCreate, CreateFolderSchema, ({ name, parentId }) =>

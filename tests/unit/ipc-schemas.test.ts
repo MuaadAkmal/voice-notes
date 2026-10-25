@@ -5,7 +5,12 @@ import {
   ExternalUrlSchema,
   SaveImageSchema,
   SetBodySchema,
+  SetKeySchema,
   SetTaskSchema,
+  SetTranscriptSchema,
+  TranscriptionEnqueueSchema,
+  TranscriptionTestSchema,
+  WavReplySchema,
 } from '../../src/shared/ipc';
 import { MAX_IMAGE_BYTES } from '../../src/shared/page-images';
 
@@ -76,5 +81,31 @@ describe('page IPC schemas', () => {
     expect(CreatePageSchema.safeParse({ folderId: null }).success).toBe(true);
     expect(CreatePageSchema.safeParse({ folderId: id }).success).toBe(true);
     expect(CreatePageSchema.safeParse({ folderId: 'x' }).success).toBe(false);
+  });
+});
+
+describe('transcription IPC schemas', () => {
+  it('enqueue takes known languages and at least one id', () => {
+    expect(TranscriptionEnqueueSchema.safeParse({ ids: [id], language: 'es' }).success).toBe(true);
+    expect(TranscriptionEnqueueSchema.safeParse({ ids: [id], language: 'xx' }).success).toBe(false);
+    expect(TranscriptionEnqueueSchema.safeParse({ ids: [], language: 'auto' }).success).toBe(false);
+  });
+  it('set-key trims and rejects blanks', () => {
+    expect(SetKeySchema.parse({ key: '  sk-1\n' })).toEqual({ key: 'sk-1' });
+    expect(SetKeySchema.safeParse({ key: '   ' }).success).toBe(false);
+  });
+  it('caps transcripts at 100 000 characters', () => {
+    expect(SetTranscriptSchema.safeParse({ id, text: 'x'.repeat(100_000) }).success).toBe(true);
+    expect(SetTranscriptSchema.safeParse({ id, text: 'x'.repeat(100_001) }).success).toBe(false);
+  });
+  it('wav replies carry bytes or an error', () => {
+    expect(WavReplySchema.safeParse({ requestId: 1, bytes: new Uint8Array(4) }).success).toBe(true);
+    expect(WavReplySchema.safeParse({ requestId: 1, error: 'x' }).success).toBe(true);
+    expect(WavReplySchema.safeParse({ requestId: 1 }).success).toBe(false);
+  });
+  it('connection tests need a valid URL and a model', () => {
+    expect(TranscriptionTestSchema.safeParse({ baseUrl: 'https://vm/v1/', model: 'm' }).success).toBe(true);
+    expect(TranscriptionTestSchema.safeParse({ baseUrl: 'ftp://vm', model: 'm' }).success).toBe(false);
+    expect(TranscriptionTestSchema.safeParse({ baseUrl: 'https://vm/v1', model: ' ' }).success).toBe(false);
   });
 });
