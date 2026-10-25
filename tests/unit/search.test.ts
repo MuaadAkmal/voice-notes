@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
-import type { Note } from '../../src/shared/channels';
-import { distinctShows, filterNotes, isFiltering, NO_FILTER } from '../../src/shared/search';
+import type { Note, Page } from '../../src/shared/channels';
+import { itemId, type Item } from '../../src/shared/items';
+import { distinctShows, filterItems, filterNotes, isFiltering, NO_FILTER } from '../../src/shared/search';
 
 const note = (id: string, over: Partial<Note> = {}): Note => ({
   id,
@@ -50,6 +51,41 @@ it('filters by show, source, rewind and starred, combined', () => {
   expect(ids(filterNotes(notes, { ...NO_FILTER, source: 'rewind' }))).toEqual(['b']);
   expect(ids(filterNotes(notes, { ...NO_FILTER, starred: true }))).toEqual(['b']);
   expect(ids(filterNotes(notes, { ...NO_FILTER, show: 'La Casa de Papel', source: 'system' }))).toEqual(['d']);
+});
+
+const page = (id: string, over: Partial<Page> = {}): Page => ({
+  id,
+  title: id,
+  body: '',
+  folderId: null,
+  starred: false,
+  createdAt: 0,
+  updatedAt: 0,
+  ...over,
+});
+
+const items: Item[] = [
+  { type: 'audio', note: note('a', { title: 'hola', show: 'Dark', source: 'system' }) },
+  { type: 'page', page: page('p1', { title: 'Shopping', body: '¿Qué pasó? hoy' }) },
+  { type: 'page', page: page('p2', { title: 'Ideas', starred: true }) },
+];
+const itemIds = (is: Item[]) => is.map(itemId);
+
+it('filterItems matches page title and body, ignoring accents', () => {
+  expect(itemIds(filterItems(items, { ...NO_FILTER, query: 'que paso' }))).toEqual(['p1']);
+  expect(itemIds(filterItems(items, { ...NO_FILTER, query: 'shopping hoy' }))).toEqual(['p1']);
+  expect(itemIds(filterItems(items, { ...NO_FILTER, query: 'ideas' }))).toEqual(['p2']);
+  expect(itemIds(filterItems(items, NO_FILTER))).toEqual(['a', 'p1', 'p2']);
+});
+
+it('filterItems applies starred to pages', () => {
+  expect(itemIds(filterItems(items, { ...NO_FILTER, starred: true }))).toEqual(['p2']);
+});
+
+it('filterItems excludes pages when a show or source filter is set', () => {
+  expect(itemIds(filterItems(items, { ...NO_FILTER, show: 'Dark' }))).toEqual(['a']);
+  expect(itemIds(filterItems(items, { ...NO_FILTER, source: 'system' }))).toEqual(['a']);
+  expect(itemIds(filterItems(items, { ...NO_FILTER, source: 'mic' }))).toEqual([]);
 });
 
 it('distinctShows lists each show once, sorted, with counts', () => {

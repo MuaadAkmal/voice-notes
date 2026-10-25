@@ -1,4 +1,5 @@
 import type { Note, RecordingSource } from './channels';
+import type { Item } from './items';
 
 export type SourceFilter = RecordingSource | 'rewind';
 export type NoteFilter = { query: string; show: string | null; source: SourceFilter | null; starred: boolean };
@@ -19,6 +20,24 @@ export function filterNotes(notes: Note[], f: NoteFilter): Note[] {
     if (f.source === 'rewind' ? n.kind !== 'rewind' : f.source !== null && n.source !== f.source) return false;
     if (words.length === 0) return true;
     const haystack = normalize([n.title, n.show, n.windowTitle].filter(Boolean).join(' '));
+    return words.every((w) => haystack.includes(w));
+  });
+}
+
+/** Like filterNotes over the merged list. Pages have no show or source, so those filters exclude them. */
+export function filterItems(items: Item[], f: NoteFilter): Item[] {
+  const words = normalize(f.query).split(/\s+/).filter(Boolean);
+  const audio = new Set(
+    filterNotes(
+      items.flatMap((i) => (i.type === 'audio' ? [i.note] : [])),
+      f,
+    ),
+  );
+  return items.filter((i) => {
+    if (i.type === 'audio') return audio.has(i.note);
+    if (f.show !== null || f.source !== null) return false;
+    if (f.starred && !i.page.starred) return false;
+    const haystack = normalize(`${i.page.title} ${i.page.body}`);
     return words.every((w) => haystack.includes(w));
   });
 }

@@ -300,11 +300,11 @@ export function NotesPage({ view, navSeq, notes, folders, onNavigate }: Props) {
       {visible === null ? null : visible.length === 0 ? (
         <EmptyState view={view} hotkeyLabel={hotkeyLabel} filtering={filtering} />
       ) : (
-        groupByDay(visible, Date.now()).map((group) => (
+        groupByDay(visible, Date.now(), (n) => n.createdAt).map((group) => (
           <section key={group.label} className="mb-8">
             <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">{group.label}</h2>
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border bg-card">
-              {group.notes.map((note) => (
+              {group.items.map((note) => (
                 <NoteRow
                   key={note.id}
                   note={note}
