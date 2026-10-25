@@ -182,9 +182,7 @@ test('pages: paste an image', async () => {
     await clipboard.write([new ClipboardItem({ 'image/png': blob })]);
   }, png.toString('base64'));
   await page.keyboard.press('Control+V');
-  await expect
-    .poll(body)
-    .toMatch(/^!\[\]\(vn-image:\/\/[0-9a-f-]{36}\.png\)$/);
+  await expect.poll(body).toMatch(/^!\[\]\(vn-image:\/\/[0-9a-f-]{36}\.png\)$/);
   await page.keyboard.press('Enter');
 
   const img = page.locator('.cm-content img[src^="vn-image://"]');
@@ -213,22 +211,23 @@ test('pages: code highlighting', async () => {
   await page.keyboard.press('Enter');
   await page.keyboard.type('plain');
 
-  const colours = await page.evaluate(() => {
-    const walker = document.createTreeWalker(
-      document.querySelector('.cm-content')!,
-      NodeFilter.SHOW_TEXT,
-    );
-    let token: Element | null = null;
-    let plain: Element | null = null;
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (n.textContent === 'const') token = n.parentElement;
-      if (n.textContent === 'plain') plain = n.parentElement;
-    }
-    return [token, plain].map((el) => el && getComputedStyle(el).color);
-  });
-  expect(colours[0]).toBeTruthy();
-  expect(colours[1]).toBeTruthy();
-  expect(colours[0]).not.toBe(colours[1]);
+  // The JS grammar loads lazily, so wait until highlighting has styled `const`.
+  const highlighted = () =>
+    page.evaluate(() => {
+      const walker = document.createTreeWalker(
+        document.querySelector('.cm-content')!,
+        NodeFilter.SHOW_TEXT,
+      );
+      let token: Element | null = null;
+      let plain: Element | null = null;
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n.textContent === 'const') token = n.parentElement;
+        if (n.textContent === 'plain') plain = n.parentElement;
+      }
+      if (!token || !plain) return false;
+      return getComputedStyle(token).color !== getComputedStyle(plain).color;
+    });
+  await expect.poll(highlighted).toBe(true);
   await shot('5-code');
 });
 
@@ -237,9 +236,12 @@ test('pages: links open externally', async () => {
   await page.keyboard.type('[site](https://example.com)');
   await page.keyboard.press('Enter');
   const url = page.url();
-  await page.locator('.cm-content').getByText('site').click({
-    modifiers: ['Control'],
-  });
+  await page
+    .locator('.cm-content')
+    .getByText('site')
+    .click({
+      modifiers: ['Control'],
+    });
   await expect
     .poll(() => t.hooks((h) => h.openedExternal))
     .toEqual(['https://example.com/']);
