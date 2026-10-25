@@ -4,6 +4,7 @@ import type { OverlayState } from '../../shared/channels';
 import { Pill } from './Pill';
 import { useDrag } from './useDrag';
 import { useFilmBuffer } from './useFilmBuffer';
+import { usePomodoro } from './usePomodoro';
 import { useRecorder } from './useRecorder';
 import './overlay.css';
 
@@ -12,6 +13,7 @@ function Overlay() {
   const analyser = useRecorder();
   useFilmBuffer();
   const drag = useDrag();
+  const pomo = usePomodoro(state.kind === 'recording');
 
   useEffect(() => window.overlayApi.onState(setState), []);
   // Device ids are origin-scoped, so the overlay (which records) is the one that lists them.
@@ -35,7 +37,7 @@ function Overlay() {
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">
       <div {...drag} className="touch-none" data-testid="pill">
-        <Pill state={state} analyser={analyser} />
+        <Pill state={state} analyser={analyser} pomo={pomo} />
       </div>
     </div>
   );

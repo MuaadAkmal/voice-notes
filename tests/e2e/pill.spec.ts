@@ -97,6 +97,36 @@ test('the × on a hands-free pill discards the recording', async () => {
   expect(await t.hooks((h) => h.store.list().length)).toBe(0);
 });
 
+test('hovering the idle bar offers a pomodoro that runs, pauses and stops without recording', async () => {
+  t = await launch();
+  const pill = await overlay(t);
+  await expect(pill.getByTestId('pomodoro')).toHaveCount(0);
+  await pill.getByTestId('pill').hover();
+  const chip = pill.getByTestId('pomodoro');
+  await expect(chip).toContainText('25:00');
+  await pill.waitForTimeout(400);
+  await pill.screenshot({ path: '.superpowers/shots/pomodoro-offer.png' });
+  await pill.getByRole('button', { name: 'Start pomodoro' }).click();
+  await expect(chip).toHaveAttribute('data-phase', 'focus');
+  await expect(chip).toContainText(/24:5\d/, { timeout: 5000 });
+  await expect(pill.getByTestId('pomodoro-fill')).toBeVisible();
+  await pill.screenshot({ path: '.superpowers/shots/pomodoro-running.png' });
+
+  await pill.getByRole('button', { name: 'Pause' }).click();
+  const frozen = await chip.textContent();
+  await pill.waitForTimeout(1500);
+  expect(await chip.textContent()).toBe(frozen);
+
+  await pill.getByRole('button', { name: 'Skip to break' }).click();
+  await expect(chip).toHaveAttribute('data-phase', 'break');
+  await expect(chip).toContainText(/[45]:\d\d/);
+
+  await pill.getByRole('button', { name: 'Stop pomodoro' }).click();
+  await expect(pill.getByTestId('pomodoro-fill')).toHaveCount(0);
+  expect(await t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('idle');
+  expect(await t.hooks((h) => h.store.list().length)).toBe(0);
+});
+
 test('waveform is drawn in the source colour while recording', async () => {
   t = await launch();
   const pill = await overlay(t);

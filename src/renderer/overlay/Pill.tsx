@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OverlayState, RecordingSource } from '../../shared/channels';
 import { isSilent, levelFromRms, rmsOf } from '../../shared/audio-level';
+import { progress } from '../../shared/pomodoro';
+import { PHASE_COLOR, PomodoroChip } from './Pomodoro';
+import type { PomodoroControls } from './usePomodoro';
 
 const BARS = 28;
 const BAR_W = 2.5;
@@ -172,7 +175,74 @@ function SourceGlyph({ source }: { source: RecordingSource }) {
   );
 }
 
-export function Pill({ state, analyser }: { state: OverlayState; analyser: AnalyserNode | null }) {
+const CHIP_LINGER_MS = 350;
+
+/**
+ * The resting bar. Hovering it raises the pomodoro chip above it (the bar itself never moves, so a
+ * click aimed at it still records); a running pomodoro fills the bar with its progress.
+ */
+function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boolean; pomo: PomodoroControls; hover: Hover }) {
+  const api = window.overlayApi;
+  const [open, setOpen] = useState(false);
+  const linger = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(linger.current), []);
+  const { timer } = pomo;
+  const running = timer.status !== 'off';
+  // Film mode and a running pomodoro are always shown, even with the idle pill hidden.
+  if (!visible && !film && !running) return null;
+
+  const fill = running ? progress(timer, pomo.now) : 0;
+  const phase = running ? timer.phase : 'focus';
+  const big = open || pomo.ended !== null;
+  return (
+    <div
+      onMouseEnter={() => {
+        clearTimeout(linger.current);
+        setOpen(true);
+        hover.onMouseEnter();
+      }}
+      onMouseLeave={() => {
+        hover.onMouseLeave();
+        linger.current = setTimeout(() => setOpen(false), CHIP_LINGER_MS);
+      }}
+      className="flex flex-col items-center gap-1.5"
+    >
+      {(open || pomo.ended) && <PomodoroChip pomo={pomo} />}
+      <div className="flex items-center gap-1.5">
+        {film && (
+          <span
+            data-testid="film-dot"
+            title="Film mode: Alt+Win+Shift saves the last few seconds"
+            className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_6px] shadow-sky-400/70"
+          />
+        )}
+        {(visible || running) && (
+          <button
+            onClick={() => api.click()}
+            title="Click or hold your hotkey to record"
+            className={`relative cursor-pointer overflow-hidden rounded-full border border-white/20 transition-all duration-200 ${
+              big ? 'h-3 w-14 bg-neutral-800' : 'h-2 w-10 bg-neutral-900/70'
+            } ${pomo.ended ? 'pomo-burst' : ''}`}
+          >
+            {running && (
+              <span
+                data-testid="pomodoro-fill"
+                className={`absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ${PHASE_COLOR[phase].bg} ${
+                  timer.status === 'paused' ? 'opacity-40' : 'opacity-80'
+                }`}
+                style={{ width: `${fill * 100}%` }}
+              />
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls };
+
+export function Pill({ state, analyser, pomo }: PillProps) {
   const api = window.overlayApi;
   const [silent, setSilent] = useState(false);
   const recording = state.kind === 'recording';
@@ -189,28 +259,7 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
 
   switch (state.kind) {
     case 'idle':
-      // Film mode is always shown, even with the idle pill hidden: the app is listening to system audio.
-      if (!state.visible && !state.film) return null;
-      return (
-        <div className="flex items-center gap-1.5">
-          {state.film && (
-            <span
-              {...hover}
-              data-testid="film-dot"
-              title="Film mode: Alt+Win+Shift saves the last few seconds"
-              className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_6px] shadow-sky-400/70"
-            />
-          )}
-          {state.visible && (
-            <button
-              {...hover}
-              onClick={() => api.click()}
-              title="Click or hold your hotkey to record"
-              className="h-2 w-10 cursor-pointer rounded-full border border-white/20 bg-neutral-900/70 transition-all hover:h-3 hover:w-14 hover:bg-neutral-800"
-            />
-          )}
-        </div>
-      );
+      return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} />;
     case 'busy':
       return (
         <div className={`${shell} h-9 gap-2 px-4 text-sm text-white/80`}>

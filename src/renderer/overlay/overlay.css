@@ -7,3 +7,41 @@ body {
   overflow: hidden;
   font-family: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
 }
+
+/* Pomodoro: the chip springs up out of the bar; a phase change pulses the chip and flashes the bar. */
+@media (prefers-reduced-motion: no-preference) {
+  .pomo-pop {
+    animation: pomo-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: 50% 100%;
+  }
+  .pomo-celebrate {
+    animation:
+      pomo-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      pomo-pulse 1.4s ease-in-out 320ms 3;
+  }
+  .pomo-burst {
+    animation: pomo-burst 1.2s ease-out 3;
+  }
+}
+
+@keyframes pomo-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.85);
+  }
+}
+
+@keyframes pomo-pulse {
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes pomo-burst {
+  0% {
+    box-shadow: 0 0 0 0 rgb(255 255 255 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgb(255 255 255 / 0);
+  }
+}
