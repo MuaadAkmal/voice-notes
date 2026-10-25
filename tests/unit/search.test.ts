@@ -20,6 +20,9 @@ const note = (id: string, over: Partial<Note> = {}): Note => ({
   windowTitle: null,
   show: null,
   starred: false,
+  transcript: null,
+  transcriptLang: null,
+  transcribedAt: null,
   ...over,
 });
 
@@ -108,4 +111,12 @@ it('distinctShows lists each show once, sorted, with counts', () => {
     { show: 'Dark', count: 1 },
     { show: 'La Casa de Papel', count: 2 },
   ]);
+});
+
+it('matches words in the transcript', () => {
+  const withTranscript = note('t', { title: 'Note', transcript: '¿Qué pasó ayer?' });
+  const q = { ...NO_FILTER, query: 'que paso' };
+  expect(ids(filterNotes([withTranscript, note('u')], q))).toEqual(['t']);
+  const items: Item[] = [{ type: 'audio', note: withTranscript }, { type: 'audio', note: note('u') }];
+  expect(filterItems(items, q).map(itemId)).toEqual([itemId(items[0])]);
 });

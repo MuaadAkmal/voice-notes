@@ -19,6 +19,9 @@ const note = (id: string, createdAt: number): Note => ({
   windowTitle: null,
   show: null,
   starred: false,
+  transcript: null,
+  transcriptLang: null,
+  transcribedAt: null,
 });
 
 it('groups notes by day, preserving input order within a group', () => {

@@ -21,6 +21,9 @@ const fakeNote = (a: NewAudio): Note => ({
   windowTitle: a.windowTitle ?? null,
   show: a.show ?? null,
   starred: false,
+  transcript: null,
+  transcriptLang: null,
+  transcribedAt: null,
 });
 
 let calls: string[];

@@ -11,7 +11,7 @@ export const normalize = (s: string) => s.normalize('NFD').replace(/\p{Diacritic
 
 export const isFiltering = (f: NoteFilter) => f.query.trim() !== '' || f.show !== null || f.source !== null || f.starred;
 
-/** Every word of the query must appear in the title, show or window title; the other filters must all hold. */
+/** Every word of the query must appear in the title, show, window title or transcript; the other filters must all hold. */
 export function filterNotes(notes: Note[], f: NoteFilter): Note[] {
   const words = normalize(f.query).split(/\s+/).filter(Boolean);
   return notes.filter((n) => {
@@ -19,7 +19,7 @@ export function filterNotes(notes: Note[], f: NoteFilter): Note[] {
     if (f.show !== null && n.show !== f.show) return false;
     if (f.source === 'rewind' ? n.kind !== 'rewind' : f.source !== null && n.source !== f.source) return false;
     if (words.length === 0) return true;
-    const haystack = normalize([n.title, n.show, n.windowTitle].filter(Boolean).join(' '));
+    const haystack = normalize([n.title, n.show, n.windowTitle, n.transcript].filter(Boolean).join(' '));
     return words.every((w) => haystack.includes(w));
   });
 }

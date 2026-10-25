@@ -32,6 +32,9 @@ const note = (
   windowTitle: null,
   show: null,
   starred: false,
+  transcript: null,
+  transcriptLang: null,
+  transcribedAt: null,
   ...over,
 });
 

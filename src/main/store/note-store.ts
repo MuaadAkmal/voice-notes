@@ -83,6 +83,9 @@ export class NoteStore {
       windowTitle: audio.windowTitle ?? null,
       show: audio.show ?? null,
       starred: false,
+      transcript: null,
+      transcriptLang: null,
+      transcribedAt: null,
     };
     this.db.insert(notes).values(note).run();
     return note;
@@ -120,6 +123,22 @@ export class NoteStore {
       .where(eq(notes.id, id))
       .returning()
       .get();
+    if (!updated) throw new Error('Note not found');
+    return updated;
+  }
+
+  /** A fresh transcription result. Not an edit of the note, so updatedAt (sort order) stays. */
+  setTranscript(id: string, text: string, lang: string | null): Note {
+    return this.updateTranscript(id, { transcript: text, transcriptLang: lang, transcribedAt: this.now() });
+  }
+
+  /** The user correcting the text: language and time of transcription are kept. */
+  editTranscript(id: string, text: string): Note {
+    return this.updateTranscript(id, { transcript: text });
+  }
+
+  private updateTranscript(id: string, patch: Partial<Note>): Note {
+    const updated = this.db.update(notes).set(patch).where(eq(notes.id, id)).returning().get();
     if (!updated) throw new Error('Note not found');
     return updated;
   }

@@ -244,3 +244,53 @@ it('migrates a v3 database: existing notes get kind note, unstarred', async () =
   expect(upgraded.get(id)).toMatchObject({ source: 'system', kind: 'note', starred: false, show: null, windowTitle: null });
   upgraded.close();
 });
+
+it('new notes have no transcript', async () => {
+  const n = await store.create(audio());
+  expect(n).toMatchObject({ transcript: null, transcriptLang: null, transcribedAt: null });
+  expect(store.get(n.id)).toMatchObject({ transcript: null, transcriptLang: null, transcribedAt: null });
+});
+
+it('setTranscript stores text, language and time without touching updatedAt', async () => {
+  const n = await store.create(audio());
+  clock = T0 + 1000;
+  const t = store.setTranscript(n.id, 'hola', 'es');
+  expect(t).toMatchObject({ transcript: 'hola', transcriptLang: 'es', transcribedAt: T0 + 1000, updatedAt: T0 });
+  expect(store.list()[0]).toMatchObject({ transcript: 'hola', transcriptLang: 'es', transcribedAt: T0 + 1000 });
+});
+
+it('editTranscript changes only the text', async () => {
+  const n = await store.create(audio());
+  clock = T0 + 1000;
+  store.setTranscript(n.id, 'hola', 'es');
+  clock = T0 + 2000;
+  expect(store.editTranscript(n.id, 'hola!')).toMatchObject({
+    transcript: 'hola!',
+    transcriptLang: 'es',
+    transcribedAt: T0 + 1000,
+    updatedAt: T0,
+  });
+});
+
+it('transcript setters reject unknown notes', () => {
+  expect(() => store.setTranscript(randomUUID(), 'x', null)).toThrow('Note not found');
+  expect(() => store.editTranscript(randomUUID(), 'x')).toThrow('Note not found');
+});
+
+it('migration 6 adds empty transcript columns to existing notes', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-store-'));
+  fs.mkdirSync(path.join(dir, 'recordings'));
+  const db = new Database(path.join(dir, 'voice-notes.sqlite'));
+  for (const sql of MIGRATIONS.slice(0, 5)) db.exec(sql);
+  db.pragma('user_version = 5');
+  const id = randomUUID();
+  fs.writeFileSync(path.join(dir, 'recordings', `${id}.webm`), 'x');
+  db.prepare(
+    `INSERT INTO notes (id, title, file_path, duration_ms, size_bytes, mime_type, status, created_at, updated_at)
+     VALUES (?, 'old', ?, 1000, 1, 'audio/webm;codecs=opus', 'ok', 1, 1)`,
+  ).run(id, `recordings/${id}.webm`);
+  db.close();
+  const upgraded = NoteStore.open(dir);
+  expect(upgraded.get(id)).toMatchObject({ transcript: null, transcriptLang: null, transcribedAt: null });
+  upgraded.close();
+});

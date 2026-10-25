@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
+import { DEFAULT_TRANSCRIPTION } from '../shared/transcription';
 
 // uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
 // Not Ctrl+Win: that's Wispr Flow's dictation key, and both apps would fire.
@@ -25,6 +26,8 @@ export const DEFAULT_SETTINGS: Settings = {
   rewindSeconds: 15,
   autoPause: true,
   homeWidgets: [],
+  transcription: DEFAULT_TRANSCRIPTION,
+  transcribeLanguage: 'auto',
 };
 
 function readRaw(file: string): Record<string, unknown> {

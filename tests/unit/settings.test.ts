@@ -91,3 +91,27 @@ it('ignores wrongly-typed fields', () => {
   fs.writeFileSync(file, JSON.stringify({ launchAtLogin: 'yes' }));
   expect(loadSettings(file).launchAtLogin).toBe(false);
 });
+
+it('transcription settings default to not set up', () => {
+  expect(DEFAULT_SETTINGS.transcription).toEqual({ provider: null, baseUrl: '', model: 'openai/whisper-large-v3' });
+  expect(DEFAULT_SETTINGS.transcribeLanguage).toBe('auto');
+});
+
+it('loads valid transcription settings', () => {
+  const transcription = { provider: 'server', baseUrl: 'https://vm/v1', model: 'm' };
+  fs.writeFileSync(file, JSON.stringify({ transcription, transcribeLanguage: 'es' }));
+  expect(loadSettings(file)).toMatchObject({ transcription, transcribeLanguage: 'es' });
+});
+
+it.each([
+  ['unknown language', { transcribeLanguage: 'xx' }],
+  ['non-http URL', { transcription: { provider: null, baseUrl: 'ftp://x', model: 'm' } }],
+  ['un-normalised URL', { transcription: { provider: 'server', baseUrl: 'https://vm/v1/', model: 'm' } }],
+  ['server without URL', { transcription: { provider: 'server', baseUrl: '', model: 'm' } }],
+  ['empty model', { transcription: { provider: null, baseUrl: '', model: '' } }],
+])('falls back to defaults on %s', (_name, raw) => {
+  fs.writeFileSync(file, JSON.stringify(raw));
+  const s = loadSettings(file);
+  expect(s.transcription).toEqual(DEFAULT_SETTINGS.transcription);
+  expect(s.transcribeLanguage).toBe('auto');
+});

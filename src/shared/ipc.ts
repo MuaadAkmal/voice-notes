@@ -3,6 +3,7 @@ import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
 import { MAX_HOME_WIDGETS } from './home-widgets';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
+import { LANGUAGE_CODES, normaliseBaseUrl } from './transcription';
 
 export * from './channels';
 
@@ -18,6 +19,18 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
   z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid() }),
 ]);
 
+const TranscriptionSchema = z
+  .object({
+    provider: z.literal('server').nullable(),
+    // Stored already normalised; anything else is a hand-edited file.
+    baseUrl: z
+      .string()
+      .max(2048)
+      .refine((s) => s === '' || normaliseBaseUrl(s) === s),
+    model: z.string().trim().min(1).max(200),
+  })
+  .refine((t) => t.provider === null || t.baseUrl !== '');
+
 export const SettingsFieldSchemas = {
   hotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   hotkeyLabel: z.string().min(1).max(60),
@@ -32,6 +45,8 @@ export const SettingsFieldSchemas = {
   rewindSeconds: z.union(REWIND_SECONDS.map((n) => z.literal(n))),
   autoPause: z.boolean(),
   homeWidgets: z.array(HomeWidgetSchema).max(MAX_HOME_WIDGETS),
+  transcription: TranscriptionSchema,
+  transcribeLanguage: z.enum(LANGUAGE_CODES),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

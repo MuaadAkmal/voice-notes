@@ -1,4 +1,5 @@
 // Types and channel names only: safe to import from sandboxed preloads (no zod).
+import type { TranscribeLanguage, TranscriptionSettings } from './transcription';
 export type Note = {
   id: string;
   title: string;
@@ -16,6 +17,9 @@ export type Note = {
   windowTitle: string | null; // foreground window when recording started
   show: string | null; // cleaned-up label from windowTitle, editable
   starred: boolean;
+  transcript: string | null; // '' = transcribed, no speech
+  transcriptLang: string | null;
+  transcribedAt: number | null;
 };
 
 /** 'rewind': the last N seconds of system audio, saved from the film-mode buffer. */
@@ -65,6 +69,8 @@ export type Settings = {
   rewindSeconds: RewindSeconds;
   autoPause: boolean; // pause playing media while recording a mic note
   homeWidgets: HomeWidget[]; // Home page cards, in order (at most 24)
+  transcription: TranscriptionSettings;
+  transcribeLanguage: TranscribeLanguage; // last used in the Transcribe menu
 };
 
 /** Overlay window top-left, relative to that display's work area. */

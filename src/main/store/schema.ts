@@ -17,6 +17,9 @@ export const notes = sqliteTable('notes', {
   windowTitle: text('window_title'),
   show: text('show'),
   starred: integer('starred', { mode: 'boolean' }).notNull().default(false),
+  transcript: text('transcript'),
+  transcriptLang: text('transcript_lang'),
+  transcribedAt: integer('transcribed_at'),
 });
 
 export const pages = sqliteTable('pages', {

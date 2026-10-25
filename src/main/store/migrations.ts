@@ -42,6 +42,9 @@ export const MIGRATIONS: string[] = [
      synced_at  INTEGER
    );
    CREATE INDEX pages_folder ON pages (folder_id);`,
+  `ALTER TABLE notes ADD COLUMN transcript TEXT;
+   ALTER TABLE notes ADD COLUMN transcript_lang TEXT;
+   ALTER TABLE notes ADD COLUMN transcribed_at INTEGER;`,
 ];
 
 export function migrate(db: Database.Database): void {
