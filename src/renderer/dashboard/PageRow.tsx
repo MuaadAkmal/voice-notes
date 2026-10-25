@@ -22,7 +22,8 @@ type Props = {
   onRename: (title: string) => void;
   onDelete: () => void;
   onToggleStar: () => void;
-  pinned: boolean;
+  /** Null until Home's widgets have loaded: Pin/Unpin is disabled. */
+  pinned: boolean | null;
   /** Home has no room for another widget: Pin is disabled (Unpin still works). */
   homeFull: boolean;
   onTogglePin: () => void;
@@ -181,9 +182,9 @@ export function PageRow(props: Props) {
             {page.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
           {/* A disabled item shows no tooltip, so the wrapper carries it. */}
-          <span title={!pinned && homeFull ? HOME_FULL : undefined}>
+          <span title={pinned === false && homeFull ? HOME_FULL : undefined}>
             <DropdownMenuItem
-              disabled={!pinned && homeFull}
+              disabled={pinned === null || (!pinned && homeFull)}
               onSelect={onTogglePin}
             >
               {pinned ? 'Unpin from Home' : 'Pin to Home'}

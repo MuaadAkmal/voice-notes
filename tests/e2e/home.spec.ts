@@ -218,3 +218,39 @@ test('home: reorder persists and delete prunes', async () => {
   );
   expect(widgets.map((w) => w.pageId)).toEqual([ids.words]);
 });
+
+test('home: a checkbox tick and a quick-add on the same page both stick', async () => {
+  await page.evaluate(async () => {
+    const api = window.dashboardApi;
+    const p = await api.createPage(null);
+    await api.renamePage(p.id, 'Shortcuts');
+    await api.setPageBody(p.id, '# Keys\n- [ ] Ctrl+K link');
+    await api.setSettings({
+      homeWidgets: [
+        { id: crypto.randomUUID(), type: 'page', pageId: p.id },
+        {
+          id: crypto.randomUUID(),
+          type: 'quick-add',
+          pageId: p.id,
+          label: 'More keys',
+        },
+      ],
+    });
+  });
+  const box = page.locator('main section .cm-content input[type=checkbox]');
+  await expect(box).toBeVisible();
+  const input = page.getByLabel('Add entry to More keys');
+  await input.fill('Ctrl+P palette');
+  await box.click();
+  await input.press('Enter');
+
+  const both =
+    /^# Keys\n- \[x\] Ctrl\+K link\n\n## \d{1,2} [A-Z][a-z]{2} \d{4}\n- Ctrl\+P palette\n$/;
+  await expect.poll(() => pageBody('Shortcuts')).toMatch(both);
+  await page.waitForTimeout(800); // nothing saved later may undo either edit
+  expect(await pageBody('Shortcuts')).toMatch(both);
+  await expect(box).toBeChecked();
+  await expect(page.locator('main section').first()).toContainText(
+    'Ctrl+P palette',
+  );
+});

@@ -6,6 +6,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { desc, eq, inArray } from 'drizzle-orm';
 import type { Page } from '../../shared/channels';
 import { appendEntry } from '../../shared/learn-log';
+import { setTaskChecked } from '../../shared/task-lines';
 import {
   MAX_IMAGE_BYTES,
   imageRefs,
@@ -80,6 +81,17 @@ export class PageStore {
       return this.update(id, {
         body: appendEntry(page.body, text, new Date(this.now())),
       });
+    })();
+  }
+
+  /** Ticks or unticks the task on 0-based line `line` of the current body, atomically. */
+  setTask(id: string, line: number, checked: boolean): Page {
+    return this.sqlite.transaction(() => {
+      const page = this.get(id);
+      if (!page) throw new Error('Page not found');
+      const body = setTaskChecked(page.body, line, checked);
+      if (body === null) throw new Error('Not a task');
+      return this.update(id, { body });
     })();
   }
 

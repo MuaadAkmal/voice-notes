@@ -15,6 +15,7 @@ import {
   ExternalUrlSchema,
   SaveImageSchema,
   SetBodySchema,
+  SetTaskSchema,
   IdListSchema,
   IdSchema,
   MoveFolderSchema,
@@ -204,6 +205,11 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   });
   handle(Ch.PagesAppendEntry, AppendEntrySchema, ({ id, text }) => {
     const page = pages.appendEntry(id, text);
+    d.pagesChanged();
+    return page;
+  });
+  handle(Ch.PagesSetTask, SetTaskSchema, ({ id, line, checked }) => {
+    const page = pages.setTask(id, line, checked);
     d.pagesChanged();
     return page;
   });

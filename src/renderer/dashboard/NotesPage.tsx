@@ -356,8 +356,8 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                       onOpen={() => onOpenPage(page.id)}
                       onRename={(t) => api.renamePage(page.id, t).catch((e) => toast(cleanIpcError(e)))}
                       onToggleStar={() => api.starPages([page.id], !page.starred).catch((e) => toast(cleanIpcError(e)))}
-                      pinned={isPinned(home.widgets ?? [], page.id)}
-                      homeFull={!canAdd(home.widgets ?? [])}
+                      pinned={home.widgets && isPinned(home.widgets, page.id)}
+                      homeFull={home.widgets !== null && !canAdd(home.widgets)}
                       onTogglePin={() => home.togglePin(page.id)}
                     />
                   );

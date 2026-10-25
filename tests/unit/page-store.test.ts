@@ -48,6 +48,20 @@ it('appendEntry appends to the current body', () => {
   expect(() => store.pages.appendEntry(randomUUID(), 'x')).toThrow('Page not found');
 });
 
+it('setTask ticks one task line of the current body', () => {
+  const a = store.pages.create(null);
+  store.pages.setBody(a.id, '# K\n- [ ] x\n- [ ] y\n');
+  clock += 5;
+  const updated = store.pages.setTask(a.id, 2, true);
+  expect(updated.body).toBe('# K\n- [ ] x\n- [x] y\n');
+  expect(updated.updatedAt).toBe(clock);
+  expect(store.pages.get(a.id)?.body).toBe(updated.body);
+  expect(() => store.pages.setTask(a.id, 0, true)).toThrow('Not a task');
+  expect(() => store.pages.setTask(randomUUID(), 0, true)).toThrow(
+    'Page not found',
+  );
+});
+
 it('setBody and rename bump updatedAt and list orders by it', () => {
   const a = store.pages.create(null);
   clock = T0 + 1;

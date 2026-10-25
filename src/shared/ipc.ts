@@ -71,6 +71,7 @@ export const SetShowSchema = z.object({
 export const CreatePageSchema = z.object({ folderId: IdSchema.nullable() });
 export const SetBodySchema = z.object({ id: IdSchema, body: z.string().max(5 * 1024 * 1024) });
 export const AppendEntrySchema = z.object({ id: IdSchema, text: z.string().trim().min(1).max(500) });
+export const SetTaskSchema = z.object({ id: IdSchema, line: z.number().int().min(0), checked: z.boolean() });
 export const SaveImageSchema = z.object({
   bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength <= MAX_IMAGE_BYTES, 'Image too large'),
   ext: z.enum(IMAGE_EXTS),

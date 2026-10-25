@@ -5,6 +5,7 @@ import {
   ExternalUrlSchema,
   SaveImageSchema,
   SetBodySchema,
+  SetTaskSchema,
 } from '../../src/shared/ipc';
 import { MAX_IMAGE_BYTES } from '../../src/shared/page-images';
 
@@ -62,6 +63,13 @@ describe('page IPC schemas', () => {
     expect(AppendEntrySchema.safeParse({ id, text: '   ' }).success).toBe(false);
     expect(AppendEntrySchema.safeParse({ id, text: 'a'.repeat(500) }).success).toBe(true);
     expect(AppendEntrySchema.safeParse({ id, text: 'a'.repeat(501) }).success).toBe(false);
+  });
+
+  it('sets a task by a non-negative line index', () => {
+    expect(SetTaskSchema.safeParse({ id, line: 0, checked: true }).success).toBe(true);
+    expect(SetTaskSchema.safeParse({ id, line: -1, checked: true }).success).toBe(false);
+    expect(SetTaskSchema.safeParse({ id, line: 1.5, checked: true }).success).toBe(false);
+    expect(SetTaskSchema.safeParse({ id, line: 1, checked: 'yes' }).success).toBe(false);
   });
 
   it('creates a page in the inbox or a folder', () => {

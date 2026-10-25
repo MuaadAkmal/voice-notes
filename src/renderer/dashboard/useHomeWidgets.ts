@@ -13,7 +13,10 @@ export function useHomeWidgets() {
   const [widgets, setWidgets] = useState<HomeWidget[] | null>(null);
   // The latest list (from settings:changed, or our own pending write); every edit starts from it.
   const latest = useRef<HomeWidget[]>([]);
+  // Until the first load, `latest` is not the stored list, and saving it would wipe Home.
+  const loaded = useRef(false);
   const apply = (ws: HomeWidget[]) => {
+    loaded.current = true;
     latest.current = ws;
     setWidgets(ws);
   };
@@ -24,8 +27,9 @@ export function useHomeWidgets() {
     return api.onSettingsChanged(load);
   }, []);
 
-  /** Applies `update` to the latest list and saves it. Rejects on failure (after reloading). */
+  /** Applies `update` to the latest list and saves it (no-op before the first load). Rejects on failure (after reloading). */
   const save = async (update: (cur: HomeWidget[]) => HomeWidget[]) => {
+    if (!loaded.current) return;
     // Taken as the latest at once, so a second edit before this one lands builds on it.
     const next = update(latest.current);
     latest.current = next;

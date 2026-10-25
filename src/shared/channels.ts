@@ -143,6 +143,7 @@ export const Ch = {
   PagesMove: 'pages:move', // { ids, folderId }
   PagesStar: 'pages:star', // { ids, starred }
   PagesAppendEntry: 'pages:append-entry', // { id, text }
+  PagesSetTask: 'pages:set-task', // { id, line, checked }
   PagesDeleteMany: 'pages:delete-many', // string[]
   PagesSaveImage: 'pages:save-image', // { bytes, ext } → vn-image:// url
   OpenExternal: 'app:open-external', // http(s)/mailto url
