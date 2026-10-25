@@ -10,8 +10,8 @@ export default defineConfig({
   build: {
     outDir: path.resolve('.vite/renderer/overlay'),
     emptyOutDir: true,
-    // The AudioWorklet module must stay a same-origin file: the CSP blocks a data: URL script.
-    assetsInlineLimit: (file) => (file.endsWith('.js') ? false : undefined),
+    // The AudioWorklet module and fonts must stay same-origin files: the CSP blocks data: URLs for them.
+    assetsInlineLimit: (file) => (file.endsWith('.js') || file.endsWith('.woff2') ? false : undefined),
   },
   plugins: [react(), tailwindcss(), cspPlugin()],
 });

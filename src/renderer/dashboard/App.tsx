@@ -54,7 +54,7 @@ export function App() {
         <div className="app-drag flex h-10 shrink-0">
           <div className="flex w-60 items-center gap-2 border-r border-sidebar-border bg-sidebar px-5">
             <Logo className="h-4 w-auto" />
-            <span className="text-[13px] font-semibold tracking-tight">Voice Notes</span>
+            <span className="font-display text-[14px] font-semibold tracking-tight">Voice Notes</span>
           </div>
         </div>
         <div className="flex min-h-0 flex-1">

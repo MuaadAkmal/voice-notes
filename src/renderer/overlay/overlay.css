@@ -1,7 +1,9 @@
 @import "tailwindcss";
+@import "@fontsource-variable/instrument-sans";
 
 html,
 body {
   background: transparent;
   overflow: hidden;
+  font-family: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
 }

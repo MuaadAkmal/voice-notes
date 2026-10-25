@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Bundled (offline, CSP-safe): Instrument Sans for UI text, Bricolage Grotesque for headings. */
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
 
 /* Dark mode is class-based: the app sets html.dark from the theme setting / Windows. */
 @custom-variant dark (&:is(.dark *));
@@ -83,6 +86,8 @@
   --radius-md: calc(var(--radius) * 0.875);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.5);
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Instrument Sans Variable", ui-sans-serif, sans-serif;
 }
 
 @layer base {
@@ -91,6 +96,11 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-variation-settings: "opsz" 48;
+    letter-spacing: -0.03em;
   }
 }
 

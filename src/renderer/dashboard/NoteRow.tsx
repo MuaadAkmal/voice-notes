@@ -159,7 +159,7 @@ export function NoteRow(props: Props) {
             </span>
           )}
           {folderLabel && (
-            <span className="max-w-48 truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span className="max-w-48 shrink-0 truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
               {folderLabel}
             </span>
           )}
@@ -167,7 +167,7 @@ export function NoteRow(props: Props) {
             <span className="text-xs text-destructive">File missing</span>
           ) : (
             note.durationMs > 0 && (
-              <div className="h-1 w-40 overflow-hidden rounded-full bg-muted">
+              <div className="h-1 w-40 min-w-12 overflow-hidden rounded-full bg-muted">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${progress * 100}%` }} />
               </div>
             )
