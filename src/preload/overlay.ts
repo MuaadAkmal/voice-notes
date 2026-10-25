@@ -21,6 +21,7 @@ const overlayApi = {
   startTitle: () => ipcRenderer.send(Ch.OverlayTitleStart),
   submitTitle: (noteId: string, title: string) => ipcRenderer.send(Ch.OverlayTitle, { noteId, title }),
   cancelTitle: () => ipcRenderer.send(Ch.OverlayTitleCancel),
+  discard: () => ipcRenderer.send(Ch.OverlayDiscard),
 };
 
 export type OverlayApi = typeof overlayApi;

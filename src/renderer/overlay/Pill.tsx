@@ -200,7 +200,7 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
       );
     case 'recording':
       return (
-        <div {...hover} onClick={() => api.click()} className={`${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
+        <div {...hover} onClick={() => api.click()} className={`group ${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
           <SourceGlyph source={state.source} />
           {/* "No sound" takes the waveform's slot so the pill never grows. */}
@@ -217,6 +217,21 @@ export function Pill({ state, analyser }: { state: OverlayState; analyser: Analy
           </div>
           <Timer startedAt={state.startedAt} />
           {state.mode === 'handsfree' && <HandsFreeGlyph />}
+          {state.mode === 'handsfree' && (
+            <button
+              aria-label="Discard recording"
+              title="Discard recording"
+              onClick={(e) => {
+                e.stopPropagation(); // not a toggle (which would save)
+                api.discard();
+              }}
+              className="-mr-1 grid h-5 w-5 place-items-center rounded-full text-white/50 opacity-0 transition-opacity hover:bg-white/15 hover:text-white group-hover:opacity-100 focus-visible:opacity-100"
+            >
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          )}
         </div>
       );
     case 'saved':

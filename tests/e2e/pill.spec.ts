@@ -85,6 +85,18 @@ test('Add title on the pill names the note just saved, then gives focus back', a
   await pill.screenshot({ path: '.superpowers/shots/pill-titled.png' });
 });
 
+test('the × on a hands-free pill discards the recording', async () => {
+  t = await launch();
+  const pill = await overlay(t);
+  await t.hooks((h) => h.gesture.toggle());
+  await pill.waitForTimeout(800);
+  await pill.getByTestId('pill').hover();
+  await pill.getByRole('button', { name: 'Discard recording' }).click();
+  await expect.poll(() => t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('idle');
+  await pill.waitForTimeout(800);
+  expect(await t.hooks((h) => h.store.list().length)).toBe(0);
+});
+
 test('waveform is drawn in the source colour while recording', async () => {
   t = await launch();
   const pill = await overlay(t);

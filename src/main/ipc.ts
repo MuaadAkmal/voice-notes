@@ -51,6 +51,7 @@ export function registerOverlayIpc({ overlay, gesture, controller, onDevices, on
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
   ipcMain.on(Ch.OverlayTitleCancel, (e) => e.sender === overlay.webContents && titles.cancel());
+  ipcMain.on(Ch.OverlayDiscard, (e) => e.sender === overlay.webContents && gesture.escape());
   ipcMain.on(
     Ch.OverlayDrag,
     from(overlay, DragSchema, ({ dx, dy }) => {

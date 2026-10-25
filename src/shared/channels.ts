@@ -73,6 +73,7 @@ export const Ch = {
   OverlayTitleStart: 'overlay:title-start',
   OverlayTitle: 'overlay:title', // { noteId, title }
   OverlayTitleCancel: 'overlay:title-cancel',
+  OverlayDiscard: 'overlay:discard', // the hands-free × (same as Esc)
   OverlayDevices: 'overlay:devices', // AudioDevice[] (ids are scoped to the overlay's origin)
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
