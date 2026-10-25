@@ -203,3 +203,49 @@ export function linkAt(state: EditorState, pos: number): string | null {
   }
   return null;
 }
+
+/** An image alone on its line renders as a block; one inside text stays inline. */
+function isBlockImage(state: EditorState, span: PreviewSpan) {
+  const line = state.doc.lineAt(span.from);
+  return line.text.trim() === state.doc.sliceString(span.from, span.to);
+}
+
+/**
+ * The spans rendered as block widgets (tables, rules, lone images), widened to whole lines,
+ * because a block widget must replace entire lines.
+ */
+export function blockSpans(state: EditorState): PreviewSpan[] {
+  return previewSpans(state)
+    .filter(
+      (span) =>
+        span.kind === 'table' ||
+        span.kind === 'hr' ||
+        (span.kind === 'image' && isBlockImage(state, span)),
+    )
+    .map((span) => ({
+      ...span,
+      from: state.doc.lineAt(span.from).from,
+      to: state.doc.lineAt(span.to).to,
+    }));
+}
+
+/**
+ * Where a cursor motion from `head` to `dest` should stop instead, when it would jump over a
+ * rendered block: on the nearest block's first line moving forward, its last line moving back.
+ * Landing there reveals the block's source. Null when no block lies in the way.
+ */
+export function blockEntry(
+  blocks: readonly { from: number; to: number }[],
+  head: number,
+  dest: number,
+): number | null {
+  let target: number | null = null;
+  for (const block of blocks) {
+    if (dest > head && block.from > head && block.from <= dest) {
+      if (target === null || block.from < target) target = block.from;
+    } else if (dest < head && block.to < head && block.to >= dest) {
+      if (target === null || block.to > target) target = block.to;
+    }
+  }
+  return target;
+}

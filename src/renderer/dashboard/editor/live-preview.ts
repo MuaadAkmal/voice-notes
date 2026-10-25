@@ -1,4 +1,6 @@
 import {
+  EditorSelection,
+  Prec,
   StateField,
   type EditorState,
   type Extension,
@@ -8,37 +10,23 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
+  keymap,
+  type Command,
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
-import { previewSpans, type PreviewSpan } from './preview-spans';
+import { blockEntry, blockSpans, previewSpans } from './preview-spans';
 import { CheckboxWidget, HrWidget, ImageWidget, TableWidget } from './widgets';
 
 const hidden = Decoration.replace({});
 const inlineCode = Decoration.mark({ class: 'cm-md-inline-code' });
 
-/** An image alone on its line renders as a block; one inside text stays inline. */
-function isBlockImage(state: EditorState, span: PreviewSpan) {
-  const line = state.doc.lineAt(span.from);
-  return line.text.trim() === state.doc.sliceString(span.from, span.to);
-}
-
-function isBlockSpan(state: EditorState, span: PreviewSpan) {
-  return (
-    span.kind === 'table' ||
-    span.kind === 'hr' ||
-    (span.kind === 'image' && isBlockImage(state, span))
-  );
-}
-
 /** Tables, rules and lone images: block widgets must come from a state field, not a plugin. */
 function blockDecorations(state: EditorState): DecorationSet {
   const ranges: Range<Decoration>[] = [];
-  for (const span of previewSpans(state)) {
-    if (!isBlockSpan(state, span)) continue;
-    const from = state.doc.lineAt(span.from).from;
-    const to = state.doc.lineAt(span.to).to;
+  for (const span of blockSpans(state)) {
+    const { from, to } = span;
     const widget =
       span.kind === 'table'
         ? new TableWidget(state.doc.sliceString(from, to))
@@ -64,6 +52,66 @@ const blockField = StateField.define<DecorationSet>({
   },
   provide: (field) => EditorView.decorations.from(field),
 });
+
+/**
+ * Arrow keys would jump over a block widget; stop on the block's first line (moving forward) or
+ * last line (moving back) instead, which reveals its source. Shift extends the selection likewise.
+ */
+function enterBlock(
+  by: 'line' | 'char',
+  forward: boolean,
+  extend: boolean,
+): Command {
+  return (view) => {
+    const { state } = view;
+    const range = state.selection.main;
+    if (state.selection.ranges.length > 1 || (!extend && !range.empty))
+      return false;
+    const moved =
+      by === 'line'
+        ? view.moveVertically(range, forward)
+        : view.moveByChar(range, forward);
+    const blocks: { from: number; to: number }[] = [];
+    state.field(blockField).between(0, state.doc.length, (from, to) => {
+      blocks.push({ from, to });
+    });
+    const target = blockEntry(blocks, range.head, moved.head);
+    if (target === null) return false;
+    view.dispatch({
+      selection: extend
+        ? EditorSelection.range(range.anchor, target)
+        : EditorSelection.cursor(target),
+      scrollIntoView: true,
+      userEvent: 'select',
+    });
+    return true;
+  };
+}
+
+const blockKeymap = Prec.high(
+  keymap.of([
+    {
+      key: 'ArrowDown',
+      run: enterBlock('line', true, false),
+      shift: enterBlock('line', true, true),
+    },
+    {
+      key: 'ArrowUp',
+      run: enterBlock('line', false, false),
+      shift: enterBlock('line', false, true),
+    },
+    {
+      key: 'ArrowRight',
+      run: enterBlock('char', true, false),
+      shift: enterBlock('char', true, true),
+    },
+    {
+      key: 'ArrowLeft',
+      run: enterBlock('char', false, false),
+      shift: enterBlock('char', false, true),
+    },
+  ]),
+);
 
 const LINE_CLASSES: Record<string, string> = {
   ATXHeading1: 'cm-md-h1',
@@ -93,8 +141,7 @@ function inlineDecorations(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     for (const span of previewSpans(state, from, to)) {
       const key = `${span.kind}:${span.from}:${span.to}`;
-      if (seen.has(key) || isBlockSpan(state, span) || inBlock(span.from))
-        continue;
+      if (seen.has(key) || inBlock(span.from)) continue;
       seen.add(key);
       // Plugins may not replace line breaks; skip spans that cross a line rather than throw.
       if (
@@ -175,5 +222,5 @@ const inlinePlugin = ViewPlugin.fromClass(
 
 /** Obsidian-style live preview: markdown renders in place, and the markup near the cursor shows. */
 export function livePreview(): Extension {
-  return [blockField, inlinePlugin];
+  return [blockField, inlinePlugin, blockKeymap];
 }
