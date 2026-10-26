@@ -33,8 +33,9 @@ export class Outbox {
 
     if (isDelete(op)) {
       // Nothing earlier matters once the row is gone; a row the server never heard of needs no delete.
+      // Only never-sent entries can go: one sent before may already be applied, so its delete must follow.
       const droppedCreate = waiting.some((e) => isCreate(e.op));
-      this.sqlite.prepare('DELETE FROM outbox WHERE entity_id = ? AND in_flight = 0').run(entityId);
+      this.sqlite.prepare('DELETE FROM outbox WHERE entity_id = ? AND sent = 0').run(entityId);
       if (droppedCreate) return;
     } else {
       // Only the latest change may absorb this one, so the order of changes to a row never shifts.
@@ -63,7 +64,8 @@ export class Outbox {
   takeBatch(max = 100): OutboxEntry[] {
     return this.sqlite.transaction(() => {
       const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE in_flight = 0 ORDER BY seq LIMIT ?').all(max) as Raw[];
-      const mark = this.sqlite.prepare('UPDATE outbox SET in_flight = 1 WHERE seq = ?');
+      // sent stays set after a failure: the server may have applied it, so its id must keep meaning this payload.
+      const mark = this.sqlite.prepare('UPDATE outbox SET in_flight = 1, sent = 1 WHERE seq = ?');
       for (const r of rows) mark.run(r.seq);
       return rows.map((r) => ({ ...toEntry(r), inFlight: true }));
     })();
@@ -98,8 +100,9 @@ export class Outbox {
     this.sqlite.prepare(`UPDATE ${TABLES[entity]} SET version = MAX(version, ?) WHERE id = ?`).run(version, id);
   }
 
+  /** Entries never sent: the only ones a new change may merge into or a delete may drop. */
   private waiting(entityId: string): OutboxEntry[] {
-    const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE entity_id = ? AND in_flight = 0 ORDER BY seq').all(entityId) as Raw[];
+    const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE entity_id = ? AND sent = 0 ORDER BY seq').all(entityId) as Raw[];
     return rows.map(toEntry);
   }
 }

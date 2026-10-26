@@ -68,10 +68,19 @@ export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: 
     store.sync.state.setCursor(res.cursor);
   })();
 
-  for (const file of goneFiles) fs.rmSync(file, { force: true });
+  // The rows are committed; a file Windows holds open (a note playing) is left for reconcile at boot.
+  for (const file of goneFiles) removeQuietly(file);
   if (goneImages.size) {
     for (const p of store.pages.list()) for (const f of imageRefs(p.body)) goneImages.delete(f);
-    for (const f of goneImages) fs.rmSync(path.join(imagesDir, f), { force: true });
+    for (const f of goneImages) removeQuietly(path.join(imagesDir, f));
+  }
+}
+
+function removeQuietly(file: string): void {
+  try {
+    fs.rmSync(file, { force: true });
+  } catch (err) {
+    console.warn('[sync] could not remove', file, err);
   }
 }
 

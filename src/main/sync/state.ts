@@ -46,6 +46,17 @@ export class SyncState {
     this.set('cursor', String(n));
   }
 
+  /** This PC's synced settings as they were when sync was turned on, kept until the first pull merged them. */
+  pendingPrefs(): Record<string, unknown> | null {
+    const raw = this.get('pending_prefs');
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+  }
+
+  setPendingPrefs(prefs: Record<string, unknown> | null): void {
+    if (prefs) this.set('pending_prefs', JSON.stringify(prefs));
+    else this.sqlite.prepare("DELETE FROM sync_state WHERE key = 'pending_prefs'").run();
+  }
+
   enabled(): boolean {
     return this.get('enabled') === '1';
   }

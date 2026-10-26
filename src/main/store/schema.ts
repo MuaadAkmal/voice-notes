@@ -62,6 +62,7 @@ export const outbox = sqliteTable('outbox', {
   payload: text('payload').notNull(),
   baseVersion: integer('base_version').notNull(),
   inFlight: integer('in_flight', { mode: 'boolean' }).notNull().default(false),
+  sent: integer('sent', { mode: 'boolean' }).notNull().default(false),
   createdAt: integer('created_at').notNull(),
 });
 

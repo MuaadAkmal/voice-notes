@@ -29,9 +29,11 @@ function pc(name: string, server: ReferenceServer, start: number): PC {
     if (opts.record !== false) recordPrefs(patch, store.sync.outbox);
     return settings;
   };
-  const engine = new SyncEngine(store, server, (prefs) =>
-    applyRemotePrefs(prefs, { getSettings: () => settings, updateSettings, pages: store.pages, deviceName: name }),
-  );
+  const engine = new SyncEngine(store, server, {
+    get: () => settings,
+    update: updateSettings,
+    applyRemote: (prefs) => applyRemotePrefs(prefs, { getSettings: () => settings, updateSettings, pages: store.pages, deviceName: name }),
+  });
   return { name, store, engine, settings: () => settings, update: (p) => void updateSettings(p) };
 }
 
@@ -147,6 +149,46 @@ both('a push whose answer is lost is not applied twice', async (a, b, server) =>
   await expect(a.engine.sync()).rejects.toThrow('connection lost');
   await converge([a, b]);
   expect(b.store.pages.get(p.id)!.body.match(/once/g)).toHaveLength(1);
+});
+
+both('an edit made after a lost answer still reaches the other PC', async (a, b, server) => {
+  const p = a.store.pages.create(null);
+  await a.engine.sync();
+  a.store.pages.setBody(p.id, 'one');
+  server.dropNextAck();
+  await expect(a.engine.sync()).rejects.toThrow('connection lost');
+  a.store.pages.setBody(p.id, 'one two');
+  await converge([a, b]);
+  expect(b.store.pages.get(p.id)!.body).toBe('one two');
+  expect(a.store.pages.get(p.id)!.body).toBe('one two');
+});
+
+both('a delete made after a lost answer still reaches the other PC', async (a, b, server) => {
+  const p = a.store.pages.create(null);
+  server.dropNextAck();
+  await expect(a.engine.sync()).rejects.toThrow('connection lost');
+  await a.store.pages.deleteMany([p.id]);
+  await converge([a, b]);
+  expect(b.store.pages.get(p.id)).toBeUndefined();
+  expect(server.row('page', p.id)?.deleted).toBe(true);
+});
+
+it('turning sync on for a second PC keeps the account\'s Home layout and adds its own cards', async () => {
+  const server = new ReferenceServer();
+  const a = pc('PC-A', server, 1_000_000);
+  const b = pc('PC-B', server, 2_000_000);
+  const pa = a.store.pages.create(null);
+  a.update({ transcribeLanguage: 'es', homeWidgets: [{ id: 'wa', type: 'page', pageId: pa.id }, { id: 'qa', type: 'quick-add', pageId: pa.id, label: 'Learn' }] });
+  enable(a);
+  await a.engine.sync();
+  const pb = b.store.pages.create(null);
+  b.update({ transcribeLanguage: 'fr', homeWidgets: [{ id: 'wb', type: 'page', pageId: pb.id }] });
+  enable(b);
+  await converge([b, a]);
+  for (const p of [a, b]) {
+    expect(p.settings().transcribeLanguage).toBe('es');
+    expect(p.settings().homeWidgets.map((w) => w.id).sort()).toEqual(['qa', 'wa', 'wb']);
+  }
 });
 
 it('two PCs with their own data end up with everything, and one Review later page', async () => {

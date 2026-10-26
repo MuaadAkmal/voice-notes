@@ -75,13 +75,15 @@ it('shared types never carry sync columns', async () => {
   expect(store.folders.get(f.id)).not.toHaveProperty('deletedAt');
 });
 
-it('reconcile leaves tombstones alone and never adopts their files', async () => {
+it('reconcile never adopts a deleted note\'s file, and removes it', async () => {
   store = NoteStore.open(root, () => clock);
   const n = await store.create(audio());
   await store.delete(n.id);
-  fs.writeFileSync(path.join(store.recordingsDir, `${n.id}.webm`), 'back');
+  const file = path.join(store.recordingsDir, `${n.id}.webm`);
+  fs.writeFileSync(file, 'back'); // left behind when Windows held it open during the delete
   expect(await store.reconcile()).toEqual({ missing: 0, adopted: 0, tmpRemoved: 0 });
   expect(store.get(n.id)).toBeUndefined();
+  expect(fs.existsSync(file)).toBe(false);
 });
 
 it('deleted pages are hidden, kept as tombstones, and lose their unused images', async () => {

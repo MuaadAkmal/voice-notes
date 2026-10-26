@@ -63,6 +63,23 @@ it('never merges into a change already being sent', () => {
   expect(outbox.pending('p')).toHaveLength(2);
 });
 
+it('a change sent once is never merged into again, even after a failed push', () => {
+  outbox.record({ op: 'page.setBody', id: 'p', body: 'one' }, 0);
+  outbox.takeBatch();
+  outbox.release(); // the server may already have it: its id must keep meaning exactly that text
+  outbox.record({ op: 'page.setBody', id: 'p', body: 'one two' }, 0);
+  expect(outbox.pending('p').map((e) => (e.op as { body: string }).body)).toEqual(['one', 'one two']);
+});
+
+it('a delete after a sent create is still sent', () => {
+  const row = { id: 'n', title: 't', body: '', folderId: null, starred: false, createdAt: 1, updatedAt: 1 };
+  outbox.record({ op: 'page.create', id: 'n', row }, 0);
+  outbox.takeBatch();
+  outbox.release();
+  outbox.record({ op: 'page.delete', id: 'n' }, 0);
+  expect(outbox.pending('n').map((e) => e.op.op)).toEqual(['page.create', 'page.delete']);
+});
+
 it('only merges into the latest change for that row', () => {
   outbox.record({ op: 'page.setBody', id: 'p', body: 'a' }, 0);
   outbox.record({ op: 'page.append', id: 'p', text: 'x', day: '2026-10-26' }, 0);

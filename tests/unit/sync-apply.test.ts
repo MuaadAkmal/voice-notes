@@ -56,6 +56,27 @@ it('a pulled delete hides the note, removes its audio and drops our waiting chan
   expect(store.sync.outbox.pending(n.id)).toEqual([]);
 });
 
+it('a file that cannot be removed does not stop the pull', async () => {
+  const n = await store.create(audio());
+  const m = await store.create(audio());
+  // Stands in for a file Windows keeps open: rmSync throws on it.
+  fs.rmSync(store.absolutePath(n));
+  fs.mkdirSync(store.absolutePath(n));
+  fs.writeFileSync(path.join(store.absolutePath(n), 'x'), 'x');
+  expect(() =>
+    applyPull(
+      store,
+      pull([
+        { entity: 'note', id: n.id, version: 5, deleted: true, data: null },
+        { entity: 'note', id: m.id, version: 6, deleted: true, data: null },
+      ]),
+      () => undefined,
+    ),
+  ).not.toThrow();
+  expect(store.get(n.id)).toBeUndefined();
+  expect(fs.existsSync(store.absolutePath(m))).toBe(false);
+});
+
 it('our unsent body edit stays on top of a pulled body', () => {
   const p = store.pages.create(null);
   store.pages.setBody(p.id, 'typing…');

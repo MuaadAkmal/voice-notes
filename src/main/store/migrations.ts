@@ -68,6 +68,7 @@ export const MIGRATIONS: string[] = [
      payload      TEXT NOT NULL,
      base_version INTEGER NOT NULL,
      in_flight    INTEGER NOT NULL DEFAULT 0,
+     sent         INTEGER NOT NULL DEFAULT 0,
      created_at   INTEGER NOT NULL
    );
    CREATE INDEX outbox_entity ON outbox (entity_id);

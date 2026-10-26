@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { and, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { Note, NoteKind, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
@@ -227,6 +227,18 @@ export class NoteStore {
 
     // Tombstoned ids count as known: a deleted note's file must never be adopted back.
     const known = new Set(this.db.select({ id: notes.id }).from(notes).all().map((r) => r.id));
+    const deleted = new Set(
+      this.db.select({ id: notes.id }).from(notes).where(isNotNull(notes.deletedAt)).all().map((r) => r.id),
+    );
+    // A deleted note's audio left behind (Windows held it open when the delete came in): remove it now.
+    for (const f of files) {
+      if (!f.endsWith('.webm') || !deleted.has(f.slice(0, -'.webm'.length))) continue;
+      try {
+        await fs.promises.rm(path.join(this.recordingsDir, f), { force: true });
+      } catch {
+        // still held open: next boot
+      }
+    }
     for (const note of this.list()) {
       const exists = fs.existsSync(this.absolutePath(note));
       const status = exists ? 'ok' : 'missing';
