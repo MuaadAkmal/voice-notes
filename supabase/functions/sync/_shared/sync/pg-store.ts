@@ -44,14 +44,16 @@ export class PgStore implements SyncStore {
   transaction<T>(userId: string, fn: (tx: SyncTx) => Promise<T>): Promise<T> {
     return this.db.transaction(async (q) => {
       await q.query('insert into public.sync_accounts (user_id) values ($1) on conflict (user_id) do nothing', [userId]);
-      const [account] = await q.query<{ version: number | string }>(
-        'select version from public.sync_accounts where user_id = $1 for update',
+      await this.housekeep(q, userId);
+      const [account] = await q.query<{ version: number | string; log_floor: number | string }>(
+        'select version, log_floor from public.sync_accounts where user_id = $1 for update',
         [userId],
       );
       let version = Number(account.version);
-      await this.housekeep(q, userId);
+      const logFloor = Number(account.log_floor);
       const at = () => this.now() / 1000;
       const tx: SyncTx = {
+        logFloor: async () => logFloor,
         nextVersion: async () => {
           version += 1;
           await q.query('update public.sync_accounts set version = $2 where user_id = $1', [userId, version]);
@@ -158,6 +160,12 @@ export class PgStore implements SyncStore {
     this.lastHousekeep.set(userId, now);
     const cutoff = (now - KEEP_MS) / 1000;
     await q.query('delete from public.sync_seen where user_id = $1 and created_at < to_timestamp($2)', [userId, cutoff]);
-    await q.query('delete from public.sync_body_log where user_id = $1 and created_at < to_timestamp($2)', [userId, cutoff]);
+    // Remember how far history was purged, so a body edit based on older history is treated as a conflict.
+    await q.query(
+      `with gone as (delete from public.sync_body_log where user_id = $1 and created_at < to_timestamp($2) returning version)
+       update public.sync_accounts set log_floor = greatest(log_floor, coalesce((select max(version) from gone), 0))
+       where user_id = $1`,
+      [userId, cutoff],
+    );
   }
 }

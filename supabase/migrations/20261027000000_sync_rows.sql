@@ -4,7 +4,8 @@
 
 create table public.sync_accounts (
   user_id uuid primary key references auth.users (id) on delete cascade,
-  version bigint not null default 0
+  version bigint not null default 0,
+  log_floor bigint not null default 0 -- body history at or below this version has been purged
 );
 
 create table public.sync_rows (

@@ -13,6 +13,8 @@ export type BodyEvent = { version: number; clientId: string; deviceName: string;
 /** One push's view of one account, inside a transaction that holds the account's lock. */
 export interface SyncTx {
   nextVersion(): Promise<number>;
+  /** Body history at or below this version was purged (30 days): older bases can't be judged. */
+  logFloor(): Promise<number>;
   getRow(entity: Entity, id: string): Promise<StoredRow | undefined>;
   putRow(row: StoredRow): Promise<void>;
   liveFolders(): Promise<FolderRow[]>;
@@ -109,7 +111,9 @@ export class SyncCore {
     deviceName: string,
   ): Promise<number> {
     const since = (await tx.bodyLog(current.id, baseVersion)).filter((e) => e.clientId !== clientId);
-    const rival = [...since].reverse().find((e) => e.op.op === 'page.setBody');
+    let rival: { deviceName: string } | undefined = [...since].reverse().find((e) => e.op.op === 'page.setBody');
+    // Based on history the server no longer has, on a page that changed since: assume a rival edit.
+    if (!rival && baseVersion < (await tx.logFloor()) && current.version > baseVersion) rival = { deviceName: 'another PC' };
     const page = current.data as PageRow;
     if (rival && page.body !== body) {
       const copyId = this.newId();

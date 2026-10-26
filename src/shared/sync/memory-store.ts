@@ -60,6 +60,7 @@ export class MemoryStore implements SyncStore {
   private tx(a: Account): SyncTx {
     return {
       nextVersion: async () => ++a.version,
+      logFloor: async () => 0, // memory keeps all history
       getRow: async (entity, id) => a.rows.get(key(entity, id)),
       putRow: async (row) => void a.rows.set(key(row.entity, row.id), row),
       liveFolders: async () =>

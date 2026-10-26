@@ -102,6 +102,31 @@ it('housekeeping forgets mutation ids and body history after 30 days', async () 
   expect(await count('sync_body_log')).toBe(0);
 });
 
+it('a body edit based on history older than the kept 30 days becomes a conflict, not an overwrite', async () => {
+  const { db } = await freshDb();
+  let clock = Date.UTC(2026, 0, 1);
+  const store = new PgStore(db, () => clock);
+  const core = new SyncCore(store);
+  const page = { id: 'p', title: 'Plan', body: 'start', folderId: null, starred: false, createdAt: 1, updatedAt: 1 };
+  const [created] = (
+    await core.push(TEST_USER, { clientId: 'A', deviceName: 'PC-A', mutations: [{ id: 'm1', op: { op: 'page.create', id: 'p', row: page }, baseVersion: 0 }] })
+  ).acked;
+  await core.push(TEST_USER, {
+    clientId: 'A',
+    deviceName: 'PC-A',
+    mutations: [{ id: 'm2', op: { op: 'page.setBody', id: 'p', body: 'edited on A' }, baseVersion: created.version }],
+  });
+  clock += 31 * 86_400_000; // A's edit leaves the body history
+  await core.push(TEST_USER, {
+    clientId: 'B',
+    deviceName: 'PC-B',
+    mutations: [{ id: 'm3', op: { op: 'page.setBody', id: 'p', body: 'offline edit on B' }, baseVersion: created.version }],
+  });
+  const pages = (await store.rows(TEST_USER)).filter((r) => r.entity === 'page' && !r.deleted).map((r) => r.data as typeof page);
+  expect(pages.find((p) => p.id === 'p')!.body).toBe('offline edit on B');
+  expect(pages.find((p) => p.id !== 'p')).toMatchObject({ title: 'Plan (conflict, another PC)', body: 'edited on A' });
+});
+
 it('every sync table has row-level security on and no client access', async () => {
   const { db } = await freshDb();
   const rls = await db.query<{ relname: string; relrowsecurity: boolean }>(
