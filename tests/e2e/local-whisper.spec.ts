@@ -85,7 +85,7 @@ test.afterEach(async () => {
 test('downloads a model and switches to built-in', async () => {
   await useFakeEngine();
   await page.getByRole('button', { name: 'Transcription' }).click();
-  await page.getByRole('button', { name: /^Built-in/ }).click();
+  await page.getByRole('tab', { name: /Built-in/ }).click();
   await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeVisible();
   const row = page.getByRole('radio', { name: /^Base,/ });
   await row.click();

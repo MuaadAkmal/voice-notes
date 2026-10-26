@@ -122,6 +122,22 @@ test('transcribes a note through an OpenAI-compatible server', async () => {
   await expect(row.getByText('hola mundo', { exact: true })).toBeVisible();
 });
 
+test('provider tabs show one provider at a time', async () => {
+  await page.getByRole('button', { name: 'Transcription' }).click();
+  await expect(page.getByLabel('Base URL')).toBeVisible();
+  await page.getByRole('tab', { name: /Built-in/ }).click();
+  await expect(page.getByLabel('Base URL')).toBeHidden();
+  await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeVisible();
+  await page.getByRole('tab', { name: /Voice Notes Cloud/ }).click();
+  await expect(page.getByText('Studio-grade transcription. Zero setup.')).toBeVisible();
+  await expect(page.getByText('Unlimited', { exact: true })).toBeVisible();
+  await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeHidden();
+  await setTheme('light');
+  await shot('cloud-light');
+  await setTheme('dark');
+  await shot('cloud-dark');
+});
+
 test('before setup, Transcribe actions lead to the Transcription page', async () => {
   await t.record(1200);
   await page.getByRole('button', { name: /^Inbox/ }).click();

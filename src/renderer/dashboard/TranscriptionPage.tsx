@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cloud, Cpu, Server } from 'lucide-react';
+import { Cloud, Cpu, Server, ShieldCheck, Sparkles, Target, Zap } from 'lucide-react';
 import type { KeyInfo, Settings, TestResult } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import {
@@ -36,7 +36,7 @@ export function TranscriptionPage() {
   const [replacingKey, setReplacingKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
-  const [mode, setMode] = useState<'server' | 'local'>('server');
+  const [mode, setMode] = useState<'server' | 'local' | 'cloud'>('server');
 
   useEffect(() => {
     // The fields start from what's saved; later setting changes don't overwrite what's being typed.
@@ -114,65 +114,40 @@ export function TranscriptionPage() {
     <div className="mx-auto max-w-3xl px-10 py-9">
       <h1 className="text-2xl font-semibold tracking-tight">Transcription</h1>
       <p className="mt-1 mb-8 text-sm text-muted-foreground">
-        Turn voice notes and dictation into text, on your own Whisper server or on this PC.
+        Turn voice notes and dictation into text. Pick where it runs.
       </p>
 
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div role="tablist" aria-label="Provider" className="mb-6 flex gap-1 rounded-xl border bg-muted/50 p-1">
         {(
           [
-            { id: 'server', icon: Server, name: 'My server', hint: 'OpenAI-compatible endpoint, e.g. vLLM' },
-            { id: 'local', icon: Cpu, name: 'Built-in', hint: 'whisper.cpp on this PC, no server needed' },
+            { id: 'server', icon: Server, name: 'My server' },
+            { id: 'local', icon: Cpu, name: 'Built-in' },
+            { id: 'cloud', icon: Cloud, name: 'Voice Notes Cloud' },
           ] as const
-        ).map(({ id, icon: Icon, name, hint }) => (
+        ).map(({ id, icon: Icon, name }) => (
           <button
             key={id}
             type="button"
-            aria-pressed={mode === id}
+            role="tab"
+            aria-selected={mode === id}
             onClick={() => setMode(id)}
             className={cn(
-              'col-span-2 flex items-start gap-3 rounded-xl border-2 bg-card p-3 text-left',
-              mode === id ? 'border-primary' : 'border-border hover:border-ring',
+              'flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              mode === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            <Icon className="mt-0.5 size-4 shrink-0" />
-            <div>
-              <div className="flex items-center gap-1.5 text-sm font-medium">
-                {name}
-                {settings.transcription.provider === id && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">In use</span>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground">{hint}</div>
-            </div>
+            <Icon className="size-4 shrink-0" />
+            {name}
+            {settings.transcription.provider === id && (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">In use</span>
+            )}
           </button>
         ))}
-        <div
-          aria-disabled="true"
-          className="col-span-2 rounded-xl border bg-card p-3 opacity-60 sm:col-span-4"
-        >
-          <div className="flex items-start gap-3">
-            <Cloud className="mt-0.5 size-4 shrink-0" />
-            <div>
-              <div className="text-sm font-medium">Voice Notes Cloud</div>
-              <div className="text-xs text-muted-foreground">
-                No GPU needed. Free includes 15 min a month, Pro 120 min.
-              </div>
-              <ComingSoon />
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {CLOUD_TIERS.map((tier) => (
-              <div key={tier.name} className="rounded-lg bg-muted px-2.5 py-2">
-                <div className="text-xs font-medium">{tier.name}</div>
-                <div className="text-[11px] text-muted-foreground">{tier.detail}</div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
+      {mode === 'cloud' && <CloudPanel />}
       {mode === 'local' && <LocalWhisperCard settings={settings} onSaved={setSettings} />}
-      <div className={cn('divide-y divide-border rounded-2xl border bg-card', mode === 'local' && 'hidden')}>
+      <div className={cn('divide-y divide-border rounded-2xl border bg-card', mode !== 'server' && 'hidden')}>
         <div className="space-y-4 px-5 py-4">
           <label className="block">
             <span className="text-sm font-medium">Base URL</span>
@@ -300,10 +275,66 @@ export function TranscriptionPage() {
   );
 }
 
-function ComingSoon() {
+const CLOUD_HIGHLIGHTS = [
+  { icon: Zap, title: 'Lightning fast', text: 'A minute of audio back as text in seconds.' },
+  { icon: Target, title: 'Pin-point accuracy', text: 'Whisper large-v3, auto-picked for each language, including Hindi, Tamil, Bengali and more.' },
+  { icon: ShieldCheck, title: 'Private by design', text: 'Your audio is encrypted in transit.' },
+] as const;
+
+/** Preview of the planned hosted service; nothing here works until the cloud backend ships. */
+function CloudPanel() {
   return (
-    <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-      Coming soon
-    </span>
+    <div className="rounded-2xl border bg-card">
+      <div className="px-6 pt-6 pb-5">
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+          <Sparkles className="size-3" /> Coming soon
+        </span>
+        <h2 className="mt-3 text-xl font-semibold tracking-tight">Studio-grade transcription. Zero setup.</h2>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          The fastest, most accurate models, tuned and hosted for you. No GPU, no server, nothing to install.
+        </p>
+      </div>
+
+      <div className="grid gap-3 px-6 pb-5 sm:grid-cols-3">
+        {CLOUD_HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
+          <div key={title} className="rounded-xl bg-muted/60 p-3">
+            <Icon className="size-4 text-primary" />
+            <div className="mt-2 text-sm font-medium">{title}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">{text}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3 border-t px-6 py-5 sm:grid-cols-2">
+        <div className="rounded-xl border p-4">
+          <div className="text-sm font-medium">Free</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">15 min</div>
+          <div className="text-xs text-muted-foreground">of transcription every month</div>
+        </div>
+        <div className="rounded-xl border-2 border-primary p-4">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            Pro
+            <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">Best value</span>
+          </div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">Unlimited</div>
+          <div className="text-xs text-muted-foreground">transcription, priority speed and every model</div>
+        </div>
+      </div>
+
+      <div className="border-t px-6 py-5">
+        <div className="text-xs font-medium text-muted-foreground">Models</div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {CLOUD_TIERS.map((tier) => (
+            <span key={tier.name} className="rounded-full bg-muted px-3 py-1 text-xs" title={tier.detail}>
+              <span className="font-medium">{tier.name}</span>
+              <span className="text-muted-foreground"> · {tier.detail}</span>
+            </span>
+          ))}
+        </div>
+        <Button className="mt-5" size="sm" disabled>
+          Coming soon
+        </Button>
+      </div>
+    </div>
   );
 }
