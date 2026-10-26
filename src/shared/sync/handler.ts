@@ -34,7 +34,8 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   try {
     let body: unknown;
     try {
-      body = JSON.parse(text);
+      // Postgres JSON can't hold U+0000 (pasted text sometimes has it): drop it rather than fail the batch.
+      body = JSON.parse(text, (_k, v) => (typeof v === 'string' ? v.replace(/\u0000/g, '') : v));
     } catch {
       throw new BadRequest('Not JSON');
     }
@@ -42,6 +43,9 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     return json(200, await deps.core.pull(userId, readPull(body)));
   } catch (err) {
     if (err instanceof BadRequest) return json(400, { error: err.message });
+    // A value Postgres can't store (SQLSTATE class 22): this batch will never succeed, so say so.
+    if (typeof (err as { code?: unknown })?.code === 'string' && (err as { code: string }).code.startsWith('22'))
+      return json(400, { error: 'A change could not be stored' });
     console.error('[sync] failed', err); // the function's own log; the client only learns that it failed
     return json(500, { error: 'Server error' });
   }
@@ -49,7 +53,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const str = (v: unknown, max = MAX_ID): v is string => typeof v === 'string' && v.length > 0 && v.length <= max;
-const count = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+const count = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
 
 function need(ok: boolean, what: string): asserts ok {
   if (!ok) throw new BadRequest(`Invalid ${what}`);
@@ -74,6 +78,20 @@ function readPush(b: unknown): PushRequest {
   };
 }
 
+/** What each update may change: never ids, and a body only through setBody/append/setTask (they carry the conflict rules). */
+const UPDATABLE: Record<string, readonly string[]> = {
+  'note.update': ['title', 'folderId', 'starred', 'show', 'transcript', 'transcriptLang', 'transcribedAt', 'updatedAt'],
+  'page.update': ['title', 'folderId', 'starred', 'updatedAt'],
+  'folder.update': ['name', 'parentId', 'updatedAt'],
+};
+
+/** The fields a created row must have. */
+const REQUIRED: Record<string, Record<string, 'string' | 'number' | 'boolean'>> = {
+  'note.create': { title: 'string', createdAt: 'number', updatedAt: 'number' },
+  'page.create': { title: 'string', body: 'string', createdAt: 'number', updatedAt: 'number' },
+  'folder.create': { name: 'string', createdAt: 'number', updatedAt: 'number' },
+};
+
 const ROW_OPS = new Set([
   'note.create', 'note.update', 'note.delete',
   'page.create', 'page.update', 'page.setBody', 'page.append', 'page.setTask', 'page.delete',
@@ -91,14 +109,20 @@ function readOp(o: unknown): SyncOp {
   switch (o.op) {
     case 'note.create':
     case 'page.create':
-    case 'folder.create':
-      need(isObject(o.row) && o.row.id === o.id, 'row');
+    case 'folder.create': {
+      const row = o.row;
+      need(isObject(row) && row.id === o.id, 'row');
+      for (const [field, type] of Object.entries(REQUIRED[o.op])) need(typeof (row as Record<string, unknown>)[field] === type, `row.${field}`);
       break;
+    }
     case 'note.update':
     case 'page.update':
-    case 'folder.update':
-      need(isObject(o.fields), 'fields');
+    case 'folder.update': {
+      const fields = o.fields;
+      need(isObject(fields), 'fields');
+      for (const k of Object.keys(fields as object)) need(UPDATABLE[o.op].includes(k), `field ${k}`);
       break;
+    }
     case 'page.setBody':
       need(typeof o.body === 'string' && at, 'body');
       break;

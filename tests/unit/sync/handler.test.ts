@@ -64,6 +64,33 @@ it('a push lands in the account of the verified token, whatever the body says', 
   expect(pulled).toMatchObject({ cursor: 1, hasMore: false, rows: [{ entity: 'folder', id: 'f' }] });
 });
 
+it('a null character in text (which Postgres JSON cannot hold) is dropped, not a failure', async () => {
+  const { store, call } = setup();
+  const page = { id: 'p', title: 'T\u0000', body: 'pasted\u0000text', folderId: null, starred: false, createdAt: 1, updatedAt: 1 };
+  const res = await call('push', push([{ id: 'm1', op: { op: 'page.create', id: 'p', row: page }, baseVersion: 0 }]));
+  expect(res.status).toBe(200);
+  expect(store.rows(USER)[0].data).toMatchObject({ title: 'T', body: 'pastedtext' });
+});
+
+it('numbers must be safe integers, rows need their fields, and updates only their own fields', async () => {
+  const { call } = setup();
+  expect((await call('pull', { clientId: 'A', cursor: 1e300 })).status).toBe(400);
+  expect((await call('push', push([{ id: 'm', op: { op: 'note.delete', id: 'n' }, baseVersion: 1.5 }]))).status).toBe(400);
+  const noName = { id: 'f', parentId: null, createdAt: 1, updatedAt: 1 };
+  expect((await call('push', push([{ id: 'm', op: { op: 'folder.create', id: 'f', row: noName }, baseVersion: 0 }]))).status).toBe(400);
+  // A body only changes through setBody/append/setTask (they carry the conflict rules); ids never change.
+  expect((await call('push', push([{ id: 'm', op: { op: 'page.update', id: 'p', fields: { body: 'x' } }, baseVersion: 0 }]))).status).toBe(400);
+  expect((await call('push', push([{ id: 'm', op: { op: 'note.update', id: 'n', fields: { id: 'other' } }, baseVersion: 0 }]))).status).toBe(400);
+  expect((await call('push', push([{ id: 'm', op: { op: 'note.update', id: 'n', fields: { title: 'ok', starred: true } }, baseVersion: 0 }]))).status).toBe(200);
+});
+
+it('a database data error is a rejected change, not a server outage', async () => {
+  const core = { push: async () => Promise.reject(Object.assign(new Error('unsupported Unicode escape sequence'), { code: '22P05' })), pull: async () => ({}) };
+  const res = await setup({ core: core as unknown as SyncCore }).call('push', push([]));
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({ error: 'A change could not be stored' });
+});
+
 it('a server error hides its details', async () => {
   const core = { push: async () => Promise.reject(new Error('SQL secret')), pull: async () => Promise.reject(new Error('SQL secret')) };
   const res = await setup({ core: core as unknown as SyncCore }).call('push', push([]));
