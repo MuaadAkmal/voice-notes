@@ -7,6 +7,10 @@ import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Setting
 import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
+import { DICTATION_TTL_MS } from '../shared/dictation';
+import { DictationController } from './dictation/controller';
+import { electronClipboard } from './dictation/clipboard';
+import { pasteText } from './dictation/paste';
 import { DragWatch, dropZone } from './drop/drag-watch';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
@@ -17,8 +21,9 @@ import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
 import { loadSettings, REWIND_HOTKEY, saveSettings } from './settings';
-import { foregroundWindow, pressPlayPause } from './win32';
+import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
+import { transcribe } from './transcription/openai-client';
 import { safeStorageCipher, Secrets } from './transcription/secrets';
 import { TranscriptionService } from './transcription/service';
 import { WavBridge } from './transcription/wav-bridge';
@@ -35,6 +40,7 @@ registerNoteScheme();
 const HIDDEN_ARG = '--hidden'; // passed by the login item so startup stays silent
 // No answer counts as "nothing playing". The probe waits for the note's mic to open, then samples ~300 ms.
 const PROBE_TIMEOUT_MS = 2000;
+const DICTATION_PRUNE_MS = 60 * 60_000;
 let isQuitting = false;
 let dashboard: BrowserWindow | null = null;
 
@@ -73,6 +79,7 @@ async function boot(): Promise<void> {
   // The built-in Review later page and its locked Home card always exist.
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
   if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
+  store.dictations.pruneOlderThan(DICTATION_TTL_MS);
   registerNoteProtocol(store);
   registerImageProtocol(store);
 
@@ -109,6 +116,9 @@ async function boot(): Promise<void> {
   const toDashboard = (channel: string) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(channel);
   };
+  setInterval(() => {
+    if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
+  }, DICTATION_PRUNE_MS);
   const idleState = (): OverlayState =>
     settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
   // The last state sent to the pill: drops are only taken while it is visibly idle or showing "Saved".
@@ -173,6 +183,7 @@ async function boot(): Promise<void> {
       getRewindSeconds: () => settings.rewindSeconds,
       onCaptureStart: (source) => autoPause.start(source),
       onCaptureEnd: () => autoPause.end(),
+      blocked: (): boolean => dictation.active,
       idleState,
       // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
       onIdle: () => gesture.reset(),
@@ -190,8 +201,69 @@ async function boot(): Promise<void> {
     overlay.blur();
   };
   gesture.onEvent((e) => {
-    if (e === 'start') releaseOverlayFocus(); // a new recording abandons an open title input
+    if (e === 'start' && !dictation.active) {
+      releaseOverlayFocus(); // a new recording abandons an open title input
+      dictation.dismissFlash();
+    }
     controller.handleGesture(e);
+  });
+
+  // Dictation: Ctrl+Win, transcript pasted into the focused app. Under test, texts are only recorded.
+  const pasted: string[] = [];
+  const dictationGesture = new HotkeyGesture();
+  const dictation = new DictationController({
+    overlay: {
+      start: (deviceId, ping) => send(Ch.RecorderStart, { deviceId, source: 'mic', dictation: { ping } }),
+      stop: () => send(Ch.RecorderStop),
+      cancel: () => send(Ch.RecorderCancel),
+      setState: setOverlayState,
+    },
+    configured: () => settings.transcription.provider !== null,
+    blocked: (): boolean => controller.state !== 'idle',
+    getDeviceId: () => settings.micDeviceId,
+    sound: () => settings.dictationSound,
+    getApp: () => getContext()?.show ?? null,
+    transcribe: async (audio, signal) => {
+      const { transcription, transcribeLanguage } = settings;
+      const result = await transcribe({
+        baseUrl: transcription.baseUrl,
+        model: transcription.model,
+        apiKey: secrets.get('server'),
+        language: transcribeLanguage === 'auto' ? null : transcribeLanguage,
+        audio,
+        filename: 'dictation.wav',
+        timeoutMs: 30_000,
+        signal,
+      });
+      return result.text;
+    },
+    save: (text, app) => {
+      store.dictations.add(text, app);
+      toDashboard(Ch.DictationsChanged);
+    },
+    paste: async (text) => {
+      if (process.env.VOICE_NOTES_TEST === '1') {
+        pasted.push(text);
+        return;
+      }
+      await pasteText(text, {
+        clipboard: electronClipboard,
+        modifiersHeld,
+        sendCtrlV,
+        sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      }).catch((err) => log.error('[dictation] paste failed', err));
+    },
+    idleState,
+    onIdle: () => dictationGesture.reset(),
+    onCaptureStart: () => autoPause.start('mic'),
+    onCaptureEnd: () => autoPause.end(),
+  });
+  dictationGesture.onEvent((e) => {
+    if (e === 'start' && controller.state === 'idle') {
+      releaseOverlayFocus(); // a dictation abandons an open title input, like a new recording
+      controller.dismissFlash();
+    }
+    dictation.handleGesture(e);
   });
   overlay.webContents.on('did-finish-load', () => {
     setOverlayState(idleState());
@@ -208,6 +280,8 @@ async function boot(): Promise<void> {
     overlayMouse,
     gesture,
     controller,
+    dictation,
+    dictationGesture,
     onDevices: (d) => (devices = d),
     onDragEnd: () => updateSettings({ pillPosition: pillPositionOf(overlay) }),
     titles: {
@@ -274,6 +348,8 @@ async function boot(): Promise<void> {
   const hotkey = new HotkeyService(gesture);
   hotkey.setCombo(settings.hotkey);
   hotkey.setRewindCombo(REWIND_HOTKEY);
+  hotkey.attachDictation(dictationGesture);
+  hotkey.setDictationCombo(settings.dictationHotkey);
   hotkey.onRewind(rewind);
   hotkey.setPaused(settings.hotkeyPaused);
   const dragWatch = new DragWatch({
@@ -308,6 +384,7 @@ async function boot(): Promise<void> {
     patch = guardWidgets(patch, settings, randomUUID);
     Object.assign(settings, saveSettings(settingsFile, patch));
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
+    if (patch.dictationHotkey) hotkey.setDictationCombo(settings.dictationHotkey);
     if (patch.recordingSource) tray.refresh();
     // Reset (null) or a move from elsewhere: put the window where the setting says.
     if ('pillPosition' in patch) positionOverlay(overlay, settings.pillPosition);
@@ -358,6 +435,7 @@ async function boot(): Promise<void> {
     notesChanged: () => toDashboard(Ch.NotesChanged),
     foldersChanged: () => toDashboard(Ch.FoldersChanged),
     pagesChanged: () => toDashboard(Ch.PagesChanged),
+    dictationsChanged: () => toDashboard(Ch.DictationsChanged),
     openedExternal,
     transcription,
     secrets,
@@ -384,6 +462,9 @@ async function boot(): Promise<void> {
       openedExternal, // URLs the dashboard asked to open in the browser
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
       transcription, // idle(): wait for queued transcriptions
+      dictationGesture, // what Ctrl+Win does
+      dictation,
+      pasted, // texts a dictation would have pasted
     };
   }
 

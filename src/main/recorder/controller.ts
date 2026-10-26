@@ -30,6 +30,8 @@ type ControllerOpts = {
   /** A live capture began / ended (stop, cancel, error, or the recorder ending itself): auto-pause hooks. */
   onCaptureStart?: (source: RecordingSource) => void;
   onCaptureEnd?: () => void;
+  /** A dictation is active: no recording or rewind may start. */
+  blocked?: () => boolean;
   minMs?: number;
   maxMs?: number;
   savedMs?: number;
@@ -136,7 +138,7 @@ export class RecorderController {
   handleGesture(e: GestureEvent): void {
     switch (e) {
       case 'start':
-        if (this._state !== 'idle') return;
+        if (this._state !== 'idle' || this.opts.blocked?.()) return;
         this.endSaved();
         this._state = 'recording';
         this.startedAt = Date.now();
@@ -173,6 +175,11 @@ export class RecorderController {
     }
   }
 
+  /** A dictation takes over the pill: end a saved/error flash (and a held title) without setting a state. */
+  dismissFlash(): void {
+    if (this._state === 'idle') this.endSaved();
+  }
+
   /** A short message on the pill (e.g. "Film mode stopped"), only when nothing else is on it. */
   notify(message: string): void {
     if (this._state !== 'idle' || this.savedState) return;
@@ -187,7 +194,7 @@ export class RecorderController {
 
   /** Save the last N seconds of the film-mode buffer. Only from idle; returns whether it started. */
   rewind(): boolean {
-    if (this._state !== 'idle') return false;
+    if (this._state !== 'idle' || this.opts.blocked?.()) return false;
     this.endSaved();
     this._state = 'rewinding';
     this.requestedSource = 'system';

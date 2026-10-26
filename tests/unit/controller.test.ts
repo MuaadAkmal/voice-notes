@@ -34,6 +34,7 @@ let created: NewAudio[];
 let idles: number;
 let abandoned: number;
 let source: RecordingSource;
+let blocked: boolean;
 let c: RecorderController;
 const audio = (durationMs: number): NewAudio => ({
   bytes: Buffer.from('xyz'),
@@ -54,6 +55,7 @@ beforeEach(() => {
   idles = 0;
   abandoned = 0;
   source = 'mic';
+  blocked = false;
   const overlay: OverlayPort = {
     start: (d, s) => calls.push(`start:${d}:${s}`),
     stop: () => calls.push('stop'),
@@ -78,6 +80,7 @@ beforeEach(() => {
     idleState: () => IDLE,
     onIdle: () => idles++,
     onTitleAbandoned: () => abandoned++,
+    blocked: () => blocked,
   });
 });
 afterEach(() => vi.useRealTimers());
@@ -309,5 +312,32 @@ describe('titling from the pill', () => {
     c.handleGesture('start');
     expect(c.state).toBe('recording');
     expect(lastState()).toMatchObject({ kind: 'recording' });
+  });
+});
+
+describe('next to a dictation', () => {
+  it('a blocked start is ignored', () => {
+    blocked = true;
+    c.handleGesture('start');
+    expect(c.state).toBe('idle');
+    expect(calls).toEqual([]);
+  });
+
+  it('a blocked rewind is refused', () => {
+    blocked = true;
+    expect(c.rewind()).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('dictation start dismisses the recorder flash', async () => {
+    c.handleGesture('start');
+    c.handleGesture('stop');
+    await c.onAudio(audio(1200));
+    expect(lastState()).toEqual({ kind: 'saved', noteId: 'n1' });
+    const n = states.length;
+    c.dismissFlash();
+    vi.advanceTimersByTime(5000);
+    expect(states).toHaveLength(n);
+    expect(c.holdFlash()).toBe(false); // the saved flash is gone: no title input can open on it
   });
 });
