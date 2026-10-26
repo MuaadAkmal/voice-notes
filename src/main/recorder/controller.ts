@@ -182,13 +182,13 @@ export class RecorderController {
 
   /** A short message on the pill (e.g. "Film mode stopped"), only when nothing else is on it. */
   notify(message: string): void {
-    if (this._state !== 'idle' || this.savedState) return;
+    if (this._state !== 'idle' || this.savedState || this.opts.blocked?.()) return;
     this.flash({ kind: 'error', message, retry: false }, this.errorMs);
   }
 
   /** The idle look changed (settings): re-send it, unless a saved/error flash is on the pill. */
   refreshIdle(): void {
-    if (this._state !== 'idle' || this.savedState || this.flashTimer) return;
+    if (this._state !== 'idle' || this.savedState || this.flashTimer || this.opts.blocked?.()) return;
     this.overlay.setState(this.opts.idleState());
   }
 

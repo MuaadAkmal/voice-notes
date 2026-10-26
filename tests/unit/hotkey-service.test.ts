@@ -181,6 +181,23 @@ describe('dictation combo (Ctrl+Win)', () => {
     expect(calls).toEqual(['esc', 'd-esc']);
   });
 
+  it('Esc is reported even when no gesture is active (a dictation still transcribing)', () => {
+    svc.onEscape(() => calls.push('escape-listener'));
+    down(Ctrl, { ctrlKey: true });
+    down(Meta, { ctrlKey: true, metaKey: true });
+    up(Meta, { ctrlKey: true });
+    up(Ctrl, {});
+    down(Escape, {});
+    expect(calls).toContain('escape-listener');
+  });
+
+  it('Esc is not reported while paused', () => {
+    svc.onEscape(() => calls.push('escape-listener'));
+    svc.setPaused(true);
+    down(Escape, {});
+    expect(calls).toEqual([]);
+  });
+
   it('pausing releases an active dictation', () => {
     down(Ctrl, { ctrlKey: true });
     down(Meta, { ctrlKey: true, metaKey: true });

@@ -62,6 +62,7 @@ export class HotkeyService {
   private dictationGesture: HotkeyGesture | null = null;
   private dictationCombo: number[] = [];
   private dictationActive = false;
+  private escapeListener: (() => void) | null = null;
 
   constructor(
     private readonly gesture: HotkeyGesture,
@@ -84,6 +85,11 @@ export class HotkeyService {
 
   stop(): void {
     this.hook.stop();
+  }
+
+  /** Every Esc while not paused, whatever the gestures' state: a dictation can still be transcribing after its keys are up. */
+  onEscape(listener: () => void): void {
+    this.escapeListener = listener;
   }
 
   /** The dictation hotkey's gesture. Register before start(). */
@@ -175,6 +181,7 @@ export class HotkeyService {
     if (code === UiohookKey.Escape) {
       this.gesture.escape();
       this.dictationGesture?.escape();
+      this.escapeListener?.();
       return;
     }
     // Rewind is checked first: it contains the main combo, whose hold may already have started.

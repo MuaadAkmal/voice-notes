@@ -329,6 +329,13 @@ describe('next to a dictation', () => {
     expect(calls).toEqual([]);
   });
 
+  it('a message or idle refresh never overwrites the dictation pill', () => {
+    blocked = true;
+    c.notify('Turn on film mode to rewind');
+    c.refreshIdle();
+    expect(states).toEqual([]);
+  });
+
   it('dictation start dismisses the recorder flash', async () => {
     c.handleGesture('start');
     c.handleGesture('stop');

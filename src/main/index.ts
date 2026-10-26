@@ -349,6 +349,8 @@ async function boot(): Promise<void> {
   hotkey.setCombo(settings.hotkey);
   hotkey.setRewindCombo(REWIND_HOTKEY);
   hotkey.attachDictation(dictationGesture);
+  // The gesture is already idle while a dictation transcribes; Esc must still cancel it.
+  hotkey.onEscape(() => dictation.handleGesture('cancel'));
   hotkey.setDictationCombo(settings.dictationHotkey);
   hotkey.onRewind(rewind);
   hotkey.setPaused(settings.hotkeyPaused);
