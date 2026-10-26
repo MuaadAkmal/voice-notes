@@ -24,6 +24,7 @@ import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
 import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
+import { recordPrefs } from './sync/prefs';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
 import { resolveEndpoint } from './transcription/endpoint';
@@ -413,10 +414,12 @@ async function boot(): Promise<void> {
     },
   });
 
-  function updateSettings(patch: Partial<Settings>): Settings {
+  /** record: false for settings that just arrived from the account (they must not be sent back). */
+  function updateSettings(patch: Partial<Settings>, opts: { record?: boolean } = {}): Settings {
     // A widget list from the dashboard (possibly stale) never loses the locked Review later card.
     patch = guardWidgets(patch, settings, randomUUID);
     Object.assign(settings, saveSettings(settingsFile, patch));
+    if (opts.record !== false) recordPrefs(patch, store.sync.outbox);
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.dictationHotkey) hotkey.setDictationCombo(settings.dictationHotkey);
     if (patch.recordingSource) tray.refresh();
