@@ -1,4 +1,4 @@
-import type { Settings, SyncStatus } from '../../shared/channels';
+import type { Settings, SyncStatus, SyncView } from '../../shared/channels';
 import type { PullChanges } from './apply';
 import { AuthExpired, NotSignedIn, Offline, Rejected, ServerError } from './http-server';
 
@@ -6,7 +6,7 @@ import { AuthExpired, NotSignedIn, Offline, Rejected, ServerError } from './http
 // decides when (start, 3 s after edits, every 5 min, on wake, Sync now), retries with backoff, and
 // keeps one account's data out of another's.
 
-export type SyncView = { status: SyncStatus; needsPrompt: boolean };
+export type { SyncView } from '../../shared/channels';
 
 type StateLike = {
   accountId(): string | null;

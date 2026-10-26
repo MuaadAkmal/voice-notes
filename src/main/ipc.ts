@@ -49,6 +49,7 @@ import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
 import type { AccountService } from './account/account';
+import type { SyncController } from './sync/controller';
 import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
@@ -175,6 +176,7 @@ type DashboardDeps = {
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
   account: AccountService;
+  sync: SyncController;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -342,6 +344,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.AccountSignIn, none, () => d.account.signIn());
   handle(Ch.AccountCancel, none, () => d.account.cancel());
   handle(Ch.AccountSignOut, none, () => d.account.signOut());
+  handle(Ch.SyncGet, none, () => d.sync.view());
+  handle(Ch.SyncTurnOn, none, () => {
+    const info = d.account.current();
+    if (info.state !== 'signed-in') throw new Error('Sign in first');
+    d.sync.turnOn(info.userId);
+  });
+  handle(Ch.SyncTurnOff, none, () => d.sync.turnOff());
+  handle(Ch.SyncNow, none, () => d.sync.syncNow());
+  handle(Ch.SyncDismissPrompt, none, () => d.sync.dismissPrompt());
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

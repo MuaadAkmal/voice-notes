@@ -1,4 +1,4 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, screen, session, shell } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, powerMonitor, screen, session, shell } from 'electron';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
@@ -25,7 +25,11 @@ import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
 import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
-import { recordPrefs } from './sync/prefs';
+import { applyRemotePrefs, recordPrefs } from './sync/prefs';
+import { SyncController } from './sync/controller';
+import { SyncEngine } from './sync/engine';
+import { HttpSyncServer } from './sync/http-server';
+import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
 import { resolveEndpoint } from './transcription/endpoint';
@@ -449,6 +453,7 @@ async function boot(): Promise<void> {
 
   const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
 
+  const syncHolder: { controller?: SyncController } = {}; // set below; the account callback needs it
   // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
   const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
   const testing = process.env.VOICE_NOTES_TEST === '1';
@@ -475,9 +480,61 @@ async function boot(): Promise<void> {
     focusApp: showDashboard,
     onChange: (info) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
+      syncHolder.controller?.onAccountChanged();
     },
   });
   if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
+
+  // Two-PC sync through the `sync` Edge Function (rows; audio and images come in C2).
+  let testToken: (() => Promise<string | null>) | null = null;
+  const makeSyncServer = (baseUrl: string) =>
+    new HttpSyncServer({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      getToken: async () => (testToken ? testToken() : ((await supabase.auth.getSession()).data.session?.access_token ?? null)),
+      fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
+    });
+  let syncServer = makeSyncServer(SUPABASE_URL);
+  const syncEngine = new SyncEngine(
+    store,
+    { push: (req: PushRequest) => syncServer.push(req), pull: (req: PullRequest) => syncServer.pull(req) },
+    {
+      get: () => settings,
+      update: (patch, opts) => updateSettings(patch, opts),
+      applyRemote: (prefs) =>
+        applyRemotePrefs(prefs, {
+          getSettings: () => settings,
+          updateSettings: (patch, opts) => updateSettings(patch, opts),
+          pages: store.pages,
+          deviceName: store.sync.state.deviceName(),
+        }),
+    },
+  );
+  const syncController: SyncController = new SyncController({
+    engine: syncEngine,
+    state: store.sync.state,
+    settings: () => settings,
+    currentUser: () => {
+      const info = account.current();
+      return info.state === 'signed-in' ? info.userId : null;
+    },
+    refreshSession: async () => {
+      if (!testToken) await supabase.auth.refreshSession();
+    },
+    onView: (view) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.SyncChanged, view);
+    },
+    onChanged: (changes) => {
+      // Settings arrive through updateSettings, which already tells both windows.
+      if (changes.notes) toDashboard(Ch.NotesChanged);
+      if (changes.pages) toDashboard(Ch.PagesChanged);
+      if (changes.folders) toDashboard(Ch.FoldersChanged);
+    },
+  });
+  syncHolder.controller = syncController;
+  store.sync.outbox.onRecord = () => syncController.onLocalChange();
+  powerMonitor.on('resume', () => syncController.onResume());
+  syncController.start();
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,
@@ -513,6 +570,7 @@ async function boot(): Promise<void> {
     wavBridge,
     localWhisper,
     account,
+    sync: syncController,
   });
 
   app.on('before-quit', () => {
@@ -520,6 +578,7 @@ async function boot(): Promise<void> {
     autoPause.end(); // quitting mid-note must not leave the film paused
   });
   app.on('will-quit', () => {
+    syncController.stop();
     localWhisper.stop(); // never leave whisper-server.exe running
     hotkey.stop();
     store.close();
@@ -541,6 +600,11 @@ async function boot(): Promise<void> {
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine
       account, // setTestSession(info): signed in or out without Google
+      sync: {
+        useServer: (url: string) => void (syncServer = makeSyncServer(url)), // a local test server
+        useToken: (fn: () => Promise<string | null>) => void (testToken = fn),
+        now: () => syncController.syncNow(),
+      },
     };
   }
 

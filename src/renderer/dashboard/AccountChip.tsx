@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Avatar } from './Avatar';
 import { useToast } from './Toast';
 import { firstName, useAccount } from './useAccount';
+import { useSync } from './useSync';
 
 const api = window.dashboardApi;
 const row = 'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm';
@@ -13,6 +14,7 @@ const row = 'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm';
 export function AccountChip({ active, onOpen }: { active: boolean; onOpen: () => void }) {
   const toast = useToast();
   const info = useAccount();
+  const sync = useSync();
   // Once per account change (each is a new object), not per render: useToast's function is new every render.
   useEffect(() => {
     if (info?.state === 'signed-out' && info.error) toast(info.error);
@@ -55,6 +57,15 @@ export function AccountChip({ active, onOpen }: { active: boolean; onOpen: () =>
     >
       <Avatar name={info.name} src={info.avatar} className="h-5 w-5 text-[9px]" />
       <span className="truncate">{firstName(info.name)}</span>
+      {sync && <SyncDot mode={sync.status.mode} />}
     </button>
   );
+}
+
+/** Syncing, offline or failing shows as a small dot by the name; idle and off show nothing. */
+function SyncDot({ mode }: { mode: string }) {
+  const tone = mode === 'syncing' ? 'bg-primary animate-pulse' : mode === 'offline' ? 'bg-amber-500' : mode === 'error' ? 'bg-destructive' : null;
+  if (!tone) return null;
+  const label = mode === 'syncing' ? 'Syncing' : mode === 'offline' ? 'Sync offline' : 'Sync problem';
+  return <span role="img" aria-label={label} title={label} className={cn('ml-auto size-1.5 shrink-0 rounded-full', tone)} />;
 }

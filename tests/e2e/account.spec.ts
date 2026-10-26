@@ -53,7 +53,7 @@ test('signed in, the chip shows who; the Account page signs out', async () => {
   await chip.click();
   await expect(page.getByText('muaad@example.com')).toBeVisible();
   await expect(page.getByText('Signed in with Google')).toBeVisible();
-  await expect(page.getByText('Sync between your PCs is coming soon.')).toBeVisible();
+  await expect(page.getByText('Sync this PC with your account?')).toBeVisible();
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(theme);
     await page.screenshot({ path: `.superpowers/shots/account-${theme}.png` });

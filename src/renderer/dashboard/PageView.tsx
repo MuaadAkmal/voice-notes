@@ -5,6 +5,7 @@ import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
 import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { MarkdownEditor } from './editor/MarkdownEditor';
+import { shouldTakeRemoteBody } from '../../shared/sync/page-refresh';
 import { useToast } from './Toast';
 import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
 
@@ -32,6 +33,9 @@ export function PageView({ page, fresh, onBack }: Props) {
   const [title, setTitle] = useState(shown.title);
   const titleInput = useRef<HTMLInputElement>(null);
   const editorHost = useRef<HTMLDivElement>(null);
+  // The editor reads its text only when it mounts: a body from another PC remounts it (new key).
+  const [editorKey, setEditorKey] = useState(0);
+  const localBody = useRef(shown.body);
   const home = useHomeWidgets();
   const pinned = isPinned(home.widgets ?? [], shown.id);
   const pinDisabled = home.widgets === null || (!pinned && !canAdd(home.widgets));
@@ -78,6 +82,16 @@ export function PageView({ page, fresh, onBack }: Props) {
   useEffect(() => {
     if (fresh) titleInput.current?.select(); // select() also focuses
   }, [fresh]);
+
+  // Changed on another PC: show it, unless you're working in the page (your text wins locally, and the
+  // server's keep-both rule settles it when your save syncs).
+  useEffect(() => {
+    const focused = !!editorHost.current?.contains(document.activeElement);
+    if (shouldTakeRemoteBody({ dirty: saver.pending, focused, localBody: localBody.current, remoteBody: shown.body })) {
+      localBody.current = shown.body;
+      setEditorKey((k) => k + 1);
+    }
+  }, [shown.body, saver]);
 
   // Renamed elsewhere (e.g. from the list): follow, unless the title is being edited here.
   useEffect(() => {
@@ -161,8 +175,10 @@ export function PageView({ page, fresh, onBack }: Props) {
         className="mx-auto mt-4 min-h-[60vh] max-w-[720px] cursor-text"
       >
         <MarkdownEditor
+          key={editorKey}
           value={shown.body}
           onChange={(body) => {
+            localBody.current = body;
             saver.push(body);
             setStatus('saving');
           }}

@@ -3,6 +3,7 @@ import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
 import { Avatar } from './Avatar';
 import { useConfirm } from './ConfirmDialog';
+import { SyncCard } from './SyncCard';
 import { useToast } from './Toast';
 import { useAccount } from './useAccount';
 
@@ -39,7 +40,7 @@ export function AccountPage({ onSignedOut }: { onSignedOut: () => void }) {
           Sign out
         </Button>
       </div>
-      <p className="mt-4 text-sm text-muted-foreground">Sync between your PCs is coming soon.</p>
+      <SyncCard />
     </div>
   );
 }
