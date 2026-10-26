@@ -17,6 +17,7 @@ const SOURCES = [
   'sync/server-core.ts',
   'sync/pg-store.ts',
   'sync/handler.ts',
+  'sync/postgres-db.ts',
 ];
 const stripExt = (code: string) => code.replace(/(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2');
 

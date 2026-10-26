@@ -191,6 +191,11 @@ export const Ch = {
   AccountSignIn: 'account:sign-in',
   AccountCancel: 'account:cancel',
   AccountSignOut: 'account:sign-out',
+  SyncGet: 'sync:get',
+  SyncTurnOn: 'sync:turn-on',
+  SyncTurnOff: 'sync:turn-off',
+  SyncNow: 'sync:now',
+  SyncDismissPrompt: 'sync:dismiss-prompt',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
@@ -199,6 +204,7 @@ export const Ch = {
   DictationsChanged: 'dictations:changed',
   LocalChanged: 'local:changed', // LocalStatus (also download progress)
   AccountChanged: 'account:changed', // AccountInfo
+  SyncChanged: 'sync:changed', // SyncView
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
@@ -208,6 +214,18 @@ export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'f
 export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
+/** What the Account page shows about sync: the state, and whether to ask "Sync this PC with your account?". */
+export type SyncView = { status: SyncStatus; needsPrompt: boolean };
+
+/** This PC's sync, as the Account page shows it. */
+export type SyncStatus =
+  | { mode: 'off' }
+  | { mode: 'paused'; reason: 'signed-out' }
+  | { mode: 'idle'; lastSyncedAt: number | null }
+  | { mode: 'syncing' }
+  | { mode: 'offline'; retryAt: number }
+  | { mode: 'error'; message: string };
+
 /** Who is signed in, as the window sees it: never tokens. */
 export type AccountInfo =
   | { state: 'signed-out'; error?: string }

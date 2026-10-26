@@ -66,7 +66,7 @@ export class PgStore implements SyncStore {
         },
         putRow: async (row) => {
           await q.query(
-            `insert into public.sync_rows (user_id, entity, id, version, deleted, data) values ($1, $2, $3, $4, $5, $6)
+            `insert into public.sync_rows (user_id, entity, id, version, deleted, data) values ($1, $2, $3, $4, $5, $6::text::jsonb)
              on conflict (user_id, entity, id) do update set version = excluded.version, deleted = excluded.deleted, data = excluded.data`,
             [userId, row.entity, row.id, row.version, row.deleted, JSON.stringify(row.data)],
           );
@@ -111,13 +111,13 @@ export class PgStore implements SyncStore {
         logBody: async (pageId, e) => {
           await q.query(
             `insert into public.sync_body_log (user_id, page_id, version, client_id, device_name, op, created_at)
-             values ($1, $2, $3, $4, $5, $6, to_timestamp($7))`,
+             values ($1, $2, $3, $4, $5, $6::text::jsonb, to_timestamp($7))`,
             [userId, pageId, e.version, e.clientId, e.deviceName, JSON.stringify(e.op), at()],
           );
         },
         setPref: async (key: SyncedKey, value, v) => {
           await q.query(
-            `insert into public.sync_prefs (user_id, key, value, version) values ($1, $2, $3, $4)
+            `insert into public.sync_prefs (user_id, key, value, version) values ($1, $2, $3::text::jsonb, $4)
              on conflict (user_id, key) do update set value = excluded.value, version = excluded.version`,
             [userId, key, JSON.stringify(value ?? null), v],
           );
