@@ -8,7 +8,6 @@ import { useConfirm } from './ConfirmDialog';
 import { useToast } from './Toast';
 
 const api = window.dashboardApi;
-const ENGINE_MB = '9 MB'; // the x64 engine zip; arm64 is smaller
 const VC_RUNTIME_URL = 'https://learn.microsoft.com/cpp/windows/latest-supported-vc-redist';
 
 /** Built-in transcription: pick a model, download it, use it. Everything runs on this PC. */
@@ -135,56 +134,18 @@ export function LocalWhisperCard({ settings, onSaved }: { settings: Settings; on
                   {formatBytes(m.bytes)} · {m.note} · ~{m.ramGb} GB RAM
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="shrink-0 text-xs text-muted-foreground">
                 {job ? (
-                  <>
-                    <div className="w-28">
-                      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                        <div className="h-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
-                      </div>
-                      <div className="mt-1 text-[11px] text-muted-foreground">
-                        {job.phase === 'engine' ? 'Engine' : 'Model'} · {pct}%
-                      </div>
+                  <div className="w-28">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full bg-primary transition-[width]" style={{ width: `${pct}%` }} />
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => api.cancelLocal()}>
-                      Cancel
-                    </Button>
-                  </>
-                ) : status.models[id] ? (
-                  <>
-                    {status.engine ? (
-                      <span className="text-xs text-muted-foreground">Downloaded</span>
-                    ) : (
-                      // The model is here but the engine went (deleted, or quarantined by a virus scanner).
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={status.job !== null}
-                        onClick={() => download(id)}
-                      >
-                        Download engine ({ENGINE_MB})
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={`Delete ${m.label}`}
-                      disabled={status.job !== null}
-                      onClick={() => remove(id)}
-                    >
-                      Delete
-                    </Button>
-                  </>
+                    <div className="mt-1 text-[11px]">
+                      {job.phase === 'engine' ? 'Engine' : 'Model'} · {pct}%
+                    </div>
+                  </div>
                 ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    aria-label={`Download ${m.label}`}
-                    disabled={status.job !== null}
-                    onClick={() => download(id)}
-                  >
-                    Download{!status.engine && <span className="text-muted-foreground"> + {ENGINE_MB} engine</span>}
-                  </Button>
+                  status.models[id] && 'Downloaded'
                 )}
               </div>
             </div>
@@ -193,9 +154,29 @@ export function LocalWhisperCard({ settings, onSaved }: { settings: Settings; on
       </div>
 
       <div className="flex flex-wrap items-center gap-3 px-5 py-4">
-        <Button size="sm" onClick={use} disabled={!status.models[choice] || !status.engine || inUse}>
-          {inUse ? 'In use ✓' : 'Use built-in'}
-        </Button>
+        {status.job ? (
+          <Button variant="outline" size="sm" onClick={() => api.cancelLocal()}>
+            Cancel download
+          </Button>
+        ) : !status.models[choice] ? (
+          <Button size="sm" onClick={() => download(choice)}>
+            Download {MODEL_DISPLAY[choice].label}
+          </Button>
+        ) : !status.engine ? (
+          // The model is here but the engine went (deleted, or quarantined by a virus scanner).
+          <Button size="sm" onClick={() => download(choice)}>
+            Download engine
+          </Button>
+        ) : (
+          <Button size="sm" onClick={use} disabled={inUse}>
+            {inUse ? 'In use ✓' : 'Use built-in'}
+          </Button>
+        )}
+        {status.models[choice] && !status.job && (
+          <Button variant="outline" size="sm" onClick={() => remove(choice)}>
+            Delete
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={test} disabled={testing || provider !== 'local'}>
           {testing ? 'Testing…' : 'Test'}
         </Button>

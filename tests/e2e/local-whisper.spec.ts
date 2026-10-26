@@ -89,7 +89,8 @@ test('downloads a model and switches to built-in', async () => {
   await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeVisible();
   const row = page.getByRole('radio', { name: /^Base,/ });
   await row.click();
-  await expect(page.getByRole('button', { name: 'Use built-in' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Use built-in' })).toHaveCount(0); // one action: Download, until it's here
+  await expect(page.getByRole('button', { name: /^Download/ })).toHaveCount(1);
   await page.getByRole('button', { name: 'Download Base', exact: true }).click();
   await expect(row.getByText('Downloaded')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Use built-in' }).click();
