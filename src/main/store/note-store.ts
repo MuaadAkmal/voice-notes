@@ -129,7 +129,7 @@ export class NoteStore {
         .returning(noteColumns)
         .get();
       if (!updated) throw new Error('Note not found');
-      this.recordUpdate(id, { title });
+      this.recordUpdate(id, { title, updatedAt: updated.updatedAt });
       return updated;
     })();
   }
@@ -137,13 +137,14 @@ export class NoteStore {
   /** Unknown note ids are ignored. */
   setStarred(ids: string[], starred: boolean): void {
     this.sqlite.transaction(() => {
+      const updatedAt = this.now();
       const changed = this.db
         .update(notes)
-        .set({ starred, updatedAt: this.now() })
+        .set({ starred, updatedAt })
         .where(and(inArray(notes.id, ids), live))
         .returning({ id: notes.id })
         .all();
-      for (const { id } of changed) this.recordUpdate(id, { starred });
+      for (const { id } of changed) this.recordUpdate(id, { starred, updatedAt });
     })();
   }
 
@@ -157,7 +158,7 @@ export class NoteStore {
         .returning(noteColumns)
         .get();
       if (!updated) throw new Error('Note not found');
-      this.recordUpdate(id, { show });
+      this.recordUpdate(id, { show, updatedAt: updated.updatedAt });
       return updated;
     })();
   }
@@ -200,13 +201,14 @@ export class NoteStore {
   moveNotes(ids: string[], folderId: string | null): void {
     if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
     this.sqlite.transaction(() => {
+      const updatedAt = this.now();
       const changed = this.db
         .update(notes)
-        .set({ folderId, updatedAt: this.now() })
+        .set({ folderId, updatedAt })
         .where(and(inArray(notes.id, ids), live))
         .returning({ id: notes.id })
         .all();
-      for (const { id } of changed) this.recordUpdate(id, { folderId });
+      for (const { id } of changed) this.recordUpdate(id, { folderId, updatedAt });
     })();
   }
 

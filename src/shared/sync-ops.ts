@@ -14,9 +14,10 @@ export type FolderRow = Folder;
 export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId'] as const;
 export type SyncedKey = (typeof SYNCED_KEYS)[number];
 
-type NoteFields = Partial<Pick<NoteRow, 'title' | 'folderId' | 'starred' | 'show' | 'transcript' | 'transcriptLang' | 'transcribedAt'>>;
-type PageFields = Partial<Pick<PageRow, 'title' | 'folderId' | 'starred'>>;
-type FolderFields = Partial<Pick<FolderRow, 'name' | 'parentId'>>;
+// updatedAt travels with a change (the sender's clock; it only sorts lists, never orders changes).
+type NoteFields = Partial<Pick<NoteRow, 'title' | 'folderId' | 'starred' | 'show' | 'transcript' | 'transcriptLang' | 'transcribedAt' | 'updatedAt'>>;
+type PageFields = Partial<Pick<PageRow, 'title' | 'folderId' | 'starred' | 'updatedAt'>>;
+type FolderFields = Partial<Pick<FolderRow, 'name' | 'parentId' | 'updatedAt'>>;
 
 export type SyncOp =
   | { op: 'note.create'; id: string; row: NoteRow } // audio key: `${id}.webm`
@@ -24,9 +25,10 @@ export type SyncOp =
   | { op: 'note.delete'; id: string }
   | { op: 'page.create'; id: string; row: PageRow }
   | { op: 'page.update'; id: string; fields: PageFields }
-  | { op: 'page.setBody'; id: string; body: string }
-  | { op: 'page.append'; id: string; text: string; day: string } // day: local 'YYYY-MM-DD' it was added on
-  | { op: 'page.setTask'; id: string; line: number; lineText: string; checked: boolean }
+  // at: when the body changed on the sender (becomes updatedAt)
+  | { op: 'page.setBody'; id: string; body: string; at?: number }
+  | { op: 'page.append'; id: string; text: string; day: string; at?: number } // day: local 'YYYY-MM-DD' it was added on
+  | { op: 'page.setTask'; id: string; line: number; lineText: string; checked: boolean; at?: number }
   | { op: 'page.delete'; id: string }
   | { op: 'folder.create'; id: string; row: FolderRow }
   | { op: 'folder.update'; id: string; fields: FolderFields }
@@ -51,17 +53,19 @@ export function applyOp<T>(row: T | undefined, op: RowOp): T | undefined {
     case 'folder.update':
       return row && { ...row, ...op.fields };
     case 'page.setBody':
-      return row && { ...row, body: op.body };
+      return row && ({ ...row, body: op.body, ...stamp(op.at) } as T);
     case 'page.append': {
       const page = row as PageRow | undefined;
-      return page && ({ ...page, body: appendOnDay(page.body, op.text, op.day) } as T);
+      return page && ({ ...page, body: appendOnDay(page.body, op.text, op.day), ...stamp(op.at) } as T);
     }
     case 'page.setTask': {
       const page = row as PageRow | undefined;
-      return page && ({ ...page, body: setTaskByText(page.body, op.line, op.lineText, op.checked) } as T);
+      return page && ({ ...page, body: setTaskByText(page.body, op.line, op.lineText, op.checked), ...stamp(op.at) } as T);
     }
   }
 }
+
+const stamp = (at: number | undefined) => (at === undefined ? {} : { updatedAt: at });
 
 /** learn-log's append, under the heading of `day` rather than of today. */
 export function appendOnDay(body: string, text: string, day: string): string {

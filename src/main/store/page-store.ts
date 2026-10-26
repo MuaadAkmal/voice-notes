@@ -80,7 +80,7 @@ export class PageStore {
   rename(id: string, title: string): Page {
     return this.sqlite.transaction(() => {
       const page = this.update(id, { title });
-      this.record({ op: 'page.update', id, fields: { title } });
+      this.record({ op: 'page.update', id, fields: { title, updatedAt: page.updatedAt } });
       return page;
     })();
   }
@@ -88,7 +88,7 @@ export class PageStore {
   setBody(id: string, body: string): Page {
     return this.sqlite.transaction(() => {
       const page = this.update(id, { body });
-      this.record({ op: 'page.setBody', id, body });
+      this.record({ op: 'page.setBody', id, body, at: page.updatedAt });
       return page;
     })();
   }
@@ -101,7 +101,7 @@ export class PageStore {
       const now = this.now();
       const updated = this.update(id, { body: appendEntry(page.body, text, new Date(now)) });
       // Sent as an append, not a new body: an edit made meanwhile on another PC keeps it.
-      this.record({ op: 'page.append', id, text, day: localDay(now) });
+      this.record({ op: 'page.append', id, text, day: localDay(now), at: updated.updatedAt });
       return updated;
     })();
   }
@@ -115,7 +115,7 @@ export class PageStore {
       if (body === null) throw new Error('Not a task');
       const updated = this.update(id, { body });
       const lineText = taskText(page.body.split('\n')[line]);
-      this.record({ op: 'page.setTask', id, line, lineText, checked });
+      this.record({ op: 'page.setTask', id, line, lineText, checked, at: updated.updatedAt });
       return updated;
     })();
   }

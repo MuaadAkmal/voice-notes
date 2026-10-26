@@ -37,7 +37,7 @@ it('notes record create, update and delete', async () => {
     {
       op: 'note.update',
       id: n.id,
-      fields: { title: 'Hola', starred: true, show: 'Friends', folderId: f.id, transcript: 'hola', transcriptLang: 'es', transcribedAt: T0 },
+      fields: { title: 'Hola', updatedAt: T0, starred: true, show: 'Friends', folderId: f.id, transcript: 'hola', transcriptLang: 'es', transcribedAt: T0 },
     },
   ]);
   clear();
@@ -63,10 +63,10 @@ it('pages record create, title, body, append, task, move, star and delete', () =
   store.pages.move([p.id], f.id);
   store.pages.setStarred([p.id], true);
   expect(ops().filter((o) => o.op.startsWith('page.'))).toEqual([
-    { op: 'page.update', id: p.id, fields: { title: 'Shop' } },
-    { op: 'page.setBody', id: p.id, body: '- [ ] milk\n- [ ] eggs' },
-    { op: 'page.append', id: p.id, text: 'bread', day: localDay(T0) },
-    { op: 'page.setTask', id: p.id, line: 1, lineText: '- [ ] eggs', checked: true },
+    { op: 'page.update', id: p.id, fields: { title: 'Shop', updatedAt: T0 } },
+    { op: 'page.setBody', id: p.id, body: '- [ ] milk\n- [ ] eggs', at: T0 },
+    { op: 'page.append', id: p.id, text: 'bread', day: localDay(T0), at: T0 },
+    { op: 'page.setTask', id: p.id, line: 1, lineText: '- [ ] eggs', checked: true, at: T0 },
     { op: 'page.update', id: p.id, fields: { folderId: f.id, starred: true } },
   ]);
 });
@@ -94,7 +94,7 @@ it('deleting a folder records the moves of its contents, then the delete', async
   expect(ops()).toEqual([
     { op: 'note.update', id: n.id, fields: { folderId: parent.id } },
     { op: 'page.update', id: p.id, fields: { folderId: parent.id } },
-    { op: 'folder.update', id: sub.id, fields: { parentId: parent.id, name: 'Sub' } },
+    { op: 'folder.update', id: sub.id, fields: { parentId: parent.id, name: 'Sub', updatedAt: T0 } },
     { op: 'folder.delete', id: f.id },
   ]);
 });
@@ -109,7 +109,7 @@ it('folders record create, rename and move', () => {
   clear();
   store.folders.rename(a.id, 'A2');
   store.folders.move(a.id, b.id);
-  expect(ops()).toEqual([{ op: 'folder.update', id: a.id, fields: { name: 'A2', parentId: b.id } }]);
+  expect(ops()).toEqual([{ op: 'folder.update', id: a.id, fields: { name: 'A2', updatedAt: T0, parentId: b.id } }]);
 });
 
 it('records nothing while sync is off', async () => {

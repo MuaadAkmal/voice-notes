@@ -21,7 +21,7 @@ export class FolderStore {
     private readonly outbox: Outbox,
   ) {}
 
-  private recordUpdate(id: string, fields: Partial<Pick<Folder, 'name' | 'parentId'>>): void {
+  private recordUpdate(id: string, fields: Partial<Pick<Folder, 'name' | 'parentId' | 'updatedAt'>>): void {
     this.outbox.record({ op: 'folder.update', id, fields }, this.outbox.rowVersion('folder', id));
   }
 
@@ -51,8 +51,9 @@ export class FolderStore {
     const clean = cleanName(name);
     this.assertFree(clean, folder.parentId, id);
     return this.sqlite.transaction(() => {
-      this.recordUpdate(id, { name: clean });
-      return this.update(id, { name: clean });
+      const folder = this.update(id, { name: clean });
+      this.recordUpdate(id, { name: clean, updatedAt: folder.updatedAt });
+      return folder;
     })();
   }
 
@@ -64,8 +65,9 @@ export class FolderStore {
     }
     this.assertFree(folder.name, parentId, id);
     return this.sqlite.transaction(() => {
-      this.recordUpdate(id, { parentId });
-      return this.update(id, { parentId });
+      const moved = this.update(id, { parentId });
+      this.recordUpdate(id, { parentId, updatedAt: moved.updatedAt });
+      return moved;
     })();
   }
 
@@ -90,8 +92,8 @@ export class FolderStore {
       for (const p of movedPages) this.outbox.record({ op: 'page.update', id: p.id, fields: { folderId } }, this.outbox.rowVersion('page', p.id));
       for (const child of this.list().filter((f) => f.parentId === id)) {
         const name = this.freeName(child.name, folder.parentId, child.id);
-        this.update(child.id, { parentId: folder.parentId, name });
-        this.recordUpdate(child.id, { parentId: folder.parentId, name });
+        const moved = this.update(child.id, { parentId: folder.parentId, name });
+        this.recordUpdate(child.id, { parentId: folder.parentId, name, updatedAt: moved.updatedAt });
       }
       this.db.update(folders).set({ deletedAt: this.now() }).where(eq(folders.id, id)).run(); // tombstone
       this.outbox.record({ op: 'folder.delete', id }, this.outbox.rowVersion('folder', id));
