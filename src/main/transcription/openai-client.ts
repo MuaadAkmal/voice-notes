@@ -12,6 +12,7 @@ export type TranscribeRequest = {
   audio: Uint8Array;
   filename: string;
   timeoutMs?: number;
+  signal?: AbortSignal; // cancels the request (e.g. a dictation cancelled with Esc)
 };
 
 export type TranscribeResult = { text: string; language: string | null };
@@ -44,7 +45,9 @@ export async function transcribe(
       method: 'POST',
       headers: req.apiKey ? { Authorization: `Bearer ${req.apiKey}` } : {},
       body: form,
-      signal: AbortSignal.timeout(req.timeoutMs ?? TIMEOUT_MS),
+      signal: req.signal
+        ? AbortSignal.any([req.signal, AbortSignal.timeout(req.timeoutMs ?? TIMEOUT_MS)])
+        : AbortSignal.timeout(req.timeoutMs ?? TIMEOUT_MS),
     });
   };
   let res = await attempt('verbose_json');
