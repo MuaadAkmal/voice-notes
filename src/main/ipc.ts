@@ -48,6 +48,7 @@ import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
+import type { AccountService } from './account/account';
 import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
@@ -173,6 +174,7 @@ type DashboardDeps = {
   secrets: Secrets;
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
+  account: AccountService;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -336,6 +338,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     }
   });
   handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
+  handle(Ch.AccountGet, none, () => d.account.current());
+  handle(Ch.AccountSignIn, none, () => d.account.signIn());
+  handle(Ch.AccountCancel, none, () => d.account.cancel());
+  handle(Ch.AccountSignOut, none, () => d.account.signOut());
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

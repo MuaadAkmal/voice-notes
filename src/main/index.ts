@@ -1,4 +1,5 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, screen, session } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, screen, session, shell } from 'electron';
+import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +34,9 @@ import { safeStorageCipher, Secrets } from './transcription/secrets';
 import { TranscriptionService } from './transcription/service';
 import { WavBridge } from './transcription/wav-bridge';
 import { createTray } from './tray';
+import { AccountService } from './account/account';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
+import { SessionStore } from './account/session-store';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -444,6 +448,23 @@ async function boot(): Promise<void> {
   }
 
   const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
+
+  // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
+  const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { flowType: 'pkce', storage: sessionStore, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  });
+  const account = new AccountService({
+    auth: supabase.auth,
+    store: sessionStore,
+    openExternal: (url) => shell.openExternal(url),
+    fetchImage: fetchAvatar,
+    focusApp: showDashboard,
+    onChange: (info) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
+    },
+  });
+  if (process.env.VOICE_NOTES_TEST !== '1') account.init().catch((err) => log.warn('[account] init failed', err));
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,
@@ -478,6 +499,7 @@ async function boot(): Promise<void> {
     secrets,
     wavBridge,
     localWhisper,
+    account,
   });
 
   app.on('before-quit', () => {
@@ -505,6 +527,7 @@ async function boot(): Promise<void> {
       dictation,
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine
+      account, // setTestSession(info): signed in or out without Google
     };
   }
 
@@ -521,4 +544,20 @@ if (!app.requestSingleInstanceLock()) {
     log.error('[boot] failed', err);
     app.quit();
   });
+}
+
+const AVATAR_MAX_BYTES = 1024 * 1024;
+
+/** The Google photo as a data: URL (the dashboard's CSP stays closed to the web), or null. */
+async function fetchAvatar(url: string): Promise<string | null> {
+  try {
+    const res = await net.fetch(url, { signal: AbortSignal.timeout(5000) });
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !/^image\/(png|jpeg|webp|gif)/.test(type)) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > AVATAR_MAX_BYTES) return null;
+    return `data:${type.split(';')[0]};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }

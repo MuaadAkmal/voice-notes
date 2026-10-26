@@ -23,6 +23,7 @@ export type Hooks = {
   transcription: { idle(): Promise<void> };
   dictationGesture: { toggle(): void };
   pasted: string[];
+  account: { setTestSession(info: unknown): void };
 };
 
 export type TestApp = {

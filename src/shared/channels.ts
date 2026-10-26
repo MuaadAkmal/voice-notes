@@ -187,6 +187,10 @@ export const Ch = {
   LocalCancel: 'local:cancel',
   LocalRemove: 'local:remove',
   LocalTest: 'local:test',
+  AccountGet: 'account:get',
+  AccountSignIn: 'account:sign-in',
+  AccountCancel: 'account:cancel',
+  AccountSignOut: 'account:sign-out',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
@@ -194,6 +198,7 @@ export const Ch = {
   FoldersChanged: 'folders:changed',
   DictationsChanged: 'dictations:changed',
   LocalChanged: 'local:changed', // LocalStatus (also download progress)
+  AccountChanged: 'account:changed', // AccountInfo
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
