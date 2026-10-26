@@ -1,5 +1,6 @@
 import type { Settings, SyncStatus, SyncView } from '../../shared/channels';
 import type { PullChanges } from './apply';
+import { AccountChanged } from './engine';
 import { AuthExpired, NotSignedIn, Offline, Rejected, ServerError } from './http-server';
 
 // When this PC syncs, and what the Account page says about it. The engine does the syncing; this
@@ -42,6 +43,8 @@ export class SyncController {
   private tick: ReturnType<typeof setInterval> | null = null;
   private failures = 0;
   private running: Promise<void> | null = null;
+  /** A sync was asked for while one ran (an edit, Turn on, Sync now): run again right after. */
+  private rerun = false;
 
   constructor(private readonly d: Deps) {}
 
@@ -148,7 +151,17 @@ export class SyncController {
       clearTimeout(this.retry);
       this.retry = null;
     }
-    this.running ??= this.run().finally(() => (this.running = null));
+    if (this.running) {
+      this.rerun = true;
+      return;
+    }
+    this.running = this.run().finally(() => {
+      this.running = null;
+      if (this.rerun) {
+        this.rerun = false;
+        this.trigger();
+      }
+    });
   }
 
   private async run(retriedAuth = false): Promise<void> {
@@ -161,6 +174,11 @@ export class SyncController {
       else this.refresh();
       if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
     } catch (err) {
+      if (err instanceof AccountChanged) {
+        this.status = { mode: 'idle', lastSyncedAt: this.lastSyncedAt };
+        this.refresh(); // the next run (already asked for by Turn on) syncs the new account
+        return;
+      }
       if (err instanceof AuthExpired && !retriedAuth) {
         await this.d.refreshSession().catch(() => undefined);
         return this.run(true);

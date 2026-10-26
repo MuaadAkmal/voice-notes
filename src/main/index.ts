@@ -491,7 +491,12 @@ async function boot(): Promise<void> {
     new HttpSyncServer({
       baseUrl,
       apiKey: SUPABASE_PUBLISHABLE_KEY,
-      getToken: async () => (testToken ? testToken() : ((await supabase.auth.getSession()).data.session?.access_token ?? null)),
+      // A token only for the account this PC syncs with: never another account's, even mid-switch.
+      getToken: async () => {
+        if (testToken) return testToken();
+        const session = (await supabase.auth.getSession()).data.session;
+        return session && session.user.id === store.sync.state.accountId() ? session.access_token : null;
+      },
       fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
     });
   let syncServer = makeSyncServer(SUPABASE_URL);

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../src/main/settings';
 import { SyncController, type SyncView } from '../../src/main/sync/controller';
 import { AuthExpired, NotSignedIn, Offline, Rejected } from '../../src/main/sync/http-server';
+import { AccountChanged } from '../../src/main/sync/engine';
 
 const NONE = { notes: false, pages: false, folders: false, prefs: false };
 
@@ -234,6 +235,27 @@ it('Not now is remembered for that account only', () => {
   user = 'u2';
   ctl.onAccountChanged();
   expect(ctl.view().needsPrompt).toBe(true);
+});
+
+it('a sync asked for while one is running happens right after it', async () => {
+  let finish!: () => void;
+  script = [() => new Promise((r) => (finish = () => r(NONE)))];
+  ctl.turnOn('u1');
+  await flush();
+  expect(engine.sync).toHaveBeenCalledTimes(1);
+  ctl.syncNow(); // e.g. Turn on for a new account, or an edit saved during the run
+  await flush();
+  expect(engine.sync).toHaveBeenCalledTimes(1);
+  finish();
+  await flush();
+  expect(engine.sync).toHaveBeenCalledTimes(2);
+});
+
+it('a run cut short by an account change is not an error', async () => {
+  script = [async () => Promise.reject(new AccountChanged())];
+  ctl.turnOn('u1');
+  await flush();
+  expect(last().status.mode).toBe('idle');
 });
 
 it('what a pull changed is passed on', async () => {
