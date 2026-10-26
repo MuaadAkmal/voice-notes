@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   homeWidgets: [],
   transcription: DEFAULT_TRANSCRIPTION,
   transcribeLanguage: 'auto',
+  laterPageId: null,
 };
 
 function readRaw(file: string): Record<string, unknown> {

@@ -55,7 +55,7 @@ export type Page = {
 export type HomeWidget = (
   | { id: string; type: 'quick-add'; pageId: string; label: string }
   | { id: string; type: 'page'; pageId: string }
-) & { w?: number; h?: number };
+) & { w?: number; h?: number; locked?: true }; // locked: the built-in Review later card, never removed
 
 export type Settings = {
   hotkey: number[]; // uiohook keycodes
@@ -73,6 +73,7 @@ export type Settings = {
   homeWidgets: HomeWidget[]; // Home page cards, in order (at most 24)
   transcription: TranscriptionSettings;
   transcribeLanguage: TranscribeLanguage; // last used in the Transcribe menu
+  laterPageId: string | null; // the built-in Review later page; created at boot
 };
 
 /** Overlay window top-left, relative to that display's work area. */

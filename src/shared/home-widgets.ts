@@ -2,14 +2,25 @@ import type { HomeWidget } from './channels';
 
 export const MAX_HOME_WIDGETS = 24;
 
+/** The locked Review later card doesn't count against the cap. */
 export const canAdd = (ws: HomeWidget[]): boolean =>
-  ws.length < MAX_HOME_WIDGETS;
+  ws.filter((w) => !w.locked).length < MAX_HOME_WIDGETS;
 
 export const addWidget = (ws: HomeWidget[], w: HomeWidget): HomeWidget[] =>
   canAdd(ws) ? [...ws, w] : ws;
 
 export const removeWidget = (ws: HomeWidget[], id: string): HomeWidget[] =>
-  ws.filter((w) => w.id !== id);
+  ws.filter((w) => w.id !== id || w.locked);
+
+/** Puts the locked page widget for `pageId` first unless it's already there (even on a full Home). */
+export const ensureLocked = (
+  ws: HomeWidget[],
+  pageId: string,
+  newId: string,
+): HomeWidget[] =>
+  ws.some((w) => w.locked && w.pageId === pageId)
+    ? ws
+    : [{ id: newId, type: 'page', pageId, locked: true }, ...ws];
 
 /** Sets a quick-add widget's label; page widgets have none. */
 export const renameWidget = (

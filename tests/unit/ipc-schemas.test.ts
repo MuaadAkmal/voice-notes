@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SettingsPatchSchema,
   AppendEntrySchema,
   CreatePageSchema,
   ExternalUrlSchema,
@@ -107,5 +108,17 @@ describe('transcription IPC schemas', () => {
     expect(TranscriptionTestSchema.safeParse({ baseUrl: 'https://vm/v1/', model: 'm' }).success).toBe(true);
     expect(TranscriptionTestSchema.safeParse({ baseUrl: 'ftp://vm', model: 'm' }).success).toBe(false);
     expect(TranscriptionTestSchema.safeParse({ baseUrl: 'https://vm/v1', model: ' ' }).success).toBe(false);
+  });
+});
+
+describe('review-later settings schemas', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  it('accepts laterPageId and a locked page widget', () => {
+    expect(SettingsPatchSchema.safeParse({ laterPageId: id }).success).toBe(true);
+    expect(SettingsPatchSchema.safeParse({ laterPageId: null }).success).toBe(true);
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'page', pageId: id, locked: true }] }).success).toBe(true);
+  });
+  it('rejects locked: false', () => {
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'page', pageId: id, locked: false }] }).success).toBe(false);
   });
 });

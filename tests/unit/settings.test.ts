@@ -79,7 +79,7 @@ it('homeWidgets defaults to [] and falls back to it when invalid', () => {
     [{ id: 'nope', type: 'page', pageId }],
     [{ id, type: 'quick-add', pageId, label: 'x'.repeat(61) }],
     [{ id, type: 'chart', pageId }],
-    Array.from({ length: 25 }, () => ({ id, type: 'page', pageId })),
+    Array.from({ length: 26 }, () => ({ id, type: 'page', pageId })), // 24 + the locked card is the most
   ];
   for (const homeWidgets of bad) {
     fs.writeFileSync(file, JSON.stringify({ homeWidgets }));
@@ -114,4 +114,23 @@ it.each([
   const s = loadSettings(file);
   expect(s.transcription).toEqual(DEFAULT_SETTINGS.transcription);
   expect(s.transcribeLanguage).toBe('auto');
+});
+
+const uuid = (n: number) => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
+
+it('laterPageId defaults to null and ignores an invalid value', () => {
+  expect(DEFAULT_SETTINGS.laterPageId).toBeNull();
+  fs.writeFileSync(file, JSON.stringify({ laterPageId: 'not-a-uuid' }));
+  expect(loadSettings(file).laterPageId).toBeNull();
+  fs.writeFileSync(file, JSON.stringify({ laterPageId: uuid(1) }));
+  expect(loadSettings(file).laterPageId).toBe(uuid(1));
+});
+
+it('keeps 24 widgets plus the locked one', () => {
+  const widgets = [
+    { id: uuid(99), type: 'page', pageId: uuid(98), locked: true },
+    ...Array.from({ length: 24 }, (_, i) => ({ id: uuid(i), type: 'page', pageId: uuid(50 + i) })),
+  ];
+  fs.writeFileSync(file, JSON.stringify({ homeWidgets: widgets }));
+  expect(loadSettings(file).homeWidgets).toEqual(widgets);
 });

@@ -19,7 +19,7 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
     w: Span,
     h: Span,
   }),
-  z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid(), w: Span, h: Span }),
+  z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid(), w: Span, h: Span, locked: z.literal(true).optional() }),
 ]);
 
 const TranscriptionSchema = z
@@ -47,9 +47,10 @@ export const SettingsFieldSchemas = {
   filmMode: z.boolean(),
   rewindSeconds: z.union(REWIND_SECONDS.map((n) => z.literal(n))),
   autoPause: z.boolean(),
-  homeWidgets: z.array(HomeWidgetSchema).max(MAX_HOME_WIDGETS),
+  homeWidgets: z.array(HomeWidgetSchema).max(MAX_HOME_WIDGETS + 1), // + the locked Review later card
   transcription: TranscriptionSchema,
   transcribeLanguage: z.enum(LANGUAGE_CODES),
+  laterPageId: z.uuid().nullable(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

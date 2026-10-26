@@ -4,6 +4,7 @@ import {
   MAX_HOME_WIDGETS,
   addWidget,
   canAdd,
+  ensureLocked,
   isPinned,
   keepExisting,
   moveWidget,
@@ -146,5 +147,34 @@ describe('widget sizes', () => {
     expect(spanFor(330, 100, 12)).toBe(3);
     expect(spanFor(10, 100, 12)).toBe(1);
     expect(spanFor(2000, 100, 12)).toBe(4);
+  });
+});
+
+describe('locked widgets', () => {
+  const locked = (id: string, pageId: string): HomeWidget => ({ id, type: 'page', pageId, locked: true });
+
+  it('removeWidget keeps a locked widget', () => {
+    const ws = [locked('l', p1), page('a', p2)];
+    expect(removeWidget(ws, 'l')).toEqual(ws);
+    expect(removeWidget(ws, 'a')).toEqual([locked('l', p1)]);
+  });
+
+  it('ensureLocked prepends one locked page widget, once', () => {
+    expect(ensureLocked([], p1, 'w')).toEqual([locked('w', p1)]);
+    const ws = [page('a', p2), locked('l', p1)];
+    expect(ensureLocked(ws, p1, 'w')).toBe(ws);
+  });
+
+  it('ensureLocked adds even to a full Home', () => {
+    const ws = ensureLocked(full(), p1, 'w');
+    expect(ws).toHaveLength(MAX_HOME_WIDGETS + 1);
+    expect(ws[0]).toEqual(locked('w', p1));
+  });
+
+  it('canAdd and addWidget count only unlocked widgets', () => {
+    const roomy = [locked('l', p1), ...full().slice(1)];
+    expect(canAdd(roomy)).toBe(true);
+    expect(addWidget(roomy, page('x', p2))).toHaveLength(MAX_HOME_WIDGETS + 1);
+    expect(canAdd([locked('l', p1), ...full()])).toBe(false);
   });
 });
