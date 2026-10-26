@@ -1,35 +1,15 @@
 import type { HomeWidget, Settings } from '../../shared/channels';
 import { MAX_HOME_WIDGETS } from '../../shared/home-widgets';
-import { type FolderRow, type NoteRow, type PageRow, SYNCED_KEYS, type SyncedKey, type SyncOp } from '../../shared/sync-ops';
+import { type FolderRow, SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import { type NoteStore, toRow } from '../store/note-store';
 import { applyPull } from './apply';
 
 // The contract between a PC and the sync server. The reference server in tests/unit/sync implements
 // it in memory; piece C implements it on Supabase.
 
-export type PushRequest = {
-  clientId: string;
-  deviceName: string;
-  mutations: { id: string; op: SyncOp; baseVersion: number }[];
-};
-export type PushResponse = { acked: { id: string; version: number }[] };
+import type { PullResponse, SyncServer } from '../../shared/sync/protocol';
 
-export type ServerRow =
-  | { entity: 'note'; id: string; version: number; deleted: boolean; data: NoteRow | null }
-  | { entity: 'page'; id: string; version: number; deleted: boolean; data: PageRow | null }
-  | { entity: 'folder'; id: string; version: number; deleted: boolean; data: FolderRow | null };
-
-export type PullResponse = {
-  cursor: number;
-  hasMore: boolean;
-  rows: ServerRow[];
-  prefs: { key: SyncedKey; value: unknown; version: number }[];
-};
-
-export type SyncServer = {
-  push(req: PushRequest): Promise<PushResponse>;
-  pull(req: { clientId: string; cursor: number }): Promise<PullResponse>;
-};
+export type { PullResponse, PushRequest, PushResponse, ServerRow, SyncServer } from '../../shared/sync/protocol';
 
 /** How the engine reaches settings.json (main's updateSettings; records synced keys unless record: false). */
 export type SettingsPort = {
