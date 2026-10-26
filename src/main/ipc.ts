@@ -39,6 +39,7 @@ import { pruneWidgets } from '../shared/home-widgets';
 import type { HotkeyService } from './hotkey/service';
 import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
+import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
@@ -46,6 +47,7 @@ import type { WavBridge } from './transcription/wav-bridge';
 
 type OverlayDeps = {
   overlay: BrowserWindow;
+  overlayMouse: OverlayMouse; // hover and drags share the window's click-through flag
   gesture: HotkeyGesture;
   controller: RecorderController;
   onDevices: (devices: AudioDevice[]) => void;
@@ -110,7 +112,7 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(
     Ch.OverlayPointer,
     from(overlay, PointerSchema, ({ over }) => {
-      overlay.setIgnoreMouseEvents(!over, { forward: true });
+      deps.overlayMouse.setHover(over);
       // Hovering a "Saved" pill keeps it up long enough to click "Add title".
       if (over) controller.pauseFlash();
       else controller.resumeFlash();

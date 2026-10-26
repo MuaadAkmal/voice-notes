@@ -1,15 +1,18 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, session } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, screen, session } from 'electron';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
 import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { acceptsDrops } from '../shared/later';
 import { ensureLocked, keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
+import { DragWatch } from './drop/drag-watch';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
 import { ensureLaterPage } from './later';
+import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
@@ -108,6 +111,15 @@ async function boot(): Promise<void> {
   };
   const idleState = (): OverlayState =>
     settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
+  // The last state sent to the pill: drops are only taken while it is visibly idle or showing "Saved".
+  let overlayState = idleState();
+  const setOverlayState = (s: OverlayState) => {
+    overlayState = s;
+    send(Ch.OverlayState, s);
+  };
+  const overlayMouse = new OverlayMouse((ignore) => {
+    if (!overlay.isDestroyed()) overlay.setIgnoreMouseEvents(ignore, { forward: true });
+  });
 
   // Which window the note was recorded over. Replaceable under test (there's no real foreground window).
   let foreground = foregroundWindow;
@@ -151,7 +163,7 @@ async function boot(): Promise<void> {
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
       rewind: (seconds) => send(Ch.FilmSave, { seconds }),
-      setState: (s) => send(Ch.OverlayState, s),
+      setState: setOverlayState,
     },
     store,
     {
@@ -182,7 +194,7 @@ async function boot(): Promise<void> {
     controller.handleGesture(e);
   });
   overlay.webContents.on('did-finish-load', () => {
-    send(Ch.OverlayState, idleState());
+    setOverlayState(idleState());
     send(Ch.FilmMode, { on: settings.filmMode }); // a reloaded overlay restarts the buffer
   });
   overlay.webContents.on('render-process-gone', (_e, details) => {
@@ -193,6 +205,7 @@ async function boot(): Promise<void> {
   let devices: AudioDevice[] = [];
   registerOverlayIpc({
     overlay,
+    overlayMouse,
     gesture,
     controller,
     onDevices: (d) => (devices = d),
@@ -247,6 +260,14 @@ async function boot(): Promise<void> {
   hotkey.setRewindCombo(REWIND_HOTKEY);
   hotkey.onRewind(rewind);
   hotkey.setPaused(settings.hotkeyPaused);
+  const dragWatch = new DragWatch({
+    accepting: () => acceptsDrops(overlayState),
+    bounds: () => overlay.getBounds(),
+    toDip: (p) => screen.screenToDipPoint(p),
+    setDrag: (on) => overlayMouse.setDrag(on),
+    later: (fn, ms) => setTimeout(fn, ms),
+  });
+  hotkey.onMouse((e) => dragWatch.onInput(e));
   // Under test the gesture is driven through __voiceNotes; a global hook would also react to whatever
   // the person at the keyboard is doing and scramble the run.
   if (process.env.VOICE_NOTES_TEST !== '1') hotkey.start();

@@ -112,3 +112,19 @@ describe('rewind combo (Alt+Win+Shift)', () => {
     expect(calls).toEqual([]);
   });
 });
+
+it('forwards mouse press, release and move events from the hook, not keys', () => {
+  const mouseHook = Object.assign(new EventEmitter(), { start: () => undefined, stop: () => undefined });
+  const service = new HotkeyService({} as HotkeyGesture, mouseHook);
+  const seen: unknown[] = [];
+  service.onMouse((e) => seen.push(e));
+  service.start();
+  mouseHook.emit('input', { type: 9, x: 1, y: 2 });
+  mouseHook.emit('input', { type: 7, x: 3, y: 4 });
+  mouseHook.emit('input', { type: 4, keycode: Alt }); // a key press
+  mouseHook.emit('input', { type: 11, x: 0, y: 0 }); // wheel
+  expect(seen).toEqual([
+    { type: 9, x: 1, y: 2 },
+    { type: 7, x: 3, y: 4 },
+  ]);
+});

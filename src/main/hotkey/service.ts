@@ -1,4 +1,5 @@
 import { uIOhook, UiohookKey } from 'uiohook-napi';
+import type { MouseInput } from '../drop/drag-watch';
 import type { HotkeyGesture } from './gesture';
 
 // Right-hand modifiers count as their left-hand twin, so "Ctrl" matches either Ctrl key.
@@ -22,10 +23,13 @@ const CAPTURE_TIMEOUT_MS = 10_000;
 const MEDIA_KEYS = new Set([0xe022, 0xe024, 0xe010, 0xe019]);
 
 const canonical = (code: number) => CANONICAL[code] ?? code;
+// uiohook mouse pressed / released / moved (drags arrive as moved).
+const MOUSE_TYPES = new Set([7, 8, 9]);
 
 type KeyEvent = { keycode: number; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean };
 export type KeyHook = {
   on(event: 'keydown' | 'keyup', listener: (e: KeyEvent) => void): unknown;
+  on(event: 'input', listener: (e: { type: number; x?: number; y?: number }) => void): unknown;
   start(): void;
   stop(): void;
 };
@@ -54,6 +58,7 @@ export class HotkeyService {
   private rewindListener: (() => void) | null = null;
   /** Set when the rewind combo fires; holds off both combos until every key of them is released. */
   private rewindLatch = false;
+  private mouseListener: ((e: MouseInput) => void) | null = null;
 
   constructor(
     private readonly gesture: HotkeyGesture,
@@ -63,7 +68,15 @@ export class HotkeyService {
   start(): void {
     this.hook.on('keydown', this.onKeyDown);
     this.hook.on('keyup', this.onKeyUp);
+    this.hook.on('input', (e) => {
+      if (this.mouseListener && MOUSE_TYPES.has(e.type)) this.mouseListener({ type: e.type, x: e.x ?? 0, y: e.y ?? 0 });
+    });
     this.hook.start();
+  }
+
+  /** Global mouse presses, releases and moves, for spotting a drag over the pill. Register before start(). */
+  onMouse(listener: (e: MouseInput) => void): void {
+    this.mouseListener = listener;
   }
 
   stop(): void {
