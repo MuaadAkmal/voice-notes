@@ -21,6 +21,8 @@ export type Hooks = {
   pagesChanged(): void;
   openedExternal: string[];
   transcription: { idle(): Promise<void> };
+  dictationGesture: { toggle(): void };
+  pasted: string[];
 };
 
 export type TestApp = {

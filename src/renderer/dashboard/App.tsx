@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Folder, Note, Page } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import { NO_FILTER, type NoteFilter } from '../../shared/search';
+import { DictationPage } from './DictationPage';
 import { HomePage } from './HomePage';
 import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
@@ -14,6 +15,7 @@ import { ConfirmProvider } from './ConfirmDialog';
 
 export type View =
   | { kind: 'home' }
+  | { kind: 'dictation' }
   | { kind: 'inbox' }
   | { kind: 'all' }
   | { kind: 'starred' }
@@ -38,7 +40,7 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -67,7 +69,8 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription') setBackTo(view);
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation')
+      setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
   };
@@ -107,6 +110,8 @@ export function App() {
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'home' ? (
               <HomePage pages={pages} onOpenPage={openPage} />
+            ) : view.kind === 'dictation' ? (
+              <DictationPage />
             ) : view.kind === 'settings' ? (
               <SettingsPage />
             ) : view.kind === 'transcription' ? (

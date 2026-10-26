@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   type AudioDevice,
   Ch,
+  type Dictation,
   type Folder,
   type KeyInfo,
   MAX_BATCH,
@@ -96,6 +97,10 @@ const dashboardApi = {
   sendWav: (reply: WavReply): Promise<void> => ipcRenderer.invoke(Ch.TranscriptionWav, reply),
   onTranscriptionStatus: (cb: (status: StatusMap) => void) => subscribeWith(Ch.TranscriptionStatus, cb),
   onNeedWav: (cb: (req: WavRequest) => void) => subscribeWith(Ch.TranscriptionNeedWav, cb),
+  listDictations: (): Promise<Dictation[]> => ipcRenderer.invoke(Ch.DictationsList),
+  copyDictation: (id: string): Promise<void> => ipcRenderer.invoke(Ch.DictationsCopy, { id }),
+  clearDictations: (): Promise<void> => ipcRenderer.invoke(Ch.DictationsClear),
+  onDictationsChanged: (cb: () => void) => subscribe(Ch.DictationsChanged, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),
   onFoldersChanged: (cb: () => void) => subscribe(Ch.FoldersChanged, cb),
