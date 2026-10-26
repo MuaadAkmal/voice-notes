@@ -283,6 +283,26 @@ it('transcribes through the built-in engine and releases it after success and fa
   expect(failing.local.release).toHaveBeenCalledTimes(1);
 });
 
+it('gives a long note on the built-in engine time in proportion to its length', async () => {
+  const thirtyMin = 30 * 60_000;
+  const t = setup({ store: { ...setup().deps.store, get: () => note({ durationMs: thirtyMin }) } });
+  t.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  t.service.enqueue([ID], 'auto');
+  await t.service.idle();
+  expect(t.requests[0].timeoutMs).toBe(4 * thirtyMin);
+
+  const short = setup();
+  short.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  short.service.enqueue([ID], 'auto');
+  await short.service.idle();
+  expect(short.requests[0].timeoutMs).toBe(10 * 60_000);
+
+  const server = setup({ store: { ...setup().deps.store, get: () => note({ durationMs: thirtyMin }) } });
+  server.service.enqueue([ID], 'auto');
+  await server.service.idle();
+  expect(server.requests[0].timeoutMs).toBeUndefined();
+});
+
 it('tests whatever provider is in use', async () => {
   const t = setup();
   t.setSettings(serverSettings({ provider: 'local', localModel: 'tiny' }));

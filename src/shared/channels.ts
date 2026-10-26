@@ -211,6 +211,7 @@ export type LocalStatus = {
   recommended: ModelId;
   diskBytes: number;
   job: { modelId: ModelId; phase: 'engine' | 'model'; received: number; total: number } | null;
+  runtimeMissing: boolean; // the Microsoft Visual C++ runtime the engine needs isn't installed
 };
 
 export type TestResult = { ok: true; ms: number; language: string | null } | { ok: false; error: string };

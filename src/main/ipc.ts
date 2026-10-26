@@ -203,7 +203,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => {
     // The built-in provider only with a downloaded model: anything else would fail every job.
     const t = patch.transcription;
-    if (t?.provider === 'local' && !(t.localModel && d.localWhisper.status().models[t.localModel])) return d.getSettings();
+    if (t?.provider === 'local') {
+      const st = d.localWhisper.status();
+      if (!(st.engine && t.localModel && st.models[t.localModel])) return d.getSettings();
+    }
     return d.updateSettings(patch);
   });
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
@@ -321,11 +324,16 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.LocalStatus, none, () => d.localWhisper.status());
   handle(Ch.LocalInstall, LocalInstallSchema, ({ modelId }) => d.localWhisper.install(modelId));
   handle(Ch.LocalCancel, none, () => d.localWhisper.cancel());
-  handle(Ch.LocalRemove, LocalRemoveSchema, ({ modelId, engineToo }) => {
-    d.localWhisper.remove(modelId, engineToo);
-    const t = d.getSettings().transcription;
-    if (t.provider === 'local' && (engineToo || t.localModel === modelId))
-      d.updateSettings({ transcription: { ...t, provider: null } });
+  handle(Ch.LocalRemove, LocalRemoveSchema, async ({ modelId, engineToo }) => {
+    try {
+      await d.localWhisper.remove(modelId, engineToo);
+    } finally {
+      // Even a removal that failed half-way may have taken the active model's files.
+      const t = d.getSettings().transcription;
+      const st = d.localWhisper.status();
+      if (t.provider === 'local' && !(st.engine && t.localModel && st.models[t.localModel]))
+        d.updateSettings({ transcription: { ...t, provider: null } });
+    }
   });
   handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
   const dictations = d.store.dictations;

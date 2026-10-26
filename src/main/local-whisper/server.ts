@@ -5,6 +5,8 @@ export type ChildLike = {
   pid?: number;
   kill(): void;
   on(ev: 'exit', cb: (code: number | null) => void): void;
+  /** Node reports a launch failure (missing or blocked exe) here, usually with no 'exit'. */
+  on(ev: 'error', cb: (err: Error) => void): void;
   stderr?: { on(ev: 'data', cb: (b: Buffer) => void): void } | null;
 };
 
@@ -36,6 +38,8 @@ export class EngineServer {
   private model: string | null = null;
   private port = 0;
   private starting: Promise<string> | null = null;
+  private gen = 0; // bumped by every new start and by stop(): an older start that wakes up gives up
+  private readonly gone = new WeakMap<ChildLike, Promise<void>>(); // resolves when that process has exited
   private busy = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly idleMs: number;
@@ -80,7 +84,7 @@ export class EngineServer {
     this.busy = Math.max(0, this.busy - 1);
     if (this.busy === 0 && this.child) {
       this.clearIdle();
-      this.idleTimer = setTimeout(() => this.kill('idle'), this.idleMs);
+      this.idleTimer = setTimeout(() => void this.kill('idle'), this.idleMs);
     }
   }
 
@@ -92,9 +96,11 @@ export class EngineServer {
     );
   }
 
-  stop(): void {
+  /** Resolves once the engine has exited (Windows keeps its files locked until then), or after 3 s. */
+  stop(): Promise<void> {
+    this.gen++;
     this.clearIdle();
-    this.kill('quit');
+    return this.kill('quit');
   }
 
   /** An engine from a run that crashed is still holding its RAM: kill it, but only if the pid is still whisper-server. */
@@ -123,17 +129,18 @@ export class EngineServer {
   private start(exe: string, model: string): Promise<string> {
     if (this.starting && this.model === model) return this.starting;
     if (this.child && !this.starting && this.model === model) return Promise.resolve(this.url());
-    if (this.child) this.kill('model switch');
+    if (this.child) void this.kill('model switch');
     this.model = model;
-    const starting = this.spawnAndWait(exe, model).finally(() => {
+    const starting = this.spawnAndWait(exe, model, ++this.gen).finally(() => {
       if (this.starting === starting) this.starting = null;
     });
     this.starting = starting;
     return starting;
   }
 
-  private async spawnAndWait(exe: string, model: string): Promise<string> {
+  private async spawnAndWait(exe: string, model: string, gen: number): Promise<string> {
     const port = await this.d.freePort();
+    if (gen !== this.gen) throw new Error(FAILED); // replaced or stopped while waiting: never spawn
     const args = [
       '-m', model,
       '--host', '127.0.0.1',
@@ -149,19 +156,25 @@ export class EngineServer {
     let exited = false;
     let onExit: () => void = () => undefined;
     const exitedP = new Promise<string>((r) => (onExit = () => r('')));
+    this.gone.set(child, exitedP.then(() => undefined));
     let lastErr = '';
     child.stderr?.on('data', (b) => {
       const line = b.toString().trim().split(/\r?\n/).pop();
       if (line) lastErr = line;
     });
-    child.on('exit', (code) => {
+    const ended = (why: unknown) => {
       exited = true;
       onExit();
       if (this.child !== child) return; // already replaced or killed on purpose
-      this.log('[local-whisper] engine exited', code, lastErr);
+      this.log('[local-whisper] engine exited', why, lastErr);
       this.child = null;
       this.clearIdle();
       fs.rmSync(this.d.pidFile, { force: true });
+    };
+    child.on('exit', (code) => ended(code));
+    child.on('error', (err) => {
+      lastErr = err.message;
+      ended('error');
     });
     if (child.pid) fs.writeFileSync(this.d.pidFile, String(child.pid));
 
@@ -184,13 +197,14 @@ export class EngineServer {
       await new Promise((r) => setTimeout(r, this.pollMs));
     }
     this.log('[local-whisper] start failed', lastErr);
-    if (this.child === child) this.kill('start failed');
+    if (this.child === child) void this.kill('start failed');
+    else if (!exited) child.kill(); // replaced by a newer start: this one must not linger unrecorded
     throw new Error(FAILED);
   }
 
-  private kill(reason: string): void {
+  private kill(reason: string): Promise<void> {
     const child = this.child;
-    if (!child) return;
+    if (!child) return Promise.resolve();
     this.child = null;
     this.log('[local-whisper] stopping engine:', reason);
     try {
@@ -199,6 +213,11 @@ export class EngineServer {
       // already gone
     }
     fs.rmSync(this.d.pidFile, { force: true });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+      this.gone.get(child) ?? Promise.resolve(),
+      new Promise<void>((r) => (timer = setTimeout(r, 3000))),
+    ]).finally(() => clearTimeout(timer));
   }
 
   private clearIdle(): void {

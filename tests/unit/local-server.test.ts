@@ -6,18 +6,24 @@ import { type ChildLike, EngineServer, type EngineServerDeps } from '../../src/m
 
 class FakeChild implements ChildLike {
   static next = 100;
+  static slowKill = false; // TerminateProcess is asynchronous: the exit comes later
   pid = FakeChild.next++;
   killed = false;
   private exits: ((code: number | null) => void)[] = [];
+  private errors: ((err: Error) => void)[] = [];
   kill(): void {
     this.killed = true;
-    this.exit(null);
+    if (!FakeChild.slowKill) this.exit(null);
   }
-  on(_ev: 'exit', cb: (code: number | null) => void): void {
-    this.exits.push(cb);
+  on(ev: 'exit' | 'error', cb: (arg: never) => void): void {
+    if (ev === 'exit') this.exits.push(cb as (code: number | null) => void);
+    else this.errors.push(cb as (err: Error) => void);
   }
   exit(code: number | null): void {
     for (const cb of this.exits.splice(0)) cb(code);
+  }
+  fail(err: Error): void {
+    for (const cb of this.errors) cb(err);
   }
 }
 
@@ -63,6 +69,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  FakeChild.slowKill = false;
   vi.useRealTimers();
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -211,6 +218,64 @@ it('reports which model is loaded and whether a job holds it', async () => {
   expect(s.inUse('base.bin')).toBe(false);
   s.stop();
   expect(s.loaded()).toBeNull();
+});
+
+it('stop resolves only once the engine has really exited', async () => {
+  const s = make();
+  const a = s.ensure('exe', 'm');
+  await vi.advanceTimersByTimeAsync(1000);
+  await a;
+  FakeChild.slowKill = true;
+  let done = false;
+  const stopped = s.stop().then(() => (done = true));
+  await vi.advanceTimersByTimeAsync(50);
+  expect(last().child.killed).toBe(true);
+  expect(done).toBe(false);
+  last().child.exit(1);
+  await stopped;
+  expect(done).toBe(true);
+});
+
+it('stop gives up waiting after 3 s', async () => {
+  const s = make();
+  const a = s.ensure('exe', 'm');
+  await vi.advanceTimersByTimeAsync(1000);
+  await a;
+  FakeChild.slowKill = true;
+  const stopped = s.stop();
+  await vi.advanceTimersByTimeAsync(3000);
+  await expect(stopped).resolves.toBeUndefined();
+});
+
+it('an engine that cannot be launched fails the start at once', async () => {
+  body = () => new Promise(() => {});
+  const s = make();
+  const url = s.ensure('exe', 'm');
+  const done = expect(url).rejects.toThrow('Built-in engine failed to start');
+  await vi.advanceTimersByTimeAsync(0);
+  last().child.fail(Object.assign(new Error('spawn exe ENOENT'), { code: 'ENOENT' }));
+  await vi.advanceTimersByTimeAsync(10);
+  await done;
+  expect(s.running()).toBe(false);
+});
+
+it('a start replaced while it waits for a port leaves no engine behind', async () => {
+  let release!: (p: number) => void;
+  const ports: Promise<number>[] = [new Promise((r) => (release = r)), Promise.resolve(5555)];
+  const s = make({ freePort: () => ports.shift()! });
+  const a = s.ensure('exe', 'base.bin');
+  const aDone = a.catch((e: Error) => e.message);
+  await vi.advanceTimersByTimeAsync(0);
+  const b = s.ensure('exe', 'small.bin');
+  await vi.advanceTimersByTimeAsync(0);
+  release(4321);
+  await vi.advanceTimersByTimeAsync(1000);
+  await expect(b).resolves.toBe('http://127.0.0.1:5555/v1');
+  await aDone;
+  const alive = spawned.filter((x) => !x.child.killed);
+  expect(alive).toHaveLength(1);
+  expect(alive[0].args[1]).toBe('small.bin');
+  expect(fs.readFileSync(pidFile, 'utf8')).toBe(String(alive[0].child.pid));
 });
 
 it('prewarm starts the engine and lets it idle out', async () => {

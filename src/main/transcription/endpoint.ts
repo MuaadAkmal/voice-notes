@@ -3,7 +3,7 @@ import type { ModelId } from '../../shared/transcription';
 import type { Secrets } from './secrets';
 
 /** Where one request goes. `release()` ends the request's hold on the built-in engine (no-op for a server). */
-export type Endpoint = { baseUrl: string; model: string; apiKey: string | null; release(): void };
+export type Endpoint = { baseUrl: string; model: string; apiKey: string | null; local: boolean; release(): void };
 
 export type LocalEngine = { ensure(id: ModelId): Promise<string>; release(): void };
 
@@ -15,7 +15,7 @@ export async function resolveEndpoint(d: {
 }): Promise<Endpoint> {
   const t = d.settings().transcription;
   if (t.provider === 'server') {
-    return { baseUrl: t.baseUrl, model: t.model, apiKey: d.secrets.get('server'), release: () => undefined };
+    return { baseUrl: t.baseUrl, model: t.model, apiKey: d.secrets.get('server'), local: false, release: () => undefined };
   }
   if (t.provider === 'local' && t.localModel) {
     const baseUrl = await d.local.ensure(t.localModel);
@@ -24,6 +24,7 @@ export async function resolveEndpoint(d: {
       baseUrl,
       model: t.localModel, // whisper-server ignores it; kept for the request shape
       apiKey: null,
+      local: true,
       release: () => {
         if (!held) return;
         held = false;

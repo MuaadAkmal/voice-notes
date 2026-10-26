@@ -17,7 +17,7 @@ it("uses the user's server with its key", async () => {
     secrets: { get: () => 'k' },
     local,
   });
-  expect(ep).toMatchObject({ baseUrl: 'https://vm/v1', model: 'whisper', apiKey: 'k' });
+  expect(ep).toMatchObject({ baseUrl: 'https://vm/v1', model: 'whisper', apiKey: 'k', local: false });
   ep.release();
   expect(local.ensure).not.toHaveBeenCalled();
   expect(local.release).not.toHaveBeenCalled();
@@ -31,7 +31,7 @@ it('uses the built-in engine without a key, and releases it once', async () => {
     local,
   });
   expect(local.ensure).toHaveBeenCalledWith('base');
-  expect(ep).toMatchObject({ baseUrl: 'http://127.0.0.1:1/v1', model: 'base', apiKey: null });
+  expect(ep).toMatchObject({ baseUrl: 'http://127.0.0.1:1/v1', model: 'base', apiKey: null, local: true });
   ep.release();
   ep.release();
   expect(local.release).toHaveBeenCalledTimes(1);

@@ -123,8 +123,9 @@ export class Installer {
 
   remove(id: ModelId, engineToo = false): void {
     const file = this.modelPath(id);
-    if (file) fs.rmSync(file, { force: true });
-    if (engineToo) fs.rmSync(this.engineDir, { recursive: true, force: true });
+    // Retries: right after the engine exits, Windows (or a virus scanner) can hold its files a moment longer.
+    if (file) fs.rmSync(file, { force: true, maxRetries: 10, retryDelay: 100 });
+    if (engineToo) fs.rmSync(this.engineDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     this.d.onChange();
   }
 

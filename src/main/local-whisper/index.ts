@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from 'node:child_process';
+import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { LocalStatus } from '../../shared/channels';
@@ -18,9 +19,12 @@ export type LocalWhisperDeps = {
   onChange: () => void;
   log?: (...a: unknown[]) => void;
   server?: Server; // tests
+  runtimeOk?: () => boolean; // tests
 };
 
 const MISSING = 'Built-in model missing — download it again';
+const ENGINE_MISSING = 'Built-in engine missing — download it again';
+const NO_RUNTIME = 'Install the Microsoft Visual C++ runtime first';
 
 /** The built-in provider: what's installed, downloads, and the engine process, behind one object. */
 export class LocalWhisper {
@@ -28,8 +32,10 @@ export class LocalWhisper {
   private readonly server: Server;
   /** e2e: run this Node script instead of whisper-server.exe. */
   private fakeScript: string | null = null;
+  private readonly runtimeOk: () => boolean;
 
   constructor(private readonly d: LocalWhisperDeps) {
+    this.runtimeOk = d.runtimeOk ?? vcRuntimeInstalled;
     this.installer = new Installer({ root: d.root, arch: d.arch, fetch: d.fetch, onChange: d.onChange });
     this.server =
       d.server ??
@@ -54,6 +60,7 @@ export class LocalWhisper {
       recommended: recommendedModel(this.d.totalMem, this.d.cores),
       diskBytes: this.installer.diskBytes(),
       job: this.installer.job(),
+      runtimeMissing: this.installer.available() && !this.fakeScript && !this.runtimeOk(),
     };
   }
 
@@ -65,11 +72,13 @@ export class LocalWhisper {
     this.installer.cancel();
   }
 
-  remove(id: ModelId, engineToo = false): void {
+  async remove(id: ModelId, engineToo = false): Promise<void> {
+    // A download may be about to need the engine (or this model): deleting now would strand it.
+    if (this.installer.job()) throw new Error('Wait for the download to finish');
     const model = this.installer.modelPath(id);
     if (model && this.server.inUse(model)) throw new Error('That model is in use — try again in a moment');
-    // The engine keeps its model open: unload it before the file goes.
-    if ((model && this.server.loaded() === model) || engineToo) this.server.stop();
+    // The engine keeps its files open until it has exited: unload it first.
+    if ((model && this.server.loaded() === model) || engineToo) await this.server.stop();
     this.installer.remove(id, engineToo);
   }
 
@@ -109,7 +118,10 @@ export class LocalWhisper {
   private paths(id: ModelId): { exe: string; model: string } {
     const exe = this.installer.enginePath();
     const model = this.installer.modelPath(id);
-    if (!exe || !model) throw new Error(MISSING);
+    if (!model) throw new Error(MISSING);
+    if (!exe) throw new Error(ENGINE_MISSING);
+    // Without it Windows can't load the engine at all (and may say so in a dialog of its own).
+    if (!this.fakeScript && !this.runtimeOk()) throw new Error(NO_RUNTIME);
     return { exe, model };
   }
 
@@ -134,6 +146,14 @@ function freePort(): Promise<number> {
       srv.close(() => (typeof address === 'object' && address ? resolve(address.port) : reject(new Error('No port'))));
     });
   });
+}
+
+/** The engine is built against the Visual C++ 2015-2022 runtime, which the release zip doesn't include. */
+function vcRuntimeInstalled(): boolean {
+  const system32 = path.join(process.env.SystemRoot ?? 'C:\Windows', 'System32');
+  return ['msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'vcomp140.dll'].every((f) =>
+    fs.existsSync(path.join(system32, f)),
+  );
 }
 
 function isWhisperPid(pid: number): boolean {

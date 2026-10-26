@@ -23,6 +23,7 @@ export type ServiceDeps = {
 };
 
 const MISSING = 'Audio file is missing';
+const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 
 /** Voice note → WAV → the user's server → transcript on the note, one note at a time. */
 export class TranscriptionService {
@@ -55,7 +56,7 @@ export class TranscriptionService {
 
   /** One second of silence through the same client: checks URL, key and model together. */
   test(baseUrl: string, model: string): Promise<TestResult> {
-    return this.probe(async () => ({ baseUrl, model, apiKey: this.d.secrets.get('server'), release: () => undefined }));
+    return this.probe(async () => ({ baseUrl, model, apiKey: this.d.secrets.get('server'), local: false, release: () => undefined }));
   }
 
   /** The same check against the provider in use (for the built-in engine, includes loading the model). */
@@ -101,6 +102,8 @@ export class TranscriptionService {
         language,
         audio,
         filename: `${id}.wav`,
+        // On a CPU a long note can take a while: give it time in proportion to its length.
+        ...(ep.local ? { timeoutMs: Math.max(LOCAL_MIN_TIMEOUT_MS, 4 * note.durationMs) } : {}),
       });
     } finally {
       ep.release();

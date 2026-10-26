@@ -9,11 +9,13 @@ const server = () => ({
   ensure: vi.fn(async () => 'http://127.0.0.1:9/v1'),
   release: vi.fn(),
   prewarm: vi.fn(),
-  stop: vi.fn(),
+  stop: vi.fn(async () => undefined),
   killOrphan: vi.fn(),
   inUse: vi.fn((_model: string) => false),
   loaded: vi.fn((): string | null => null),
 });
+
+let runtimeOk: boolean;
 
 function make(s = server()) {
   const lw = new LocalWhisper({
@@ -24,6 +26,7 @@ function make(s = server()) {
     fetch: fetch,
     onChange: () => undefined,
     server: s,
+    runtimeOk: () => runtimeOk,
   });
   return { lw, s };
 }
@@ -37,6 +40,7 @@ function fakeInstall() {
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'vn-lw-'));
+  runtimeOk = true;
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
 
@@ -70,20 +74,53 @@ it('a model that is not downloaded says so instead of starting', async () => {
   expect(s.prewarm).not.toHaveBeenCalled();
 });
 
-it('refuses to delete a model a job is using, and unloads an idle one first', () => {
+it('refuses to delete a model a job is using, and unloads an idle one first', async () => {
   fakeInstall();
   const s = server();
   const modelFile = path.join(root, 'models', 'ggml-base.bin');
   s.inUse.mockImplementation((m) => m === modelFile);
   const { lw } = make(s);
-  expect(() => lw.remove('base')).toThrow('That model is in use — try again in a moment');
+  await expect(lw.remove('base')).rejects.toThrow('That model is in use — try again in a moment');
   expect(fs.existsSync(modelFile)).toBe(true);
 
   s.inUse.mockReturnValue(false);
   s.loaded.mockReturnValue(modelFile);
-  lw.remove('base');
-  expect(s.stop).toHaveBeenCalled();
+  let exited!: () => void;
+  s.stop.mockImplementation(() => new Promise<undefined>((r) => (exited = () => r(undefined))));
+  const removing = lw.remove('base');
+  await new Promise((r) => setTimeout(r, 10));
+  expect(fs.existsSync(modelFile)).toBe(true); // the engine still has it open
+  exited();
+  await removing;
   expect(fs.existsSync(modelFile)).toBe(false);
+});
+
+it('refuses to delete anything while a download runs', async () => {
+  fakeInstall();
+  const { lw } = make();
+  const stalled = new Promise<Response>(() => {});
+  (lw as unknown as { installer: { d: { fetch: typeof fetch } } }).installer.d.fetch = (() => stalled) as typeof fetch;
+  void lw.install('small').catch(() => undefined);
+  await expect.poll(() => lw.status().job?.modelId).toBe('small');
+  await expect(lw.remove('base', true)).rejects.toThrow('Wait for the download to finish');
+  expect(lw.status().engine).toBe(true);
+  lw.cancel();
+});
+
+it('a missing engine is reported as such, so it can be downloaded again', async () => {
+  fakeInstall();
+  fs.rmSync(path.join(root, 'engine'), { recursive: true });
+  const { lw } = make();
+  await expect(lw.ensure('base')).rejects.toThrow('Built-in engine missing — download it again');
+});
+
+it('without the Visual C++ runtime, says so instead of starting the engine', async () => {
+  fakeInstall();
+  runtimeOk = false;
+  const { lw, s } = make();
+  expect(lw.status().runtimeMissing).toBe(true);
+  await expect(lw.ensure('base')).rejects.toThrow('Install the Microsoft Visual C++ runtime first');
+  expect(s.ensure).not.toHaveBeenCalled();
 });
 
 it('boot clears leftovers and a crashed engine', () => {
