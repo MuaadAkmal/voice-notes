@@ -1,16 +1,26 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { type AudioDevice, type AudioPayload, Ch, type DropPayload, type OverlayState, type RecordingSource } from '../shared/channels';
+import {
+  type AudioDevice,
+  type AudioPayload,
+  Ch,
+  type DictationAudio,
+  type DropPayload,
+  type OverlayState,
+  type RecordingSource,
+} from '../shared/channels';
 
 const on = <T>(channel: string, cb: (payload: T) => void) => {
   ipcRenderer.on(channel, (_e, payload: T) => cb(payload));
 };
 
 const overlayApi = {
-  onStart: (cb: (p: { deviceId: string | null; source: RecordingSource }) => void) => on(Ch.RecorderStart, cb),
+  onStart: (cb: (p: { deviceId: string | null; source: RecordingSource; dictation?: { ping: boolean } }) => void) =>
+    on(Ch.RecorderStart, cb),
   onStop: (cb: () => void) => on(Ch.RecorderStop, cb),
   onCancel: (cb: () => void) => on(Ch.RecorderCancel, cb),
   onState: (cb: (s: OverlayState) => void) => on(Ch.OverlayState, cb),
   sendAudio: (a: AudioPayload) => ipcRenderer.send(Ch.RecorderAudio, a),
+  sendDictationAudio: (a: DictationAudio) => ipcRenderer.send(Ch.DictationAudio, a),
   sendError: (message: string) => ipcRenderer.send(Ch.RecorderError, { message }),
   setPointerOver: (over: boolean) => ipcRenderer.send(Ch.OverlayPointer, { over }),
   click: () => ipcRenderer.send(Ch.OverlayClick),

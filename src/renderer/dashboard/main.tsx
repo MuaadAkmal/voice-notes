@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './dashboard.css';
-import { toWav } from './to-wav';
+import { toWav } from '../common/to-wav';
 
 // Main sets nativeTheme.themeSource from the theme setting, so prefers-color-scheme already reflects
 // System / Light / Dark; mirror it onto html.dark for Tailwind's class-based dark variant.
