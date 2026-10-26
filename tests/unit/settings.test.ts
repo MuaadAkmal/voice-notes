@@ -15,6 +15,10 @@ it('returns defaults when file absent', () => {
   expect(DEFAULT_SETTINGS.hotkey).toEqual([56, 3675]);
 });
 
+it('dictation defaults to Ctrl+Win with the start sound on', () => {
+  expect(DEFAULT_SETTINGS).toMatchObject({ dictationHotkey: [29, 3675], dictationHotkeyLabel: 'Ctrl+Win', dictationSound: true });
+});
+
 it('falls back to defaults on invalid JSON', () => {
   fs.writeFileSync(file, '{not json');
   expect(loadSettings(file)).toEqual(DEFAULT_SETTINGS);

@@ -3,8 +3,9 @@ import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
 import { DEFAULT_TRANSCRIPTION } from '../shared/transcription';
 
 // uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
-// Not Ctrl+Win: that's Wispr Flow's dictation key, and both apps would fire.
+// Not Ctrl+Win: that's the dictation key (as in Wispr Flow).
 const ALT = 56;
+const CTRL = 29;
 const META = 3675;
 const SHIFT = 42;
 
@@ -29,6 +30,9 @@ export const DEFAULT_SETTINGS: Settings = {
   transcription: DEFAULT_TRANSCRIPTION,
   transcribeLanguage: 'auto',
   laterPageId: null,
+  dictationHotkey: [CTRL, META],
+  dictationHotkeyLabel: 'Ctrl+Win',
+  dictationSound: true,
 };
 
 function readRaw(file: string): Record<string, unknown> {

@@ -45,6 +45,13 @@ export const MIGRATIONS: string[] = [
   `ALTER TABLE notes ADD COLUMN transcript TEXT;
    ALTER TABLE notes ADD COLUMN transcript_lang TEXT;
    ALTER TABLE notes ADD COLUMN transcribed_at INTEGER;`,
+  `CREATE TABLE dictations (
+     id         TEXT PRIMARY KEY,
+     text       TEXT NOT NULL,
+     app        TEXT,
+     created_at INTEGER NOT NULL
+   );
+   CREATE INDEX dictations_created_at ON dictations (created_at);`,
 ];
 
 export function migrate(db: Database.Database): void {

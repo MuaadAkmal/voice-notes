@@ -52,6 +52,9 @@ export const SettingsFieldSchemas = {
   transcription: TranscriptionSchema,
   transcribeLanguage: z.enum(LANGUAGE_CODES),
   laterPageId: z.uuid().nullable(),
+  dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
+  dictationHotkeyLabel: z.string().min(1).max(60),
+  dictationSound: z.boolean(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -64,6 +67,12 @@ export const AudioPayloadSchema = z.object({
 });
 
 export const IdSchema = z.uuid();
+// About 1.9 MB of WAV per minute: 30 MB is a long dictation.
+export const DictationAudioSchema = z.object({
+  bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength <= 30 * 1024 * 1024, 'Audio too large'),
+  durationMs: z.number().nonnegative().finite(),
+});
+export const CopyDictationSchema = z.object({ id: IdSchema });
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });

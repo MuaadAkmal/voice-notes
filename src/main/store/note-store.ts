@@ -9,6 +9,7 @@ import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { PageStore } from './page-store';
+import { DictationStore } from './dictation-store';
 import { notes } from './schema';
 
 export type NewAudio = {
@@ -29,6 +30,7 @@ export class NoteStore {
   readonly imagesDir: string;
   readonly folders: FolderStore;
   readonly pages: PageStore;
+  readonly dictations: DictationStore;
 
   private constructor(
     private readonly rootDir: string,
@@ -40,6 +42,7 @@ export class NoteStore {
     this.imagesDir = path.join(rootDir, 'images');
     this.folders = new FolderStore(db, sqlite, now);
     this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir);
+    this.dictations = new DictationStore(db, now);
   }
 
   static open(rootDir: string, now: () => number = Date.now): NoteStore {
