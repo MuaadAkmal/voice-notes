@@ -32,25 +32,7 @@ function Waveform({ analyser, source, onSilentChange }: WaveformProps) {
 
     const history = new Array<number>(BARS).fill(0);
     const samples = analyser ? new Float32Array(analyser.fftSize) : null;
-    let quietSince = performance.now();
-    let reportedSilent = false;
-    const sample = setInterval(() => {
-      if (!analyser || !samples) return;
-      analyser.getFloatTimeDomainData(samples);
-      const rms = rmsOf(samples);
-      history.shift();
-      history.push(levelFromRms(rms));
-      // "No sound" once the input has stayed below the silence threshold for SILENT_AFTER_MS.
-      const now = performance.now();
-      if (!isSilent(rms)) quietSince = now;
-      const silent = now - quietSince >= SILENT_AFTER_MS;
-      if (silent !== reportedSilent) {
-        reportedSilent = silent;
-        onSilentChange(silent);
-      }
-    }, SAMPLE_MS);
-
-    let raf = 0;
+    // Bars only change when a sample lands, so draw then rather than every animation frame.
     const draw = () => {
       ctx.clearRect(0, 0, WAVE_W, WAVE_H);
       ctx.fillStyle = SOURCE_COLOR[source];
@@ -61,13 +43,29 @@ function Waveform({ analyser, source, onSilentChange }: WaveformProps) {
         ctx.roundRect(i * (BAR_W + GAP), (WAVE_H - h) / 2, BAR_W, h, BAR_W / 2);
         ctx.fill();
       });
-      raf = requestAnimationFrame(draw);
     };
+
+    let quietSince = performance.now();
+    let reportedSilent = false;
+    const sample = setInterval(() => {
+      if (!analyser || !samples) return;
+      analyser.getFloatTimeDomainData(samples);
+      const rms = rmsOf(samples);
+      history.shift();
+      history.push(levelFromRms(rms));
+      draw();
+      // "No sound" once the input has stayed below the silence threshold for SILENT_AFTER_MS.
+      const now = performance.now();
+      if (!isSilent(rms)) quietSince = now;
+      const silent = now - quietSince >= SILENT_AFTER_MS;
+      if (silent !== reportedSilent) {
+        reportedSilent = silent;
+        onSilentChange(silent);
+      }
+    }, SAMPLE_MS);
+
     draw();
-    return () => {
-      clearInterval(sample);
-      cancelAnimationFrame(raf);
-    };
+    return () => clearInterval(sample);
   }, [analyser, source, onSilentChange]);
 
   return <canvas ref={canvas} style={{ width: WAVE_W, height: WAVE_H }} aria-hidden />;
@@ -117,7 +115,7 @@ function SavedPill({ state, shell, hover }: { state: SavedState; shell: string; 
 
   if (titling) {
     return (
-      <div {...hover} className={`${shell} h-9 gap-2 px-3`}>
+      <div {...hover} data-morph className={`${shell} h-9 gap-2 px-3`}>
         <span className="text-sm text-white/60">✓</span>
         <input
           ref={input}
@@ -143,7 +141,7 @@ function SavedPill({ state, shell, hover }: { state: SavedState; shell: string; 
         setTitling(true);
         api.startTitle();
       }}
-      className={`${shell} h-9 cursor-pointer gap-1.5 px-4 text-sm`}
+      data-morph className={`${shell} h-9 cursor-pointer gap-1.5 px-4 text-sm`}
     >
       {state.micOnly ? 'Saved ✓ (mic only)' : 'Saved ✓'}
       <span className="text-white/40">·</span>
@@ -219,6 +217,7 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
         )}
         {(visible || running) && (
           <button
+            data-morph
             onClick={() => api.click()}
             title="Click or hold your hotkey to record"
             className={`relative cursor-pointer overflow-hidden rounded-full border border-white/20 transition-all duration-200 ${
@@ -244,21 +243,21 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
 type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls };
 
 const SHELL =
-  'flex items-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
+  'flex items-center justify-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
 
 /** Takes the pill's place while something is dragged over it, and for the confirmation after a drop. */
 export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
   if (phase === 'over')
     return (
-      <div className={`${SHELL} h-10 gap-2 border-dashed border-sky-400/70 px-5 text-sm text-sky-100 ring-2 ring-sky-400/30`}>
+      <div data-morph className={`${SHELL} h-10 gap-2 border-dashed border-sky-400/70 px-5 text-sm text-sky-100 ring-2 ring-sky-400/30`}>
         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
         </svg>
         Drop to save for later
       </div>
     );
-  if (phase === 'saved') return <div className={`${SHELL} h-9 px-4 text-sm`}>Saved for later ✓</div>;
-  return <div className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
+  if (phase === 'saved') return <div data-morph className={`${SHELL} h-9 px-4 text-sm`}>Saved for later ✓</div>;
+  return <div data-morph className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
 }
 
 export function Pill({ state, analyser, pomo }: PillProps) {
@@ -280,14 +279,14 @@ export function Pill({ state, analyser, pomo }: PillProps) {
       return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} />;
     case 'busy':
       return (
-        <div className={`${shell} h-9 gap-2 px-4 text-sm text-white/80`}>
+        <div data-morph className={`${shell} h-9 gap-2 px-4 text-sm text-white/80`}>
           <span className="h-2 w-2 animate-pulse rounded-full bg-sky-400" />
           {state.message}
         </div>
       );
     case 'recording':
       return (
-        <div {...hover} onClick={() => api.click()} className={`group ${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
+        <div {...hover} onClick={() => api.click()} data-morph className={`group ${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
           <SourceGlyph source={state.source} />
           {/* "No sound" takes the waveform's slot so the pill never grows. */}
@@ -322,15 +321,15 @@ export function Pill({ state, analyser, pomo }: PillProps) {
         </div>
       );
     case 'saved':
-      if (state.titled) return <div className={`${shell} h-9 px-4 text-sm`}>Saved ✓</div>;
+      if (state.titled) return <div data-morph className={`${shell} h-9 px-4 text-sm`}>Saved ✓</div>;
       return <SavedPill state={state} shell={shell} hover={hover} />;
     case 'error':
       return state.retry ? (
-        <button {...hover} onClick={() => api.retry()} className={`${shell} h-10 cursor-pointer bg-red-600/95 px-5 text-sm`}>
+        <button {...hover} onClick={() => api.retry()} data-morph className={`${shell} h-10 cursor-pointer bg-red-600/95 px-5 text-sm`}>
           {state.message}
         </button>
       ) : (
-        <div className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
+        <div data-morph className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
       );
   }
 }
