@@ -203,6 +203,12 @@ export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'f
 export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
+/** Who is signed in, as the window sees it: never tokens. */
+export type AccountInfo =
+  | { state: 'signed-out'; error?: string }
+  | { state: 'signing-in' }
+  | { state: 'signed-in'; userId: string; email: string; name: string; avatar: string | null };
+
 /** The built-in provider as the Transcription page shows it. */
 export type LocalStatus = {
   available: boolean; // an engine build exists for this CPU
