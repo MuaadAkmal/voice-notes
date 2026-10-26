@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { OverlayState } from '../../shared/channels';
-import { Pill } from './Pill';
+import { acceptsDrops } from '../../shared/later';
+import { DropPill, Pill } from './Pill';
 import { useDrag } from './useDrag';
+import { useDropLater } from './useDropLater';
 import { useFilmBuffer } from './useFilmBuffer';
 import { usePomodoro } from './usePomodoro';
 import { useRecorder } from './useRecorder';
@@ -14,6 +16,7 @@ function Overlay() {
   useFilmBuffer();
   const drag = useDrag();
   const pomo = usePomodoro(state.kind === 'recording');
+  const drop = useDropLater(acceptsDrops(state));
 
   useEffect(() => window.overlayApi.onState(setState), []);
   // Device ids are origin-scoped, so the overlay (which records) is the one that lists them.
@@ -32,12 +35,12 @@ function Overlay() {
   }, []);
   // The element under the cursor is replaced on every state change; make the window click-through
   // again until the new pill reports mouseenter, so a vanished pill can't leave a dead click zone.
-  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind]);
+  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, drop]);
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">
       <div {...drag} className="touch-none" data-testid="pill">
-        <Pill state={state} analyser={analyser} pomo={pomo} />
+        {drop === 'none' ? <Pill state={state} analyser={analyser} pomo={pomo} /> : <DropPill phase={drop} />}
       </div>
     </div>
   );

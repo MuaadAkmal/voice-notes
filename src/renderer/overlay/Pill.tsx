@@ -3,6 +3,7 @@ import type { OverlayState, RecordingSource } from '../../shared/channels';
 import { isSilent, levelFromRms, rmsOf } from '../../shared/audio-level';
 import { progress } from '../../shared/pomodoro';
 import { PHASE_COLOR, PomodoroChip } from './Pomodoro';
+import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
 
 const BARS = 28;
@@ -242,6 +243,24 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
 
 type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls };
 
+const SHELL =
+  'flex items-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
+
+/** Takes the pill's place while something is dragged over it, and for the confirmation after a drop. */
+export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
+  if (phase === 'over')
+    return (
+      <div className={`${SHELL} h-10 gap-2 border-dashed border-sky-400/70 px-5 text-sm text-sky-100 ring-2 ring-sky-400/30`}>
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+        </svg>
+        Drop to save for later
+      </div>
+    );
+  if (phase === 'saved') return <div className={`${SHELL} h-9 px-4 text-sm`}>Saved for later ✓</div>;
+  return <div className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
+}
+
 export function Pill({ state, analyser, pomo }: PillProps) {
   const api = window.overlayApi;
   const [silent, setSilent] = useState(false);
@@ -254,8 +273,7 @@ export function Pill({ state, analyser, pomo }: PillProps) {
     onMouseEnter: () => api.setPointerOver(true),
     onMouseLeave: () => api.setPointerOver(false),
   };
-  const shell =
-    'flex items-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
+  const shell = SHELL;
 
   switch (state.kind) {
     case 'idle':

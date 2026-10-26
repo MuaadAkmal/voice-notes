@@ -8,6 +8,8 @@ import {
   Ch,
   DevicesSchema,
   DragSchema,
+  type DropPayload,
+  DropPayloadSchema,
   OverlayTitleSchema,
   CreateFolderSchema,
   CreatePageSchema,
@@ -55,6 +57,7 @@ type OverlayDeps = {
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
+  onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -118,6 +121,10 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
       else controller.resumeFlash();
     }),
   );
+  ipcMain.handle(Ch.LaterDrop, (event: IpcMainInvokeEvent, payload: unknown) => {
+    if (event.sender !== overlay.webContents) throw new Error('Forbidden');
+    return deps.onDrop(DropPayloadSchema.parse(payload));
+  });
   ipcMain.on(Ch.OverlayClick, (e) => e.sender === overlay.webContents && gesture.toggle());
   ipcMain.on(Ch.OverlayRetry, (e) => {
     if (e.sender === overlay.webContents) controller.retry().catch((err) => log.error(err));

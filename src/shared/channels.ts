@@ -131,6 +131,7 @@ export const Ch = {
   FilmError: 'film:error', // { message } the buffer's loopback stream failed or ended
   MediaProbe: 'media:probe', // { id } is sound playing?
   MediaProbeResult: 'media:probe-result', // { id, playing }
+  LaterDrop: 'later:drop', // DropPayload → 'saved' | 'ignored' (invoke)
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
   NotesRename: 'notes:rename',

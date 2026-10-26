@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { type AudioDevice, type AudioPayload, Ch, type OverlayState, type RecordingSource } from '../shared/channels';
+import { type AudioDevice, type AudioPayload, Ch, type DropPayload, type OverlayState, type RecordingSource } from '../shared/channels';
 
 const on = <T>(channel: string, cb: (payload: T) => void) => {
   ipcRenderer.on(channel, (_e, payload: T) => cb(payload));
@@ -29,6 +29,7 @@ const overlayApi = {
   sendRewindError: (message: string) => ipcRenderer.send(Ch.FilmSaveError, { message }),
   onProbe: (cb: (p: { id: number }) => void) => on(Ch.MediaProbe, cb),
   sendProbeResult: (id: number, playing: boolean) => ipcRenderer.send(Ch.MediaProbeResult, { id, playing }),
+  dropLater: (p: DropPayload): Promise<'saved' | 'ignored'> => ipcRenderer.invoke(Ch.LaterDrop, p),
 };
 
 export type OverlayApi = typeof overlayApi;

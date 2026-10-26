@@ -11,7 +11,7 @@ import { DragWatch } from './drop/drag-watch';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
-import { ensureLaterPage } from './later';
+import { ensureLaterPage, saveDrop } from './later';
 import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
@@ -244,6 +244,22 @@ async function boot(): Promise<void> {
       controller.notify(message);
     },
     onProbeResult: (id, playing) => probes.get(id)?.(playing),
+    onDrop: (payload) => {
+      try {
+        const result = saveDrop(payload, {
+          pages: store.pages,
+          getSettings: () => settings,
+          updateSettings,
+          source: () => getContext()?.show ?? null, // the browser the drag came from
+          newId: randomUUID,
+        });
+        if (result === 'saved') toDashboard(Ch.PagesChanged);
+        return result;
+      } catch (err) {
+        log.error('[later] drop not saved', err);
+        throw err;
+      }
+    },
   });
 
   const rewind = () => {

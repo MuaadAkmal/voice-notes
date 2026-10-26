@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DropPayloadSchema,
   SettingsPatchSchema,
   AppendEntrySchema,
   CreatePageSchema,
@@ -120,5 +121,13 @@ describe('review-later settings schemas', () => {
   });
   it('rejects locked: false', () => {
     expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'page', pageId: id, locked: false }] }).success).toBe(false);
+  });
+});
+
+describe('later:drop schema', () => {
+  it('accepts three strings and rejects oversize or missing fields', () => {
+    expect(DropPayloadSchema.safeParse({ text: 'a', uriList: '', html: '<b>a</b>' }).success).toBe(true);
+    expect(DropPayloadSchema.safeParse({ text: 'x'.repeat(20_001), uriList: '', html: '' }).success).toBe(false);
+    expect(DropPayloadSchema.safeParse({ text: 'a', html: '' }).success).toBe(false);
   });
 });
