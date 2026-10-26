@@ -170,7 +170,7 @@ both('a delete made after a lost answer still reaches the other PC', async (a, b
   await a.store.pages.deleteMany([p.id]);
   await converge([a, b]);
   expect(b.store.pages.get(p.id)).toBeUndefined();
-  expect(server.row('page', p.id)?.deleted).toBe(true);
+  expect((await server.row('page', p.id))?.deleted).toBe(true);
 });
 
 it('turning sync on for a second PC keeps the account\'s Home layout and adds its own cards', async () => {
