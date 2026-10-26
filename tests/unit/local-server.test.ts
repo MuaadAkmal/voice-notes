@@ -198,6 +198,21 @@ it('stop kills the engine and clears the pid file', async () => {
   expect(fs.existsSync(pidFile)).toBe(false);
 });
 
+it('reports which model is loaded and whether a job holds it', async () => {
+  const s = make();
+  expect(s.loaded()).toBeNull();
+  const a = s.ensure('exe', 'base.bin');
+  await vi.advanceTimersByTimeAsync(1000);
+  await a;
+  expect(s.loaded()).toBe('base.bin');
+  expect(s.inUse('base.bin')).toBe(true);
+  expect(s.inUse('small.bin')).toBe(false);
+  s.release();
+  expect(s.inUse('base.bin')).toBe(false);
+  s.stop();
+  expect(s.loaded()).toBeNull();
+});
+
 it('prewarm starts the engine and lets it idle out', async () => {
   const s = make();
   s.prewarm('exe', 'm');

@@ -45,6 +45,7 @@ beforeEach(() => {
     onIdle: () => log.push('idle'),
     onCaptureStart: () => log.push('capture-start'),
     onCaptureEnd: () => log.push('capture-end'),
+    prewarm: () => log.push('prewarm'),
   };
   ctl = new DictationController(ports);
 });
@@ -58,8 +59,18 @@ it('hold: records, transcribes, saves, then pastes', async () => {
   await ctl.onAudio(audio(800));
   expect(states.map((s) => s.kind)).toEqual(['recording', 'busy', 'idle']);
   expect(states[1]).toEqual({ kind: 'busy', message: 'Transcribing…' });
-  expect(log).toEqual(['start:mic1:true', 'capture-start', 'stop', 'capture-end', 'save:hello:Slack', 'paste:hello', 'idle']);
+  expect(log).toEqual(['prewarm', 'start:mic1:true', 'capture-start', 'stop', 'capture-end', 'save:hello:Slack', 'paste:hello', 'idle']);
   expect(ctl.state).toBe('idle');
+});
+
+it('loads the engine once when listening starts, never when refused', () => {
+  blocked = true;
+  ctl.handleGesture('start');
+  expect(log).not.toContain('prewarm');
+  blocked = false;
+  ctl.handleGesture('start');
+  ctl.handleGesture('handsfree');
+  expect(log.filter((l) => l === 'prewarm')).toHaveLength(1);
 });
 
 it('handsfree updates the mode', () => {

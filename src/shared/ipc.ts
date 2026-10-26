@@ -74,6 +74,9 @@ export const DictationAudioSchema = z.object({
   durationMs: z.number().nonnegative().finite(),
 });
 export const CopyDictationSchema = z.object({ id: IdSchema });
+
+export const LocalInstallSchema = z.object({ modelId: z.enum(MODEL_IDS) });
+export const LocalRemoveSchema = z.object({ modelId: z.enum(MODEL_IDS), engineToo: z.boolean().optional() });
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });

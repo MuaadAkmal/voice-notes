@@ -1,5 +1,5 @@
 // Types and channel names only: safe to import from sandboxed preloads (no zod).
-import type { TranscribeLanguage, TranscriptionSettings } from './transcription';
+import type { ModelId, TranscribeLanguage, TranscriptionSettings } from './transcription';
 export type Note = {
   id: string;
   title: string;
@@ -182,12 +182,18 @@ export const Ch = {
   DictationsList: 'dictations:list', // → Dictation[]
   DictationsCopy: 'dictations:copy', // { id } main writes the clipboard
   DictationsClear: 'dictations:clear',
+  LocalStatus: 'local:status',
+  LocalInstall: 'local:install',
+  LocalCancel: 'local:cancel',
+  LocalRemove: 'local:remove',
+  LocalTest: 'local:test',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
   FoldersChanged: 'folders:changed',
   DictationsChanged: 'dictations:changed',
+  LocalChanged: 'local:changed', // LocalStatus (also download progress)
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
@@ -197,4 +203,14 @@ export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'f
 export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
+/** The built-in provider as the Transcription page shows it. */
+export type LocalStatus = {
+  available: boolean; // an engine build exists for this CPU
+  engine: boolean;
+  models: Record<ModelId, boolean>;
+  recommended: ModelId;
+  diskBytes: number;
+  job: { modelId: ModelId; phase: 'engine' | 'model'; received: number; total: number } | null;
+};
+
 export type TestResult = { ok: true; ms: number; language: string | null } | { ok: false; error: string };

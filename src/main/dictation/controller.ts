@@ -21,6 +21,8 @@ export type DictationPorts = {
   onIdle?(): void;
   onCaptureStart?(): void;
   onCaptureEnd?(): void;
+  /** Listening started: a built-in engine can load its model while the user speaks. */
+  prewarm?(): void;
   minMs?: number;
   errorMs?: number;
   stopTimeoutMs?: number;
@@ -71,6 +73,7 @@ export class DictationController {
           return;
         }
         this.clearFlash();
+        this.p.prewarm?.();
         this._state = 'listening';
         this.startedAt = Date.now();
         this.app = this.p.getApp();

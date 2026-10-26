@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../../src/main/settings';
+import { DEFAULT_SETTINGS, loadSettings, normaliseLocal, saveSettings } from '../../src/main/settings';
 
 let file: string;
 beforeEach(() => {
@@ -110,6 +110,14 @@ it('loads the built-in provider with its model', () => {
   const transcription = { provider: 'local', baseUrl: '', model: 'x', localModel: 'base' };
   fs.writeFileSync(file, JSON.stringify({ transcription }));
   expect(loadSettings(file).transcription).toEqual(transcription);
+});
+
+it('falls back to not set up when the built-in model file is gone', () => {
+  const local = { ...DEFAULT_SETTINGS, transcription: { ...DEFAULT_SETTINGS.transcription, provider: 'local' as const, localModel: 'base' as const } };
+  expect(normaliseLocal(local, () => false).transcription).toMatchObject({ provider: null, localModel: 'base' });
+  expect(normaliseLocal(local, () => true)).toBe(local);
+  const server = { ...DEFAULT_SETTINGS, transcription: { ...DEFAULT_SETTINGS.transcription, provider: 'server' as const, baseUrl: 'https://vm/v1' } };
+  expect(normaliseLocal(server, () => false)).toBe(server);
 });
 
 it('reads settings saved before the built-in provider existed', () => {

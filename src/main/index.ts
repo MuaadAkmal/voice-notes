@@ -1,5 +1,6 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, screen, session } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, screen, session } from 'electron';
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
@@ -8,21 +9,24 @@ import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
+import { cleanTranscript } from '../shared/transcription';
 import { DictationController } from './dictation/controller';
 import { electronClipboard } from './dictation/clipboard';
 import { pasteText } from './dictation/paste';
 import { DragWatch, dropZone } from './drop/drag-watch';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
+import { LocalWhisper } from './local-whisper';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
 import { ensureLaterPage, guardWidgets, saveDrop } from './later';
 import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
-import { loadSettings, REWIND_HOTKEY, saveSettings } from './settings';
+import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
+import { resolveEndpoint } from './transcription/endpoint';
 import { transcribe } from './transcription/openai-client';
 import { safeStorageCipher, Secrets } from './transcription/secrets';
 import { TranscriptionService } from './transcription/service';
@@ -116,6 +120,23 @@ async function boot(): Promise<void> {
   const toDashboard = (channel: string) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(channel);
   };
+
+  // Built-in transcription: engine and models are downloaded on demand into whisper/.
+  const localWhisper: LocalWhisper = new LocalWhisper({
+    root: path.join(userData, 'whisper'),
+    arch: process.arch,
+    cores: os.cpus().length,
+    totalMem: os.totalmem(),
+    fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
+    onChange: () => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.LocalChanged, localWhisper.status());
+    },
+    log: (...a) => log.info(...a),
+  });
+  localWhisper.boot();
+  const checked = normaliseLocal(settings, (id) => localWhisper.status().models[id]);
+  if (checked !== settings) Object.assign(settings, saveSettings(settingsFile, { transcription: checked.transcription }));
+  const endpoint = () => resolveEndpoint({ settings: () => settings, secrets, local: localWhisper });
   setInterval(() => {
     if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
   }, DICTATION_PRUNE_MS);
@@ -225,17 +246,27 @@ async function boot(): Promise<void> {
     getApp: () => getContext()?.show ?? null,
     transcribe: async (audio, signal) => {
       const { transcription, transcribeLanguage } = settings;
-      const result = await transcribe({
-        baseUrl: transcription.baseUrl,
-        model: transcription.model,
-        apiKey: secrets.get('server'),
-        language: transcribeLanguage === 'auto' ? null : transcribeLanguage,
-        audio,
-        filename: 'dictation.wav',
-        timeoutMs: 30_000,
-        signal,
-      });
-      return result.text;
+      const ep = await endpoint();
+      try {
+        const result = await transcribe({
+          baseUrl: ep.baseUrl,
+          model: ep.model,
+          apiKey: ep.apiKey,
+          language: transcribeLanguage === 'auto' ? null : transcribeLanguage,
+          audio,
+          filename: 'dictation.wav',
+          // The built-in engine may still be loading its model on a slow CPU.
+          timeoutMs: transcription.provider === 'local' ? 120_000 : 30_000,
+          signal,
+        });
+        return cleanTranscript(result.text);
+      } finally {
+        ep.release();
+      }
+    },
+    prewarm: () => {
+      const { provider, localModel } = settings.transcription;
+      if (provider === 'local' && localModel) localWhisper.prewarm(localModel);
     },
     save: (text, app) => {
       store.dictations.add(text, app);
@@ -412,7 +443,7 @@ async function boot(): Promise<void> {
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,
-    getSettings: () => ({ ...settings }),
+    endpoint,
     secrets,
     toWav: (bytes, mimeType) =>
       wavBridge.request((requestId) => {
@@ -442,6 +473,7 @@ async function boot(): Promise<void> {
     transcription,
     secrets,
     wavBridge,
+    localWhisper,
   });
 
   app.on('before-quit', () => {
@@ -449,6 +481,7 @@ async function boot(): Promise<void> {
     autoPause.end(); // quitting mid-note must not leave the film paused
   });
   app.on('will-quit', () => {
+    localWhisper.stop(); // never leave whisper-server.exe running
     hotkey.stop();
     store.close();
   });
@@ -467,6 +500,7 @@ async function boot(): Promise<void> {
       dictationGesture, // what Ctrl+Win does
       dictation,
       pasted, // texts a dictation would have pasted
+      localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine
     };
   }
 

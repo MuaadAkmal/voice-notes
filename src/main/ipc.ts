@@ -34,6 +34,8 @@ import {
   SettingsPatchSchema,
   SetKeySchema,
   SetTranscriptSchema,
+  LocalInstallSchema,
+  LocalRemoveSchema,
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
@@ -46,6 +48,7 @@ import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
+import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
 import type { WavBridge } from './transcription/wav-bridge';
@@ -169,6 +172,7 @@ type DashboardDeps = {
   transcription: TranscriptionService;
   secrets: Secrets;
   wavBridge: WavBridge;
+  localWhisper: LocalWhisper;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -196,7 +200,12 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     if (note?.status === 'ok') shell.showItemInFolder(d.store.absolutePath(note));
   });
   handle(Ch.SettingsGet, none, () => d.getSettings());
-  handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => d.updateSettings(patch));
+  handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => {
+    // The built-in provider only with a downloaded model: anything else would fail every job.
+    const t = patch.transcription;
+    if (t?.provider === 'local' && !(t.localModel && d.localWhisper.status().models[t.localModel])) return d.getSettings();
+    return d.updateSettings(patch);
+  });
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
   handle(Ch.DevicesList, none, () => d.getDevices());
   handle(Ch.OpenRecordingsFolder, none, async () => {
@@ -309,6 +318,16 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     return d.secrets.info('server');
   });
   handle(Ch.TranscriptionWav, WavReplySchema, (reply) => d.wavBridge.settle(reply.requestId, reply));
+  handle(Ch.LocalStatus, none, () => d.localWhisper.status());
+  handle(Ch.LocalInstall, LocalInstallSchema, ({ modelId }) => d.localWhisper.install(modelId));
+  handle(Ch.LocalCancel, none, () => d.localWhisper.cancel());
+  handle(Ch.LocalRemove, LocalRemoveSchema, ({ modelId, engineToo }) => {
+    d.localWhisper.remove(modelId, engineToo);
+    const t = d.getSettings().transcription;
+    if (t.provider === 'local' && (engineToo || t.localModel === modelId))
+      d.updateSettings({ transcription: { ...t, provider: null } });
+  });
+  handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

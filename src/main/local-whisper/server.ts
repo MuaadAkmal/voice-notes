@@ -54,6 +54,16 @@ export class EngineServer {
     return this.child !== null && this.starting === null;
   }
 
+  /** Model file of the running (or starting) engine. */
+  loaded(): string | null {
+    return this.child ? this.model : null;
+  }
+
+  /** A job is holding the engine with this model. */
+  inUse(model: string): boolean {
+    return this.busy > 0 && this.loaded() === model;
+  }
+
   /** Base URL of the running engine for `model`, starting (or restarting) it as needed. Marks a job busy until release(). */
   async ensure(exe: string, model: string): Promise<string> {
     this.busy++;
