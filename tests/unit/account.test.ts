@@ -154,6 +154,22 @@ it('a session ended elsewhere (refresh token revoked) signs this PC out', async 
   await vi.waitFor(() => expect(a.current()).toEqual({ state: 'signed-out' }));
 });
 
+it('started offline with an expired token: shows signed in once the refresh succeeds', async () => {
+  auth.getSession.mockResolvedValueOnce({ data: { session: null }, error: { name: 'AuthRetryableFetchError', message: 'Failed to fetch' } });
+  const a = make();
+  await a.init();
+  expect(a.current()).toEqual({ state: 'signed-out' });
+  authCb!('TOKEN_REFRESHED', session);
+  await vi.waitFor(() => expect(a.current()).toEqual(signedIn));
+});
+
+it('the listener is stopped when the browser cannot be opened', async () => {
+  const a = make({ openExternal: async () => Promise.reject(new Error('No browser')) });
+  await a.signIn();
+  expect(redirect.signal?.aborted).toBe(true);
+  expect(a.current()).toEqual({ state: 'signed-out', error: 'No browser' });
+});
+
 it('never hands tokens or the code to the window', async () => {
   const a = make();
   const running = a.signIn();

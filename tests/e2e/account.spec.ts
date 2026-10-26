@@ -34,6 +34,16 @@ test('signed out, the sidebar offers Sign in', async () => {
   await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 });
 
+test('Sign in under test never opens a real browser, and Cancel stops it', async () => {
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page.getByText('Waiting for browser…')).toBeVisible();
+  await expect
+    .poll(() => t.hooks((h) => h.openedExternal))
+    .toEqual([expect.stringMatching(/^https:\/\/tpadlhyraittxehfvshc\.supabase\.co\/auth\/v1\/authorize\?/)]);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+});
+
 test('signed in, the chip shows who; the Account page signs out', async () => {
   await signInAs();
   const chip = page.getByRole('button', { name: /^Account: Muaad Akmal/ });

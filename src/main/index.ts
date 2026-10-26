@@ -451,20 +451,33 @@ async function boot(): Promise<void> {
 
   // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
   const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
+  const testing = process.env.VOICE_NOTES_TEST === '1';
   const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: { flowType: 'pkce', storage: sessionStore, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: {
+      flowType: 'pkce',
+      storage: sessionStore,
+      persistSession: true,
+      autoRefreshToken: !testing, // tests never talk to Supabase
+      detectSessionInUrl: false,
+    },
+    // Electron's network stack, so the system proxy applies (as for the built-in model downloads).
+    global: { fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string | Request), init) },
   });
   const account = new AccountService({
     auth: supabase.auth,
     store: sessionStore,
-    openExternal: (url) => shell.openExternal(url),
+    // Under test the browser is never opened: the URL is recorded like every other external link.
+    openExternal: async (url) => {
+      if (testing) openedExternal.push(url);
+      else await shell.openExternal(url);
+    },
     fetchImage: fetchAvatar,
     focusApp: showDashboard,
     onChange: (info) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
     },
   });
-  if (process.env.VOICE_NOTES_TEST !== '1') account.init().catch((err) => log.warn('[account] init failed', err));
+  if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,

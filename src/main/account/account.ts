@@ -50,6 +50,9 @@ export class AccountService {
       // A refresh token revoked elsewhere (or signed out in another way) ends this PC's session too.
       if (event === 'SIGNED_OUT' && this.info.state === 'signed-in') this.set({ state: 'signed-out' });
       else if (event === 'USER_UPDATED' && session) void this.signedIn(session.user);
+      // Started offline with an expired token: the session was kept, and a later refresh brings it back.
+      else if ((event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') && session && this.info.state === 'signed-out')
+        void this.signedIn(session.user);
     });
     const { data } = await this.d.auth.getSession();
     if (data.session) await this.signedIn(data.session.user);
@@ -84,19 +87,17 @@ export class AccountService {
   }
 
   private async run(): Promise<void> {
-    this.abort = new AbortController();
+    const abort = new AbortController();
+    this.abort = abort;
     this.set({ state: 'signing-in' });
     try {
-      const { url, result } = await this.redirect({ signal: this.abort.signal });
+      const { url, result } = await this.redirect({ signal: abort.signal });
+      result.catch(() => undefined); // awaited below; on an earlier failure nobody else will
       const { data, error } = await this.d.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: url, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
       });
-      if (error || !data.url) {
-        this.abort.abort(); // stop the listener
-        result.catch(() => undefined);
-        throw error ?? new Error('Sign-in failed');
-      }
+      if (error || !data.url) throw error ?? new Error('Sign-in failed');
       await this.d.openExternal(data.url);
       const { code } = await result;
       const exchanged = await this.d.auth.exchangeCodeForSession(code);
@@ -106,6 +107,8 @@ export class AccountService {
     } catch (err) {
       const message = errorMessage(err);
       this.set(message === 'Cancelled' ? { state: 'signed-out' } : { state: 'signed-out', error: message });
+    } finally {
+      abort.abort(); // the listener closes on every way out (a no-op once it has its code)
     }
   }
 
