@@ -73,6 +73,7 @@ async function boot(): Promise<void> {
   nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
   const store = NoteStore.open(userData);
   log.info('[store] reconcile', await store.reconcile());
+  log.info('[store] purged tombstones', store.purgeTombstones(Date.now()));
   // Widgets whose page no longer exists (deleted while pruning failed, or removed outside the app).
   const liveWidgets = keepExisting(
     settings.homeWidgets,

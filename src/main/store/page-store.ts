@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Page } from '../../shared/channels';
 import { appendEntry } from '../../shared/learn-log';
 import { setTaskChecked } from '../../shared/task-lines';
@@ -15,7 +15,8 @@ import {
 import type { FolderStore } from './folder-store';
 import { pages } from './schema';
 
-// syncedAt exists in SQL for future sync but is not part of Page.
+// syncedAt, version and deletedAt exist in SQL for sync but are not part of Page.
+const live = isNull(pages.deletedAt);
 const columns = {
   id: pages.id,
   title: pages.title,
@@ -57,12 +58,13 @@ export class PageStore {
     return this.db
       .select(columns)
       .from(pages)
+      .where(live)
       .orderBy(desc(pages.updatedAt))
       .all();
   }
 
   get(id: string): Page | undefined {
-    return this.db.select(columns).from(pages).where(eq(pages.id, id)).get();
+    return this.db.select(columns).from(pages).where(and(eq(pages.id, id), live)).get();
   }
 
   rename(id: string, title: string): Page {
@@ -102,7 +104,7 @@ export class PageStore {
     this.db
       .update(pages)
       .set({ folderId })
-      .where(inArray(pages.id, ids))
+      .where(and(inArray(pages.id, ids), live))
       .run();
   }
 
@@ -111,7 +113,7 @@ export class PageStore {
     this.db
       .update(pages)
       .set({ starred })
-      .where(inArray(pages.id, ids))
+      .where(and(inArray(pages.id, ids), live))
       .run();
   }
 
@@ -123,7 +125,7 @@ export class PageStore {
         const page = this.get(id);
         if (!page) continue;
         for (const file of imageRefs(page.body)) doomed.add(file);
-        this.db.delete(pages).where(eq(pages.id, id)).run();
+        this.db.update(pages).set({ deletedAt: this.now() }).where(eq(pages.id, id)).run(); // tombstone
       }
     })();
     if (!doomed.size) return;
@@ -161,7 +163,7 @@ export class PageStore {
     const updated = this.db
       .update(pages)
       .set({ ...patch, updatedAt: this.now() })
-      .where(eq(pages.id, id))
+      .where(and(eq(pages.id, id), live))
       .returning(columns)
       .get();
     if (!updated) throw new Error('Page not found');

@@ -53,7 +53,7 @@ it('migrates an existing v6 database', () => {
   raw.close();
   store = NoteStore.open(dir, () => clock);
   const check = new Database(path.join(dir, 'voice-notes.sqlite'));
-  expect(check.pragma('user_version', { simple: true })).toBe(7);
+  expect(check.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
   check.close();
   expect(store.dictations.list()).toEqual([]);
 });

@@ -52,6 +52,26 @@ export const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL
    );
    CREATE INDEX dictations_created_at ON dictations (created_at);`,
+  // Sync prep: deletes become tombstones, rows remember the server version they were synced at,
+  // and local changes queue in the outbox (see docs/superpowers/specs/2026-10-26-sync-prep-design.md).
+  `ALTER TABLE notes   ADD COLUMN deleted_at INTEGER;
+   ALTER TABLE notes   ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE pages   ADD COLUMN deleted_at INTEGER;
+   ALTER TABLE pages   ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE folders ADD COLUMN deleted_at INTEGER;
+   ALTER TABLE folders ADD COLUMN version INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE outbox (
+     seq          INTEGER PRIMARY KEY AUTOINCREMENT,
+     mutation_id  TEXT NOT NULL UNIQUE,
+     op           TEXT NOT NULL,
+     entity_id    TEXT NOT NULL,
+     payload      TEXT NOT NULL,
+     base_version INTEGER NOT NULL,
+     in_flight    INTEGER NOT NULL DEFAULT 0,
+     created_at   INTEGER NOT NULL
+   );
+   CREATE INDEX outbox_entity ON outbox (entity_id);
+   CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
 ];
 
 export function migrate(db: Database.Database): void {

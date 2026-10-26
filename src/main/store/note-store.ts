@@ -3,14 +3,18 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNull } from 'drizzle-orm';
 import type { Note, NoteKind, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { PageStore } from './page-store';
 import { DictationStore } from './dictation-store';
-import { notes } from './schema';
+import { liveColumns, notes } from './schema';
+
+const noteColumns = liveColumns(getTableColumns(notes));
+const live = isNull(notes.deletedAt);
+const TOMBSTONE_TTL_MS = 30 * 86_400_000;
 
 export type NewAudio = {
   bytes: Buffer;
@@ -95,19 +99,19 @@ export class NoteStore {
   }
 
   list(): Note[] {
-    return this.db.select().from(notes).orderBy(desc(notes.createdAt)).all();
+    return this.db.select(noteColumns).from(notes).where(live).orderBy(desc(notes.createdAt)).all();
   }
 
   get(id: string): Note | undefined {
-    return this.db.select().from(notes).where(eq(notes.id, id)).get();
+    return this.db.select(noteColumns).from(notes).where(and(eq(notes.id, id), live)).get();
   }
 
   rename(id: string, title: string): Note {
     const updated = this.db
       .update(notes)
       .set({ title, updatedAt: this.now() })
-      .where(eq(notes.id, id))
-      .returning()
+      .where(and(eq(notes.id, id), live))
+      .returning(noteColumns)
       .get();
     if (!updated) throw new Error('Note not found');
     return updated;
@@ -115,7 +119,7 @@ export class NoteStore {
 
   /** Unknown note ids are ignored. */
   setStarred(ids: string[], starred: boolean): void {
-    this.db.update(notes).set({ starred, updatedAt: this.now() }).where(inArray(notes.id, ids)).run();
+    this.db.update(notes).set({ starred, updatedAt: this.now() }).where(and(inArray(notes.id, ids), live)).run();
   }
 
   /** null clears the label (the raw window title is kept). */
@@ -123,8 +127,8 @@ export class NoteStore {
     const updated = this.db
       .update(notes)
       .set({ show, updatedAt: this.now() })
-      .where(eq(notes.id, id))
-      .returning()
+      .where(and(eq(notes.id, id), live))
+      .returning(noteColumns)
       .get();
     if (!updated) throw new Error('Note not found');
     return updated;
@@ -141,7 +145,7 @@ export class NoteStore {
   }
 
   private updateTranscript(id: string, patch: Partial<Note>): Note {
-    const updated = this.db.update(notes).set(patch).where(eq(notes.id, id)).returning().get();
+    const updated = this.db.update(notes).set(patch).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
     if (!updated) throw new Error('Note not found');
     return updated;
   }
@@ -150,13 +154,14 @@ export class NoteStore {
     const note = this.get(id);
     if (!note) return;
     await fs.promises.rm(this.absolutePath(note), { force: true });
-    this.db.delete(notes).where(eq(notes.id, id)).run();
+    // A tombstone, so the delete can reach other PCs; purgeTombstones() removes it later.
+    this.db.update(notes).set({ deletedAt: this.now() }).where(eq(notes.id, id)).run();
   }
 
   /** folderId null = Inbox. Unknown note ids are ignored. */
   moveNotes(ids: string[], folderId: string | null): void {
     if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
-    this.db.update(notes).set({ folderId, updatedAt: this.now() }).where(inArray(notes.id, ids)).run();
+    this.db.update(notes).set({ folderId, updatedAt: this.now() }).where(and(inArray(notes.id, ids), live)).run();
   }
 
   async deleteMany(ids: string[]): Promise<void> {
@@ -172,9 +177,9 @@ export class NoteStore {
       result.tmpRemoved++;
     }
 
-    const known = new Set<string>();
+    // Tombstoned ids count as known: a deleted note's file must never be adopted back.
+    const known = new Set(this.db.select({ id: notes.id }).from(notes).all().map((r) => r.id));
     for (const note of this.list()) {
-      known.add(note.id);
       const exists = fs.existsSync(this.absolutePath(note));
       const status = exists ? 'ok' : 'missing';
       if (status !== note.status) {
@@ -209,6 +214,19 @@ export class NoteStore {
       result.adopted++;
     }
     return result;
+  }
+
+  /** Drops tombstones older than 30 days whose delete is no longer waiting in the outbox. */
+  purgeTombstones(now: number): number {
+    let removed = 0;
+    for (const table of ['notes', 'pages', 'folders']) {
+      removed += this.sqlite
+        .prepare(
+          `DELETE FROM ${table} WHERE deleted_at IS NOT NULL AND deleted_at < ? AND id NOT IN (SELECT entity_id FROM outbox)`,
+        )
+        .run(now - TOMBSTONE_TTL_MS).changes;
+    }
+    return removed;
   }
 
   absolutePath(note: Note): string {

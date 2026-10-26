@@ -1,10 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { eq } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull } from 'drizzle-orm';
 import type { Folder } from '../../shared/channels';
 import { isDescendant } from '../../shared/folders';
-import { folders, notes, pages } from './schema';
+import { folders, liveColumns, notes, pages } from './schema';
+
+const folderColumns = liveColumns(getTableColumns(folders));
+const live = isNull(folders.deletedAt);
 
 const MAX_NAME = 100;
 
@@ -17,11 +20,11 @@ export class FolderStore {
   ) {}
 
   list(): Folder[] {
-    return this.db.select().from(folders).all();
+    return this.db.select(folderColumns).from(folders).where(live).all();
   }
 
   get(id: string): Folder | undefined {
-    return this.db.select().from(folders).where(eq(folders.id, id)).get();
+    return this.db.select(folderColumns).from(folders).where(and(eq(folders.id, id), live)).get();
   }
 
   create(name: string, parentId: string | null): Folder {
@@ -55,13 +58,13 @@ export class FolderStore {
   delete(id: string): void {
     const folder = this.require(id);
     this.sqlite.transaction(() => {
-      this.db.update(notes).set({ folderId: folder.parentId }).where(eq(notes.folderId, id)).run();
-      this.db.update(pages).set({ folderId: folder.parentId }).where(eq(pages.folderId, id)).run();
+      this.db.update(notes).set({ folderId: folder.parentId }).where(and(eq(notes.folderId, id), isNull(notes.deletedAt))).run();
+      this.db.update(pages).set({ folderId: folder.parentId }).where(and(eq(pages.folderId, id), isNull(pages.deletedAt))).run();
       for (const child of this.list().filter((f) => f.parentId === id)) {
         const name = this.freeName(child.name, folder.parentId, child.id);
         this.update(child.id, { parentId: folder.parentId, name });
       }
-      this.db.delete(folders).where(eq(folders.id, id)).run();
+      this.db.update(folders).set({ deletedAt: this.now() }).where(eq(folders.id, id)).run(); // tombstone
     })();
   }
 
@@ -70,7 +73,7 @@ export class FolderStore {
       .update(folders)
       .set({ ...patch, updatedAt: this.now() })
       .where(eq(folders.id, id))
-      .returning()
+      .returning(folderColumns)
       .get()!;
   }
 
