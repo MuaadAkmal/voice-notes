@@ -70,7 +70,9 @@ const dashboardApi = {
   listPages: (): Promise<Page[]> => ipcRenderer.invoke(Ch.PagesList),
   createPage: (folderId: string | null): Promise<Page> => ipcRenderer.invoke(Ch.PagesCreate, { folderId }),
   renamePage: (id: string, title: string): Promise<Page> => ipcRenderer.invoke(Ch.PagesRename, { id, title }),
-  setPageBody: (id: string, body: string): Promise<Page> => ipcRenderer.invoke(Ch.PagesSetBody, { id, body }),
+  /** `expected`: the text this edit started from; if the page changed since, the other text is kept as a copy. */
+  setPageBody: (id: string, body: string, expected?: string): Promise<Page> =>
+    ipcRenderer.invoke(Ch.PagesSetBody, { id, body, expected }),
   appendPageEntry: (id: string, text: string): Promise<Page> =>
     ipcRenderer.invoke(Ch.PagesAppendEntry, { id, text }),
   setPageTask: (id: string, line: number, checked: boolean): Promise<Page> =>

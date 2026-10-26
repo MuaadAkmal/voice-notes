@@ -36,6 +36,9 @@ export function PageView({ page, fresh, onBack }: Props) {
   // The editor reads its text only when it mounts: a body from another PC remounts it (new key).
   const [editorKey, setEditorKey] = useState(0);
   const localBody = useRef(shown.body);
+  // The stored text this editor's edits build on: what it loaded, then what it last saved. A save based
+  // on text that changed underneath (another PC's edit while you typed) keeps the other text as a copy.
+  const baseBody = useRef(shown.body);
   const home = useHomeWidgets();
   const pinned = isPinned(home.widgets ?? [], shown.id);
   const pinDisabled = home.widgets === null || (!pinned && !canAdd(home.widgets));
@@ -48,7 +51,8 @@ export function PageView({ page, fresh, onBack }: Props) {
   const [saver] = useState(() => {
     const s: DebouncedSaver<string> = new DebouncedSaver<string>(
       async (body) => {
-        await api.setPageBody(shown.id, body);
+        await api.setPageBody(shown.id, body, baseBody.current);
+        baseBody.current = body;
         if (!s.pending) setStatus('saved');
       },
       SAVE_DELAY_MS,
@@ -89,6 +93,7 @@ export function PageView({ page, fresh, onBack }: Props) {
     const focused = !!editorHost.current?.contains(document.activeElement);
     if (shouldTakeRemoteBody({ dirty: saver.pending, focused, localBody: localBody.current, remoteBody: shown.body })) {
       localBody.current = shown.body;
+      baseBody.current = shown.body;
       setEditorKey((k) => k + 1);
     }
   }, [shown.body, saver]);

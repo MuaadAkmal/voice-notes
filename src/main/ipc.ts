@@ -258,8 +258,8 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
     return page;
   });
-  handle(Ch.PagesSetBody, SetBodySchema, ({ id, body }) => {
-    const page = pages.setBody(id, body);
+  handle(Ch.PagesSetBody, SetBodySchema, ({ id, body, expected }) => {
+    const page = pages.setBody(id, body, expected);
     d.pagesChanged();
     return page;
   });

@@ -89,6 +89,20 @@ test('two PCs stay in step: notes, an open page, and the switch', async () => {
   await b.app.evaluate((_e, id) => (globalThis as unknown as { __voiceNotes: any }).__voiceNotes.store.pages.appendEntry(id, 'added on B'), pageId); // eslint-disable-line @typescript-eslint/no-explicit-any
   await until(a.dashboard, async () => (await a.dashboard.locator('.cm-content').textContent())?.includes('added on B') ?? false);
 
+  // Typing on A while B rewrites the page: nobody's text is lost.
+  await a.dashboard.locator('.cm-content').click();
+  await b.app.evaluate((_e, id) => (globalThis as unknown as { __voiceNotes: any }).__voiceNotes.store.pages.setBody(id, 'rewritten on B'), pageId); // eslint-disable-line @typescript-eslint/no-explicit-any
+  await syncNow(b);
+  await syncNow(a); // arrives while A is typing: A's editor keeps its text
+  await a.dashboard.keyboard.press('End');
+  await a.dashboard.keyboard.type(' typed on A');
+  await a.dashboard.locator('.cm-content').blur(); // saves
+  const bodies = async (t: TestApp) => (await t.hooks((h) => h.store.pages.list().map((p) => p.body))).join('\n');
+  await until(b.dashboard, async () => {
+    const all = await bodies(b);
+    return all.includes('rewritten on B') && all.includes('typed on A');
+  });
+
   // Switched off on A: an edit waits; switched back on, it goes across.
   await a.dashboard.getByRole('button', { name: /^Account: Test User/ }).click();
   await a.dashboard.getByRole('switch', { name: 'Sync this PC' }).click();

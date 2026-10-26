@@ -85,8 +85,19 @@ export class PageStore {
     })();
   }
 
-  setBody(id: string, body: string): Page {
+  /**
+   * `expected` is the text the editor was showing when this edit began. If the stored text changed
+   * since (another PC's edit arrived while you typed), it's kept as "<title> (other version)" rather
+   * than overwritten; both sync as ordinary pages.
+   */
+  setBody(id: string, body: string, expected?: string): Page {
     return this.sqlite.transaction(() => {
+      const before = this.get(id);
+      if (before && expected !== undefined && before.body !== expected && before.body !== body) {
+        const copy = this.create(before.folderId);
+        this.rename(copy.id, `${before.title} (other version)`);
+        this.setBody(copy.id, before.body);
+      }
       const page = this.update(id, { body });
       this.record({ op: 'page.setBody', id, body, at: page.updatedAt });
       return page;
