@@ -288,7 +288,11 @@ export function Pill({ state, analyser, pomo }: PillProps) {
       return (
         <div {...hover} onClick={() => api.click()} data-morph className={`group ${shell} h-9 cursor-pointer gap-2.5 px-3.5`}>
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
-          <SourceGlyph source={state.source} />
+          {state.dictation ? (
+            <span className="text-[11px] font-medium tracking-wide text-sky-300">Dictating</span>
+          ) : (
+            <SourceGlyph source={state.source} />
+          )}
           {/* "No sound" takes the waveform's slot so the pill never grows. */}
           <div className="relative" style={{ width: WAVE_W, height: WAVE_H }}>
             <Waveform analyser={analyser} source={state.source} onSilentChange={setSilent} />

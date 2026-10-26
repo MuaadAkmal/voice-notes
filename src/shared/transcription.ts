@@ -28,17 +28,49 @@ export const LANGUAGE_CODES = [
 
 export const DEFAULT_MODEL = 'openai/whisper-large-v3';
 
-/** provider null = not set up. Only the user's own OpenAI-compatible server exists for now. */
+/** Built-in (whisper.cpp) models, in the order the picker lists them. */
+export const MODEL_IDS = [
+  'tiny',
+  'tiny.en',
+  'base',
+  'base.en',
+  'small',
+  'small.en',
+  'medium',
+  'medium.en',
+  'turbo-q5',
+  'turbo',
+] as const;
+
+export type ModelId = (typeof MODEL_IDS)[number];
+
+/** What the picker shows for each model. `bytes` is the download size. */
+export const MODEL_DISPLAY: Record<ModelId, { label: string; note: string; bytes: number; ramGb: number }> = {
+  tiny: { label: 'Tiny', note: 'Fastest, rough accuracy', bytes: 77_691_713, ramGb: 0.4 },
+  'tiny.en': { label: 'Tiny (English)', note: 'Fastest, English only', bytes: 77_704_715, ramGb: 0.4 },
+  base: { label: 'Base', note: 'Fast, decent accuracy', bytes: 147_951_465, ramGb: 0.5 },
+  'base.en': { label: 'Base (English)', note: 'Fast, English only', bytes: 147_964_211, ramGb: 0.5 },
+  small: { label: 'Small', note: 'Balanced speed and accuracy', bytes: 487_601_967, ramGb: 1 },
+  'small.en': { label: 'Small (English)', note: 'Balanced, English only', bytes: 487_614_201, ramGb: 1 },
+  medium: { label: 'Medium', note: 'Accurate, slow on most PCs', bytes: 1_533_763_059, ramGb: 2.6 },
+  'medium.en': { label: 'Medium (English)', note: 'Accurate, English only', bytes: 1_533_774_781, ramGb: 2.6 },
+  'turbo-q5': { label: 'Large-v3 Turbo (compact)', note: 'Best for most PCs', bytes: 574_041_195, ramGb: 1.5 },
+  turbo: { label: 'Large-v3 Turbo', note: 'Best, needs a strong CPU', bytes: 1_624_555_275, ramGb: 3 },
+};
+
+/** provider null = not set up; 'server' = the user's own OpenAI-compatible server; 'local' = built-in whisper.cpp. */
 export type TranscriptionSettings = {
-  provider: 'server' | null;
+  provider: 'server' | 'local' | null;
   baseUrl: string;
   model: string;
+  localModel: ModelId | null;
 };
 
 export const DEFAULT_TRANSCRIPTION: TranscriptionSettings = {
   provider: null,
   baseUrl: '',
   model: DEFAULT_MODEL,
+  localModel: null,
 };
 
 /** Planned Voice Notes Cloud models, previewed on the Transcription page until the cloud backend ships. */
@@ -48,6 +80,12 @@ export const CLOUD_TIERS = [
   { name: 'Most accurate', detail: 'Whisper large-v3' },
   { name: 'Indian languages', detail: 'Hindi, Tamil, Bengali and more' },
 ] as const;
+
+/** whisper.cpp answers silence with markers like "[BLANK_AUDIO]": text made only of markers means no speech. */
+export function cleanTranscript(text: string): string {
+  const trimmed = text.trim();
+  return trimmed.replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim() === '' ? '' : trimmed;
+}
 
 /** http(s) URL without query, hash or trailing slashes; a pasted full endpoint is cut back to its base. */
 export function normaliseBaseUrl(input: string): string | null {

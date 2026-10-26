@@ -1,5 +1,5 @@
 // Types and channel names only: safe to import from sandboxed preloads (no zod).
-import type { TranscribeLanguage, TranscriptionSettings } from './transcription';
+import type { ModelId, TranscribeLanguage, TranscriptionSettings } from './transcription';
 export type Note = {
   id: string;
   title: string;
@@ -74,6 +74,9 @@ export type Settings = {
   transcription: TranscriptionSettings;
   transcribeLanguage: TranscribeLanguage; // last used in the Transcribe menu
   laterPageId: string | null; // the built-in Review later page; created at boot
+  dictationHotkey: number[]; // uiohook keycodes: hold to dictate into the focused app
+  dictationHotkeyLabel: string;
+  dictationSound: boolean; // a ping when dictation starts listening
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -87,7 +90,7 @@ export type RecordingMode = 'hold' | 'handsfree';
 export type OverlayState =
   | { kind: 'idle'; visible: boolean; film?: true } // film: film mode is listening (rewind ready)
   | { kind: 'busy'; message: string }
-  | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource }
+  | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource; dictation?: true }
   // micOnly: 'both' was requested but system audio failed; titled: confirmation after a title was added
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean };
@@ -96,6 +99,11 @@ export type OverlayState =
 export type DropPayload = { text: string; uriList: string; html: string };
 /** A dropped item for the Review later page. title null = no usable link text. */
 export type LaterItem = { kind: 'link'; url: string; title: string | null } | { kind: 'text'; text: string };
+
+/** A dictation's text, kept for 24 h. app: show label of the window it was dictated into. */
+export type Dictation = { id: string; text: string; app: string | null; createdAt: number };
+/** A dictation clip from the overlay, already 16 kHz mono WAV. */
+export type DictationAudio = { bytes: Uint8Array; durationMs: number };
 
 export type AudioDevice = { deviceId: string; label: string };
 
@@ -132,6 +140,7 @@ export const Ch = {
   MediaProbe: 'media:probe', // { id } is sound playing?
   MediaProbeResult: 'media:probe-result', // { id, playing }
   LaterDrop: 'later:drop', // DropPayload → 'saved' | 'ignored' (invoke)
+  DictationAudio: 'dictation:audio', // DictationAudio
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
   NotesRename: 'notes:rename',
@@ -170,11 +179,21 @@ export const Ch = {
   TranscriptionSetKey: 'transcription:set-key', // { key } → KeyInfo
   TranscriptionRemoveKey: 'transcription:remove-key', // → KeyInfo
   TranscriptionWav: 'transcription:wav', // { requestId, bytes } | { requestId, error }
+  DictationsList: 'dictations:list', // → Dictation[]
+  DictationsCopy: 'dictations:copy', // { id } main writes the clipboard
+  DictationsClear: 'dictations:clear',
+  LocalStatus: 'local:status',
+  LocalInstall: 'local:install',
+  LocalCancel: 'local:cancel',
+  LocalRemove: 'local:remove',
+  LocalTest: 'local:test',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
   FoldersChanged: 'folders:changed',
+  DictationsChanged: 'dictations:changed',
+  LocalChanged: 'local:changed', // LocalStatus (also download progress)
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
@@ -184,4 +203,15 @@ export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'f
 export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
+/** The built-in provider as the Transcription page shows it. */
+export type LocalStatus = {
+  available: boolean; // an engine build exists for this CPU
+  engine: boolean;
+  models: Record<ModelId, boolean>;
+  recommended: ModelId;
+  diskBytes: number;
+  job: { modelId: ModelId; phase: 'engine' | 'model'; received: number; total: number } | null;
+  runtimeMissing: boolean; // the Microsoft Visual C++ runtime the engine needs isn't installed
+};
+
 export type TestResult = { ok: true; ms: number; language: string | null } | { ok: false; error: string };

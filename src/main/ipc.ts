@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, shell } from 'electron';
+import { BrowserWindow, clipboard, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, shell } from 'electron';
 import log from 'electron-log/main';
 import { z } from 'zod';
 import {
@@ -13,6 +13,8 @@ import {
   OverlayTitleSchema,
   CreateFolderSchema,
   CreatePageSchema,
+  CopyDictationSchema,
+  DictationAudioSchema,
   ErrorSchema,
   ExternalUrlSchema,
   SaveImageSchema,
@@ -32,6 +34,8 @@ import {
   SettingsPatchSchema,
   SetKeySchema,
   SetTranscriptSchema,
+  LocalInstallSchema,
+  LocalRemoveSchema,
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
@@ -39,10 +43,12 @@ import {
 import { normaliseBaseUrl } from '../shared/transcription';
 import { pruneWidgets } from '../shared/home-widgets';
 import type { HotkeyService } from './hotkey/service';
+import type { DictationController } from './dictation/controller';
 import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
+import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
 import type { WavBridge } from './transcription/wav-bridge';
@@ -52,6 +58,8 @@ type OverlayDeps = {
   overlayMouse: OverlayMouse; // hover and drags share the window's click-through flag
   gesture: HotkeyGesture;
   controller: RecorderController;
+  dictation: DictationController;
+  dictationGesture: HotkeyGesture;
   onDevices: (devices: AudioDevice[]) => void;
   onDragEnd: () => void;
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
@@ -74,7 +82,7 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
 }
 
 export function registerOverlayIpc(deps: OverlayDeps): void {
-  const { overlay, gesture, controller, onDevices, onDragEnd, titles } = deps;
+  const { overlay, gesture, controller, dictation, dictationGesture, onDevices, onDragEnd, titles } = deps;
   ipcMain.on(Ch.FilmError, from(overlay, ErrorSchema, ({ message }) => deps.onFilmError(message)));
   ipcMain.on(
     Ch.FilmAudio,
@@ -88,7 +96,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
   ipcMain.on(Ch.OverlayTitleCancel, (e) => e.sender === overlay.webContents && titles.cancel());
-  ipcMain.on(Ch.OverlayDiscard, (e) => e.sender === overlay.webContents && gesture.escape());
+  // The hands-free × discards whichever is recording (only one can be).
+  ipcMain.on(Ch.OverlayDiscard, (e) => {
+    if (e.sender !== overlay.webContents) return;
+    gesture.escape();
+    dictationGesture.escape();
+  });
   ipcMain.on(
     Ch.OverlayDrag,
     from(overlay, DragSchema, ({ dx, dy }) => {
@@ -109,7 +122,8 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     Ch.RecorderError,
     from(overlay, ErrorSchema, ({ message }) => {
       log.warn('[recorder] capture error', message);
-      controller.onCaptureError(message);
+      if (dictation.active) dictation.onCaptureError(message);
+      else controller.onCaptureError(message);
     }),
   );
   ipcMain.on(
@@ -125,7 +139,18 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     if (event.sender !== overlay.webContents) throw new Error('Forbidden');
     return deps.onDrop(DropPayloadSchema.parse(payload));
   });
-  ipcMain.on(Ch.OverlayClick, (e) => e.sender === overlay.webContents && gesture.toggle());
+  ipcMain.on(
+    Ch.DictationAudio,
+    from(overlay, DictationAudioSchema, (a) => {
+      dictation.onAudio(a).catch((e) => log.error('[dictation]', e));
+    }),
+  );
+  // Clicking the pill during a dictation stops it; otherwise it toggles a hands-free note.
+  ipcMain.on(Ch.OverlayClick, (e) => {
+    if (e.sender !== overlay.webContents) return;
+    if (dictation.active) dictationGesture.toggle();
+    else gesture.toggle();
+  });
   ipcMain.on(Ch.OverlayRetry, (e) => {
     if (e.sender === overlay.webContents) controller.retry().catch((err) => log.error(err));
   });
@@ -141,11 +166,13 @@ type DashboardDeps = {
   notesChanged: () => void;
   foldersChanged: () => void;
   pagesChanged: () => void;
+  dictationsChanged: () => void;
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
   transcription: TranscriptionService;
   secrets: Secrets;
   wavBridge: WavBridge;
+  localWhisper: LocalWhisper;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -173,7 +200,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     if (note?.status === 'ok') shell.showItemInFolder(d.store.absolutePath(note));
   });
   handle(Ch.SettingsGet, none, () => d.getSettings());
-  handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => d.updateSettings(patch));
+  handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => {
+    // The built-in provider only with a downloaded model: anything else would fail every job.
+    const t = patch.transcription;
+    if (t?.provider === 'local') {
+      const st = d.localWhisper.status();
+      if (!(st.engine && t.localModel && st.models[t.localModel])) return d.getSettings();
+    }
+    return d.updateSettings(patch);
+  });
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
   handle(Ch.DevicesList, none, () => d.getDevices());
   handle(Ch.OpenRecordingsFolder, none, async () => {
@@ -286,6 +321,33 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     return d.secrets.info('server');
   });
   handle(Ch.TranscriptionWav, WavReplySchema, (reply) => d.wavBridge.settle(reply.requestId, reply));
+  handle(Ch.LocalStatus, none, () => d.localWhisper.status());
+  handle(Ch.LocalInstall, LocalInstallSchema, ({ modelId }) => d.localWhisper.install(modelId));
+  handle(Ch.LocalCancel, none, () => d.localWhisper.cancel());
+  handle(Ch.LocalRemove, LocalRemoveSchema, async ({ modelId, engineToo }) => {
+    try {
+      await d.localWhisper.remove(modelId, engineToo);
+    } finally {
+      // Even a removal that failed half-way may have taken the active model's files.
+      const t = d.getSettings().transcription;
+      const st = d.localWhisper.status();
+      if (t.provider === 'local' && !(st.engine && t.localModel && st.models[t.localModel]))
+        d.updateSettings({ transcription: { ...t, provider: null } });
+    }
+  });
+  handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
+  const dictations = d.store.dictations;
+  handle(Ch.DictationsList, none, () => dictations.list());
+  // Main writes the clipboard: the dashboard has no clipboard permission.
+  handle(Ch.DictationsCopy, CopyDictationSchema, async ({ id }) => {
+    const entry = dictations.get(id);
+    if (!entry) throw new Error('Dictation not found');
+    await clipboard.writeText(entry.text);
+  });
+  handle(Ch.DictationsClear, none, () => {
+    dictations.clear();
+    d.dictationsChanged();
+  });
   const folders = d.store.folders;
   handle(Ch.FoldersList, none, () => folders.list());
   handle(Ch.FoldersCreate, CreateFolderSchema, ({ name, parentId }) =>

@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { cleanIpcError, dayGroupLabel, defaultTitle, formatDuration } from '../../src/shared/format';
+import { cleanIpcError, dayGroupLabel, defaultTitle, formatBytes, formatDuration } from '../../src/shared/format';
+
+describe('formatBytes', () => {
+  it('uses MB below a GB and GB above, like the model sizes read', () => {
+    expect(formatBytes(0)).toBe('0 MB');
+    expect(formatBytes(8_928_640)).toBe('9 MB');
+    expect(formatBytes(147_951_465)).toBe('148 MB');
+    expect(formatBytes(1_533_763_059)).toBe('1.5 GB');
+    expect(formatBytes(1_624_555_275)).toBe('1.6 GB');
+  });
+});
 
 describe('formatDuration', () => {
   it('shows a dash for unknown duration', () => expect(formatDuration(0)).toBe('—'));

@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
-import { DEFAULT_TRANSCRIPTION } from '../shared/transcription';
+import { DEFAULT_TRANSCRIPTION, type ModelId } from '../shared/transcription';
 
 // uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
-// Not Ctrl+Win: that's Wispr Flow's dictation key, and both apps would fire.
+// Not Ctrl+Win: that's the dictation key (as in Wispr Flow).
 const ALT = 56;
+const CTRL = 29;
 const META = 3675;
 const SHIFT = 42;
 
@@ -29,6 +30,9 @@ export const DEFAULT_SETTINGS: Settings = {
   transcription: DEFAULT_TRANSCRIPTION,
   transcribeLanguage: 'auto',
   laterPageId: null,
+  dictationHotkey: [CTRL, META],
+  dictationHotkeyLabel: 'Ctrl+Win',
+  dictationSound: true,
 };
 
 function readRaw(file: string): Record<string, unknown> {
@@ -49,6 +53,13 @@ export function loadSettings(file: string): Settings {
     if (key in raw && parsed.success) result[key] = parsed.data;
   }
   return result as Settings;
+}
+
+/** The built-in model's file is gone (deleted outside the app): transcription is not set up any more. Same object when nothing changes. */
+export function normaliseLocal(s: Settings, modelInstalled: (id: ModelId) => boolean): Settings {
+  const t = s.transcription;
+  if (t.provider !== 'local' || (t.localModel && modelInstalled(t.localModel))) return s;
+  return { ...s, transcription: { ...t, provider: null } };
 }
 
 export function saveSettings(file: string, patch: Partial<Settings>): Settings {

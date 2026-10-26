@@ -45,6 +45,12 @@ export function chunk<T>(items: T[], n: number): T[][] {
   return out;
 }
 
+/** Decimal units, as download sizes are usually given: "148 MB", "1.5 GB". */
+export function formatBytes(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  return `${Math.round(bytes / 1e6)} MB`;
+}
+
 /** Electron wraps rejected invokes as "Error invoking remote method '<ch>': Error: <msg>"; keep just <msg>. */
 export function cleanIpcError(err: unknown): string {
   const message = err instanceof Error ? err.message : String(err);

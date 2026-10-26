@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   type AudioDevice,
   Ch,
+  type Dictation,
+  type LocalStatus,
   type Folder,
   type KeyInfo,
   MAX_BATCH,
@@ -13,7 +15,7 @@ import {
 } from '../shared/channels';
 import { chunk } from '../shared/format';
 import type { ImageExt } from '../shared/page-images';
-import type { TranscribeLanguage } from '../shared/transcription';
+import type { ModelId, TranscribeLanguage } from '../shared/transcription';
 
 const subscribe = (channel: string, cb: () => void) => {
   const listener = () => cb();
@@ -96,6 +98,17 @@ const dashboardApi = {
   sendWav: (reply: WavReply): Promise<void> => ipcRenderer.invoke(Ch.TranscriptionWav, reply),
   onTranscriptionStatus: (cb: (status: StatusMap) => void) => subscribeWith(Ch.TranscriptionStatus, cb),
   onNeedWav: (cb: (req: WavRequest) => void) => subscribeWith(Ch.TranscriptionNeedWav, cb),
+  listDictations: (): Promise<Dictation[]> => ipcRenderer.invoke(Ch.DictationsList),
+  copyDictation: (id: string): Promise<void> => ipcRenderer.invoke(Ch.DictationsCopy, { id }),
+  clearDictations: (): Promise<void> => ipcRenderer.invoke(Ch.DictationsClear),
+  onDictationsChanged: (cb: () => void) => subscribe(Ch.DictationsChanged, cb),
+  localStatus: (): Promise<LocalStatus> => ipcRenderer.invoke(Ch.LocalStatus),
+  installLocal: (modelId: ModelId): Promise<void> => ipcRenderer.invoke(Ch.LocalInstall, { modelId }),
+  cancelLocal: (): Promise<void> => ipcRenderer.invoke(Ch.LocalCancel),
+  removeLocal: (modelId: ModelId, engineToo?: boolean): Promise<void> =>
+    ipcRenderer.invoke(Ch.LocalRemove, { modelId, engineToo }),
+  testLocal: (): Promise<TestResult> => ipcRenderer.invoke(Ch.LocalTest),
+  onLocalChanged: (cb: (status: LocalStatus) => void) => subscribeWith(Ch.LocalChanged, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),
   onFoldersChanged: (cb: () => void) => subscribe(Ch.FoldersChanged, cb),

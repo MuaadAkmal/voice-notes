@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RecordingSource } from '../../shared/channels';
+import { toWav } from '../common/to-wav';
 import { openSystemAudio, trackOpening } from './capture';
+import { playPing } from './ping';
 
 const MIME = 'audio/webm;codecs=opus';
 const BITRATE = 32_000;
@@ -135,12 +137,13 @@ export function useRecorder(): AnalyserNode | null {
       scheduleMicRelease();
     };
 
-    api.onStart(async ({ deviceId, source }) => {
+    api.onStart(async ({ deviceId, source, dictation }) => {
       if (releaseTimer.current) clearTimeout(releaseTimer.current);
       // The latest command wins: a start while capture is still opening voids a queued stop/cancel.
       pending.current = null;
       if (starting.current || recorder.current) return;
       starting.current = true;
+      if (dictation?.ping) playPing();
       let clip: Clip | null = null;
       try {
         clip = await trackOpening(openClip(deviceId, source));
@@ -152,7 +155,17 @@ export function useRecorder(): AnalyserNode | null {
         rec.onstop = async () => {
           const durationMs = performance.now() - t0;
           const bytes = new Uint8Array(await new Blob(chunks, { type: MIME }).arrayBuffer());
-          api.sendAudio({ bytes, durationMs, mimeType: MIME, source: opened.source });
+          if (!dictation) {
+            api.sendAudio({ bytes, durationMs, mimeType: MIME, source: opened.source });
+            return;
+          }
+          // Dictation goes straight to the Whisper server, which wants WAV.
+          try {
+            api.sendDictationAudio({ bytes: await toWav(bytes), durationMs });
+          } catch (err) {
+            console.error('dictation clip conversion failed', err);
+            api.sendError('Recording failed');
+          }
         };
         // Runs on stop and on cancel (onstop is nulled for cancel; listeners are not).
         rec.addEventListener('stop', () => {

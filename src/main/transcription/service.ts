@@ -1,21 +1,18 @@
 import fs from 'node:fs';
-import type {
-  Note,
-  Settings,
-  StatusMap,
-  TestResult,
-} from '../../shared/channels';
-import type { TranscribeLanguage } from '../../shared/transcription';
+import type { Note, StatusMap, TestResult } from '../../shared/channels';
+import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
 import { silentWav } from '../../shared/wav';
 import type { NoteStore } from '../store/note-store';
+import type { Endpoint } from './endpoint';
 import { transcribe as realTranscribe } from './openai-client';
 import { TranscriptionQueue } from './queue';
 import type { Secrets } from './secrets';
 
 export type ServiceDeps = {
   store: Pick<NoteStore, 'get' | 'absolutePath' | 'setTranscript'>;
-  getSettings: () => Settings;
-  secrets: Pick<Secrets, 'get'>;
+  /** Where a job's request goes, read when the job starts. */
+  endpoint: () => Promise<Endpoint>;
+  secrets: Pick<Secrets, 'get'>; // for testing a server the user hasn't saved yet
   /** The dashboard decodes the clip and returns 16 kHz mono WAV (main has no audio decoder). */
   toWav: (bytes: Uint8Array, mimeType: string) => Promise<Uint8Array>;
   readFile?: (absPath: string) => Promise<Uint8Array>;
@@ -26,6 +23,7 @@ export type ServiceDeps = {
 };
 
 const MISSING = 'Audio file is missing';
+const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 
 /** Voice note → WAV → the user's server → transcript on the note, one note at a time. */
 export class TranscriptionService {
@@ -57,18 +55,32 @@ export class TranscriptionService {
   }
 
   /** One second of silence through the same client: checks URL, key and model together. */
-  async test(baseUrl: string, model: string): Promise<TestResult> {
+  test(baseUrl: string, model: string): Promise<TestResult> {
+    return this.probe(async () => ({ baseUrl, model, apiKey: this.d.secrets.get('server'), local: false, release: () => undefined }));
+  }
+
+  /** The same check against the provider in use (for the built-in engine, includes loading the model). */
+  testCurrent(): Promise<TestResult> {
+    return this.probe(this.d.endpoint);
+  }
+
+  private async probe(endpoint: () => Promise<Endpoint>): Promise<TestResult> {
     const started = this.now();
     try {
-      const { language } = await this.transcribe({
-        baseUrl,
-        model,
-        apiKey: this.d.secrets.get('server'),
-        language: null,
-        audio: silentWav(1),
-        filename: 'test.wav',
-      });
-      return { ok: true, ms: this.now() - started, language };
+      const ep = await endpoint();
+      try {
+        const { language } = await this.transcribe({
+          baseUrl: ep.baseUrl,
+          model: ep.model,
+          apiKey: ep.apiKey,
+          language: null,
+          audio: silentWav(1),
+          filename: 'test.wav',
+        });
+        return { ok: true, ms: this.now() - started, language };
+      } finally {
+        ep.release();
+      }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
@@ -78,21 +90,26 @@ export class TranscriptionService {
     const note = this.d.store.get(id);
     if (!note) return; // deleted while queued
     if (note.status !== 'ok') throw new Error(MISSING);
-    // Read when the job starts, so a fix made on the setup page applies to queued notes too.
-    const { transcription } = this.d.getSettings();
-    if (transcription.provider === null)
-      throw new Error('Set up transcription first');
     const audio = await this.d.toWav(await this.readAudio(note), note.mimeType);
-    const result = await this.transcribe({
-      baseUrl: transcription.baseUrl,
-      model: transcription.model,
-      apiKey: this.d.secrets.get('server'),
-      language,
-      audio,
-      filename: `${id}.wav`,
-    });
+    // Resolved when the job starts, so a fix made on the setup page applies to queued notes too.
+    const ep = await this.d.endpoint();
+    let result: Awaited<ReturnType<typeof realTranscribe>>;
     try {
-      this.d.store.setTranscript(id, result.text.trim(), result.language);
+      result = await this.transcribe({
+        baseUrl: ep.baseUrl,
+        model: ep.model,
+        apiKey: ep.apiKey,
+        language,
+        audio,
+        filename: `${id}.wav`,
+        // On a CPU a long note can take a while: give it time in proportion to its length.
+        ...(ep.local ? { timeoutMs: Math.max(LOCAL_MIN_TIMEOUT_MS, 4 * note.durationMs) } : {}),
+      });
+    } finally {
+      ep.release();
+    }
+    try {
+      this.d.store.setTranscript(id, cleanTranscript(result.text), result.language);
     } catch (e) {
       if (e instanceof Error && e.message === 'Note not found') return; // deleted mid-request
       throw e;

@@ -3,6 +3,7 @@ import { anyAudible } from '../../shared/audio-level';
 import { RingBuffer } from '../../shared/ring-buffer';
 import { clipOpened, openSystemAudio } from './capture';
 import { encodeWebmOpus } from './encode';
+import { afterPing } from './ping-gate';
 import workletUrl from './ring-worklet.js?url';
 
 const SAMPLE_RATE = 48_000; // Opus's native rate; Chromium resamples the loopback to it
@@ -86,6 +87,8 @@ export function useFilmBuffer(): void {
 
     /** Is sound coming out of the speakers? From the live buffer if film mode is on, else a short loopback sample. */
     const probe = async (): Promise<boolean> => {
+      // The dictation start ping would read as playing media: let it finish (and leave the film's look-back window).
+      await afterPing(film ? PROBE_MS : 0);
       if (film) return anyAudible(film.ring.latest((SAMPLE_RATE * PROBE_MS) / 1000), WINDOW);
       await clipOpened(); // never compete with the mic that's starting this very note
       const stream = await openSystemAudio();

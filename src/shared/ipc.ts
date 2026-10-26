@@ -4,7 +4,7 @@ import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
 import { MAX_DROP_FIELD } from './later';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
-import { LANGUAGE_CODES, normaliseBaseUrl } from './transcription';
+import { LANGUAGE_CODES, MODEL_IDS, normaliseBaseUrl } from './transcription';
 
 export * from './channels';
 
@@ -25,15 +25,16 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
 
 const TranscriptionSchema = z
   .object({
-    provider: z.literal('server').nullable(),
+    provider: z.enum(['server', 'local']).nullable(),
     // Stored already normalised; anything else is a hand-edited file.
     baseUrl: z
       .string()
       .max(2048)
       .refine((s) => s === '' || normaliseBaseUrl(s) === s),
     model: z.string().trim().min(1).max(200),
+    localModel: z.enum(MODEL_IDS).nullable().default(null), // absent in settings saved before the built-in provider
   })
-  .refine((t) => t.provider === null || t.baseUrl !== '');
+  .refine((t) => (t.provider === 'server' ? t.baseUrl !== '' : t.provider === 'local' ? t.localModel !== null : true));
 
 export const SettingsFieldSchemas = {
   hotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
@@ -52,6 +53,9 @@ export const SettingsFieldSchemas = {
   transcription: TranscriptionSchema,
   transcribeLanguage: z.enum(LANGUAGE_CODES),
   laterPageId: z.uuid().nullable(),
+  dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
+  dictationHotkeyLabel: z.string().min(1).max(60),
+  dictationSound: z.boolean(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -64,6 +68,15 @@ export const AudioPayloadSchema = z.object({
 });
 
 export const IdSchema = z.uuid();
+// About 1.9 MB of WAV per minute: 30 MB is a long dictation.
+export const DictationAudioSchema = z.object({
+  bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength <= 30 * 1024 * 1024, 'Audio too large'),
+  durationMs: z.number().nonnegative().finite(),
+});
+export const CopyDictationSchema = z.object({ id: IdSchema });
+
+export const LocalInstallSchema = z.object({ modelId: z.enum(MODEL_IDS) });
+export const LocalRemoveSchema = z.object({ modelId: z.enum(MODEL_IDS), engineToo: z.boolean().optional() });
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });

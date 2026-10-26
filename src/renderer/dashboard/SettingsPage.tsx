@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { type AudioDevice, type RecordingSource, REWIND_SECONDS, type RewindSeconds, type Settings, type Theme } from '../../shared/channels';
+import { sameCombo } from '../../shared/dictation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Kbd } from './NotesPage';
+import { useToast } from './Toast';
 
 const api = window.dashboardApi;
 const THEMES: { value: Theme; label: string; Icon: typeof Monitor }[] = [
@@ -17,13 +19,16 @@ const SOURCES: { value: RecordingSource; label: string }[] = [
   { value: 'system', label: 'System audio' },
   { value: 'both', label: 'Mic + system audio' },
 ];
+// Alt+Win+Shift (uiohook Alt, Meta, Shift): the fixed rewind combo.
+const REWIND_COMBO = [56, 3675, 42];
 // Radix Select can't hold an empty value; this stands for "System default" (micDeviceId null).
 const DEFAULT_MIC = 'default';
 
 export function SettingsPage() {
+  const toast = useToast();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
-  const [capturing, setCapturing] = useState(false);
+  const [capturing, setCapturing] = useState<'hotkey' | 'dictation' | null>(null);
 
   useEffect(() => {
     const load = () => {
@@ -37,15 +42,21 @@ export function SettingsPage() {
   if (!settings) return null;
   const update = (patch: Partial<Settings>) => api.setSettings(patch).then(setSettings);
 
-  const changeHotkey = async () => {
-    setCapturing(true);
+  // Each hotkey must differ from the other and from the rewind combo, or two actions would fire.
+  const changeHotkey = async (which: 'hotkey' | 'dictation') => {
+    setCapturing(which);
     try {
       const { keycodes, label } = await api.captureHotkey();
-      await update({ hotkey: keycodes, hotkeyLabel: label });
+      const others = which === 'hotkey' ? [settings.dictationHotkey, REWIND_COMBO] : [settings.hotkey, REWIND_COMBO];
+      if (others.some((o) => sameCombo(o, keycodes))) {
+        toast('That shortcut is already used');
+        return;
+      }
+      await update(which === 'hotkey' ? { hotkey: keycodes, hotkeyLabel: label } : { dictationHotkey: keycodes, dictationHotkeyLabel: label });
     } catch {
       // timed out: keep the old hotkey
     } finally {
-      setCapturing(false);
+      setCapturing(null);
     }
   };
 
@@ -58,10 +69,28 @@ export function SettingsPage() {
           title="Recording hotkey"
           hint="Hold to record, double-tap for hands-free. Other apps still receive these keys."
         >
-          <Kbd>{capturing ? 'Press keys…' : settings.hotkeyLabel}</Kbd>
-          <Button variant="outline" size="sm" onClick={changeHotkey} disabled={capturing}>
+          <Kbd>{capturing === 'hotkey' ? 'Press keys…' : settings.hotkeyLabel}</Kbd>
+          <Button variant="outline" size="sm" aria-label="Change recording hotkey" onClick={() => changeHotkey('hotkey')} disabled={capturing !== null}>
             Change
           </Button>
+        </Row>
+
+        <Row
+          title="Dictation hotkey"
+          hint="Hold to dictate into any app, double-tap for hands-free. Uses your Transcription server."
+        >
+          <Kbd>{capturing === 'dictation' ? 'Press keys…' : settings.dictationHotkeyLabel}</Kbd>
+          <Button variant="outline" size="sm" aria-label="Change dictation hotkey" onClick={() => changeHotkey('dictation')} disabled={capturing !== null}>
+            Change
+          </Button>
+        </Row>
+
+        <Row title="Dictation start sound" hint="A soft ping when dictation starts listening.">
+          <Switch
+            aria-label="Dictation start sound"
+            checked={settings.dictationSound}
+            onCheckedChange={(v) => update({ dictationSound: v })}
+          />
         </Row>
 
         <Row title="Appearance" hint="System follows your Windows light/dark setting.">

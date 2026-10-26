@@ -59,6 +59,10 @@ export class HotkeyService {
   /** Set when the rewind combo fires; holds off both combos until every key of them is released. */
   private rewindLatch = false;
   private mouseListener: ((e: MouseInput) => void) | null = null;
+  private dictationGesture: HotkeyGesture | null = null;
+  private dictationCombo: number[] = [];
+  private dictationActive = false;
+  private escapeListener: (() => void) | null = null;
 
   constructor(
     private readonly gesture: HotkeyGesture,
@@ -83,6 +87,22 @@ export class HotkeyService {
     this.hook.stop();
   }
 
+  /** Every Esc while not paused, whatever the gestures' state: a dictation can still be transcribing after its keys are up. */
+  onEscape(listener: () => void): void {
+    this.escapeListener = listener;
+  }
+
+  /** The dictation hotkey's gesture. Register before start(). */
+  attachDictation(gesture: HotkeyGesture): void {
+    this.dictationGesture = gesture;
+  }
+
+  /** A second, independent combo (Ctrl+Win) for dictation. Only one of it and the main combo is active at a time. */
+  setDictationCombo(keycodes: number[]): void {
+    this.dictationCombo = keycodes.map(canonical);
+    this.dictationActive = false;
+  }
+
   setCombo(keycodes: number[]): void {
     this.combo = keycodes.map(canonical);
     this.comboActive = false;
@@ -104,6 +124,13 @@ export class HotkeyService {
       this.comboActive = false;
       this.gesture.keyUp();
     }
+    if (p) this.releaseDictation();
+  }
+
+  private releaseDictation(): void {
+    if (!this.dictationActive) return;
+    this.dictationActive = false;
+    this.dictationGesture?.keyUp();
   }
 
   /** Resolves with the keys held at the moment the first one is released. */
@@ -138,6 +165,7 @@ export class HotkeyService {
       this.comboActive = false;
       this.gesture.keyUp();
     }
+    if (this.dictationActive && !this.dictationCombo.every((k) => k === code || this.pressed.has(k))) this.releaseDictation();
   }
 
   private onKeyDown = (e: KeyEvent): void => {
@@ -152,6 +180,8 @@ export class HotkeyService {
     if (this.paused) return;
     if (code === UiohookKey.Escape) {
       this.gesture.escape();
+      this.dictationGesture?.escape();
+      this.escapeListener?.();
       return;
     }
     // Rewind is checked first: it contains the main combo, whose hold may already have started.
@@ -166,9 +196,20 @@ export class HotkeyService {
       return;
     }
     if (this.rewindLatch) return;
+    if (this.dictationActive) return; // a held dictation owns the keyboard until released
     if (!this.comboActive && this.combo.length > 0 && this.combo.every((k) => this.pressed.has(k))) {
       this.comboActive = true;
       this.gesture.keyDown();
+      return;
+    }
+    if (
+      !this.comboActive &&
+      this.dictationGesture &&
+      this.dictationCombo.length > 0 &&
+      this.dictationCombo.every((k) => this.pressed.has(k))
+    ) {
+      this.dictationActive = true;
+      this.dictationGesture.keyDown();
     }
   };
 
@@ -190,5 +231,6 @@ export class HotkeyService {
       this.comboActive = false;
       this.gesture.keyUp();
     }
+    if (this.dictationActive && this.dictationCombo.includes(code)) this.releaseDictation();
   };
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from '../../src/main/settings';
+import { DEFAULT_SETTINGS, loadSettings, normaliseLocal, saveSettings } from '../../src/main/settings';
 
 let file: string;
 beforeEach(() => {
@@ -13,6 +13,10 @@ it('returns defaults when file absent', () => {
   expect(loadSettings(file)).toEqual(DEFAULT_SETTINGS);
   expect(DEFAULT_SETTINGS.hotkeyLabel).toBe('Alt+Win');
   expect(DEFAULT_SETTINGS.hotkey).toEqual([56, 3675]);
+});
+
+it('dictation defaults to Ctrl+Win with the start sound on', () => {
+  expect(DEFAULT_SETTINGS).toMatchObject({ dictationHotkey: [29, 3675], dictationHotkeyLabel: 'Ctrl+Win', dictationSound: true });
 });
 
 it('falls back to defaults on invalid JSON', () => {
@@ -93,8 +97,32 @@ it('ignores wrongly-typed fields', () => {
 });
 
 it('transcription settings default to not set up', () => {
-  expect(DEFAULT_SETTINGS.transcription).toEqual({ provider: null, baseUrl: '', model: 'openai/whisper-large-v3' });
+  expect(DEFAULT_SETTINGS.transcription).toEqual({
+    provider: null,
+    baseUrl: '',
+    model: 'openai/whisper-large-v3',
+    localModel: null,
+  });
   expect(DEFAULT_SETTINGS.transcribeLanguage).toBe('auto');
+});
+
+it('loads the built-in provider with its model', () => {
+  const transcription = { provider: 'local', baseUrl: '', model: 'x', localModel: 'base' };
+  fs.writeFileSync(file, JSON.stringify({ transcription }));
+  expect(loadSettings(file).transcription).toEqual(transcription);
+});
+
+it('falls back to not set up when the built-in model file is gone', () => {
+  const local = { ...DEFAULT_SETTINGS, transcription: { ...DEFAULT_SETTINGS.transcription, provider: 'local' as const, localModel: 'base' as const } };
+  expect(normaliseLocal(local, () => false).transcription).toMatchObject({ provider: null, localModel: 'base' });
+  expect(normaliseLocal(local, () => true)).toBe(local);
+  const server = { ...DEFAULT_SETTINGS, transcription: { ...DEFAULT_SETTINGS.transcription, provider: 'server' as const, baseUrl: 'https://vm/v1' } };
+  expect(normaliseLocal(server, () => false)).toBe(server);
+});
+
+it('reads settings saved before the built-in provider existed', () => {
+  fs.writeFileSync(file, JSON.stringify({ transcription: { provider: 'server', baseUrl: 'https://vm/v1', model: 'm' } }));
+  expect(loadSettings(file).transcription).toEqual({ provider: 'server', baseUrl: 'https://vm/v1', model: 'm', localModel: null });
 });
 
 it('loads valid transcription settings', () => {
@@ -109,6 +137,8 @@ it.each([
   ['un-normalised URL', { transcription: { provider: 'server', baseUrl: 'https://vm/v1/', model: 'm' } }],
   ['server without URL', { transcription: { provider: 'server', baseUrl: '', model: 'm' } }],
   ['empty model', { transcription: { provider: null, baseUrl: '', model: '' } }],
+  ['built-in without a model', { transcription: { provider: 'local', baseUrl: '', model: 'm', localModel: null } }],
+  ['unknown built-in model', { transcription: { provider: 'local', baseUrl: '', model: 'm', localModel: 'huge' } }],
 ])('falls back to defaults on %s', (_name, raw) => {
   fs.writeFileSync(file, JSON.stringify(raw));
   const s = loadSettings(file);

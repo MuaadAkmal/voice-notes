@@ -8,6 +8,10 @@ const VK_MEDIA_PLAY_PAUSE = 0xb3;
 const KEYEVENTF_EXTENDEDKEY = 0x1;
 const KEYEVENTF_KEYUP = 0x2;
 const MAX_CHARS = 512;
+const VK_CONTROL = 0x11;
+const VK_V = 0x56;
+// Shift, Ctrl, Alt, left and right Win.
+const MODIFIER_VKS = [0x10, 0x11, 0x12, 0x5b, 0x5c];
 
 type Bindings = {
   GetForegroundWindow: () => unknown;
@@ -17,6 +21,7 @@ type Bindings = {
   QueryFullProcessImageNameW: (h: unknown, flags: number, buf: Buffer, size: Uint32Array) => boolean;
   CloseHandle: (h: unknown) => boolean;
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
+  GetAsyncKeyState: (vk: number) => number;
 };
 
 let bindings: Bindings | null | undefined;
@@ -39,6 +44,7 @@ function bind(): Bindings | null {
       ),
       CloseHandle: kernel32.func('bool __stdcall CloseHandle(void* h)'),
       keybd_event: user32.func('void __stdcall keybd_event(uint8_t vk, uint8_t scan, uint32_t flags, uintptr_t extra)'),
+      GetAsyncKeyState: user32.func('int16_t __stdcall GetAsyncKeyState(int vKey)'),
     };
   } catch (err) {
     log.error('[win32] bindings unavailable', err);
@@ -89,4 +95,21 @@ export function pressPlayPause(): void {
   if (!b) return;
   b.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY, 0);
   b.keybd_event(VK_MEDIA_PLAY_PAUSE, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
+}
+
+/** Whether any of Shift, Ctrl, Alt or Win is physically down right now. */
+export function modifiersHeld(): boolean {
+  const b = bind();
+  if (!b) return false;
+  return MODIFIER_VKS.some((vk) => (b.GetAsyncKeyState(vk) & 0x8000) !== 0);
+}
+
+/** Presses Ctrl+V in whatever window has focus. Throws if the bindings are unavailable. */
+export function sendCtrlV(): void {
+  const b = bind();
+  if (!b) throw new Error('win32 bindings unavailable');
+  b.keybd_event(VK_CONTROL, 0, 0, 0);
+  b.keybd_event(VK_V, 0, 0, 0);
+  b.keybd_event(VK_V, 0, KEYEVENTF_KEYUP, 0);
+  b.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
 }

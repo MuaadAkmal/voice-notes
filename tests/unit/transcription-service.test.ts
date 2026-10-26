@@ -9,6 +9,7 @@ import {
   type ServiceDeps,
   TranscriptionService,
 } from '../../src/main/transcription/service';
+import { resolveEndpoint } from '../../src/main/transcription/endpoint';
 import { silentWav } from '../../src/shared/wav';
 
 const ID = '123e4567-e89b-42d3-a456-426614174000';
@@ -44,6 +45,7 @@ const serverSettings = (
     provider: 'server',
     baseUrl: 'https://vm/v1',
     model: 'm',
+    localModel: null,
     ...over,
   },
 });
@@ -53,6 +55,7 @@ function setup(over: Partial<ServiceDeps> = {}) {
   let settings = serverSettings();
   let key: string | null = 'k';
   const requests: TranscribeRequest[] = [];
+  const local = { ensure: vi.fn(async () => 'http://127.0.0.1:1/v1'), release: vi.fn() };
   const deps: ServiceDeps = {
     store: {
       get: vi.fn(() => note()),
@@ -61,7 +64,7 @@ function setup(over: Partial<ServiceDeps> = {}) {
         note({ id, transcript: text, transcriptLang: lang }),
       ),
     },
-    getSettings: () => settings,
+    endpoint: () => resolveEndpoint({ settings: () => settings, secrets: { get: () => key }, local }),
     secrets: { get: () => key },
     toWav: vi.fn(async () => new Uint8Array([9])),
     readFile: vi.fn(async () => new Uint8Array([1, 2])),
@@ -79,6 +82,7 @@ function setup(over: Partial<ServiceDeps> = {}) {
     service,
     deps,
     requests,
+    local,
     setSettings: (s: Settings) => (settings = s),
     setKey: (k: string | null) => (key = k),
   };
@@ -254,4 +258,55 @@ it('reports a failed connection test', async () => {
     ok: false,
     error: "Can't reach the server",
   });
+});
+
+it('stores no speech when the transcript is only markers', async () => {
+  const t = setup({ transcribe: vi.fn(async () => ({ text: ' [BLANK_AUDIO]\n', language: 'en' })) });
+  t.service.enqueue([ID], 'auto');
+  await t.service.idle();
+  expect(t.deps.store.setTranscript).toHaveBeenCalledWith(ID, '', 'en');
+});
+
+it('transcribes through the built-in engine and releases it after success and failure', async () => {
+  const t = setup();
+  t.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  t.service.enqueue([ID], 'auto');
+  await t.service.idle();
+  expect(t.local.ensure).toHaveBeenCalledWith('base');
+  expect(t.requests[0]).toMatchObject({ baseUrl: 'http://127.0.0.1:1/v1', model: 'base', apiKey: null });
+  expect(t.local.release).toHaveBeenCalledTimes(1);
+
+  const failing = setup({ transcribe: async () => Promise.reject(new TranscriptionFailed({ kind: 'network' })) });
+  failing.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  failing.service.enqueue([ID], 'auto');
+  await failing.service.idle();
+  expect(failing.local.release).toHaveBeenCalledTimes(1);
+});
+
+it('gives a long note on the built-in engine time in proportion to its length', async () => {
+  const thirtyMin = 30 * 60_000;
+  const t = setup({ store: { ...setup().deps.store, get: () => note({ durationMs: thirtyMin }) } });
+  t.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  t.service.enqueue([ID], 'auto');
+  await t.service.idle();
+  expect(t.requests[0].timeoutMs).toBe(4 * thirtyMin);
+
+  const short = setup();
+  short.setSettings(serverSettings({ provider: 'local', localModel: 'base' }));
+  short.service.enqueue([ID], 'auto');
+  await short.service.idle();
+  expect(short.requests[0].timeoutMs).toBe(10 * 60_000);
+
+  const server = setup({ store: { ...setup().deps.store, get: () => note({ durationMs: thirtyMin }) } });
+  server.service.enqueue([ID], 'auto');
+  await server.service.idle();
+  expect(server.requests[0].timeoutMs).toBeUndefined();
+});
+
+it('tests whatever provider is in use', async () => {
+  const t = setup();
+  t.setSettings(serverSettings({ provider: 'local', localModel: 'tiny' }));
+  expect(await t.service.testCurrent()).toMatchObject({ ok: true });
+  expect(t.requests[0]).toMatchObject({ baseUrl: 'http://127.0.0.1:1/v1', model: 'tiny', filename: 'test.wav' });
+  expect(t.local.release).toHaveBeenCalledTimes(1);
 });

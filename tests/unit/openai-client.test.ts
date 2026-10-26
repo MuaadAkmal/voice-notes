@@ -120,6 +120,16 @@ it('maps network failures and timeouts', async () => {
   await expect(transcribe(req(), slow.impl)).rejects.toThrow('Timed out');
 });
 
+it('an aborted signal cancels the request', async () => {
+  const cancel = new AbortController();
+  cancel.abort();
+  const impl = (async (_url: string, init: RequestInit) => {
+    if (init.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    return json(200, { text: 'too late' });
+  }) as unknown as typeof fetch;
+  await expect(transcribe(req({ signal: cancel.signal }), impl)).rejects.toBeInstanceOf(TranscriptionFailed);
+});
+
 it.each(['not json', '{"nope":1}'])(
   'rejects an unusable success body: %s',
   async (body) => {

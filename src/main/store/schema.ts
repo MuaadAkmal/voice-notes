@@ -40,3 +40,10 @@ export const folders = sqliteTable('folders', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+export const dictations = sqliteTable('dictations', {
+  id: text('id').primaryKey(),
+  text: text('text').notNull(),
+  app: text('app'),
+  createdAt: integer('created_at').notNull(),
+});
