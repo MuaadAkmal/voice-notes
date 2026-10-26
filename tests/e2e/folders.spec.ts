@@ -43,7 +43,7 @@ test('folders: create, drag a note in, delete folder returns it to Inbox', async
 
   await page.locator('li[draggable="true"]').first().dragTo(folderRow('Spanish'));
   await expect.poll(() => t.hooks((h) => h.store.list()[0].folderId)).toBe(folderId);
-  await expect(page.getByText('No notes yet')).toBeVisible();
+  await expect(page.getByText(/^Voice note · /)).toHaveCount(0); // only the built-in Review later page is left
 
   await folderRow('Spanish').getByText('Spanish').click();
   await expect(page.getByRole('heading', { name: 'Spanish' })).toBeVisible();
@@ -77,7 +77,7 @@ test('folders: nesting, duplicate-name toast, multi-select drag, cycle refused',
 
   // Shift-select two notes and drag them together into Films.
   await page.getByRole('button', { name: /^Inbox/ }).click();
-  const rows = page.locator('li[draggable="true"]');
+  const rows = page.locator('li[draggable="true"]').filter({ hasNotText: 'Review later' });
   await expect(rows).toHaveCount(3);
   await rows.nth(0).click({ position: { x: 360, y: 30 } });
   await rows.nth(1).click({ position: { x: 360, y: 30 }, modifiers: ['Shift'] });

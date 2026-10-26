@@ -28,7 +28,7 @@ test('appearance switches between dark and light and persists', async () => {
   await shot('dark-settings');
 
   await page.getByRole('button', { name: /^Inbox/ }).click();
-  await page.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('button', { name: 'More' }).first().click();
   await page.waitForTimeout(250);
   await shot('dark-inbox-menu');
   await page.keyboard.press('Escape');

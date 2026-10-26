@@ -193,7 +193,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
                   ? (label) => run((cur) => renameWidget(cur, widget.id, label))
                   : undefined
               }
-              onRemove={() => run((cur) => removeWidget(cur, widget.id))}
+              onRemove={widget.locked ? undefined : () => run((cur) => removeWidget(cur, widget.id))}
             >
               {widget.type === 'quick-add' && (
                 <QuickAddWidget
@@ -233,7 +233,8 @@ type CardProps = {
   onOpenPage: () => void;
   /** Quick-add widgets: rename the label inline. */
   onRename?: (label: string) => void;
-  onRemove: () => void;
+  /** Absent for the locked Review later card. */
+  onRemove?: () => void;
   children?: React.ReactNode;
 };
 
@@ -407,10 +408,14 @@ function WidgetCard({
                 ))}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onRemove}>
-              Remove
-            </DropdownMenuItem>
+            {onRemove && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+                  Remove
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </header>

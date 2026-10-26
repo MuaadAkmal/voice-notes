@@ -5,7 +5,7 @@ import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, ty
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
-import { canAdd, isPinned } from '../../shared/home-widgets';
+import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems, untranscribedIds } from '../../shared/items';
 import type { View } from './App';
 import { NOTES_MIME, onDropped, setCountDragImage, setDragging } from './dnd';
@@ -63,6 +63,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const filtering = isFiltering(filter);
   const shows = useMemo(() => distinctShows(notes ?? []), [notes]);
   const home = useHomeWidgets();
+  const laterId = builtInPageId(home.widgets);
   const transcription = useTranscription();
 
   useEffect(() => {
@@ -173,7 +174,9 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
     el.play().catch(() => setPlayingId(null));
   };
 
-  const remove = async (ids: string[]) => {
+  const remove = async (all: string[]) => {
+    const ids = all.filter((id) => id !== laterId); // the built-in Review later page stays
+    if (!ids.length) return;
     const ok = await confirm({ title: ids.length === 1 ? 'Delete this note?' : `Delete ${ids.length} notes?` });
     if (!ok) return;
     stopIfPlaying(ids);
@@ -338,9 +341,11 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
               {transcription.ready ? `Transcribe (${selectedAudio.length})` : 'Set up transcription'}
             </button>
           )}
-          <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>
-            Delete
-          </button>
+          {[...selected].some((id) => id !== laterId) && (
+            <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>
+              Delete
+            </button>
+          )}
           <button className="rounded-md px-2 py-1 text-muted-foreground hover:bg-accent" onClick={clearSelection}>
             Clear
           </button>
@@ -377,6 +382,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                       pinned={home.widgets && isPinned(home.widgets, page.id)}
                       homeFull={home.widgets !== null && !canAdd(home.widgets)}
                       onTogglePin={() => home.togglePin(page.id)}
+                      builtIn={page.id === laterId}
                     />
                   );
                 }

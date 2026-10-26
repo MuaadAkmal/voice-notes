@@ -35,7 +35,7 @@ test('home: default view and quick add', async () => {
   await setTheme('light');
   await shot('1-empty');
 
-  await page.getByRole('button', { name: 'Add a quick-add box' }).click();
+  await page.getByRole('button', { name: 'Add widget' }).click(); // Home is never empty: Review later is built in
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await dialog.getByRole('combobox', { name: 'Page' }).click();
@@ -79,7 +79,7 @@ test('home: default view and quick add', async () => {
 
   // Rename the box from its ⋯ menu; Escape cancels a second rename.
   const rename = async (label: string, key: 'Enter' | 'Escape') => {
-    await page.getByRole('button', { name: 'Widget options' }).click();
+    await cards().first().getByRole('button', { name: 'Widget options' }).click();
     await page.getByRole('menuitem', { name: 'Rename' }).click();
     const field = page.getByLabel('Label');
     await expect(field).toBeFocused();
@@ -94,10 +94,10 @@ test('home: default view and quick add', async () => {
   await expect(page.getByLabel('Add entry to Words')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Nope' })).toHaveCount(0);
 
-  // Remove: back to the empty state; the page itself stays.
-  await page.getByRole('button', { name: 'Widget options' }).click();
+  // Remove: only the built-in Review later card is left; the page itself stays.
+  await cards().first().getByRole('button', { name: 'Widget options' }).click();
   await page.getByRole('menuitem', { name: 'Remove' }).click();
-  await expect(page.getByText('Nothing on Home yet')).toBeVisible();
+  await expect(cards()).toHaveCount(0);
   expect(
     await t.hooks((h) =>
       h.store.pages.list().some((p) => p.title === 'New words'),
@@ -105,8 +105,10 @@ test('home: default view and quick add', async () => {
   ).toBe(true);
 });
 
-const cards = () => page.locator('main section');
-const cardTitles = () => page.locator('main section h2');
+// Every card but the built-in Review later one, which is always first.
+const cards = () =>
+  page.locator('main section').filter({ hasNot: page.locator('h2', { hasText: /^Review later$/ }) });
+const cardTitles = () => cards().locator('h2');
 const pageBody = (title: string) =>
   t
     .hooks((h) => h.store.pages.list())
@@ -157,7 +159,7 @@ test('home: pin a page', async () => {
   await expect(page.getByRole('button', { name: 'Pin to Home' })).toBeVisible();
   expect(
     await page.evaluate(() =>
-      window.dashboardApi.getSettings().then((s) => s.homeWidgets),
+      window.dashboardApi.getSettings().then((s) => s.homeWidgets.filter((w) => !w.locked)),
     ),
   ).toEqual([]);
 });
@@ -216,7 +218,7 @@ test('home: reorder persists and delete prunes', async () => {
   const widgets = await page.evaluate(() =>
     window.dashboardApi.getSettings().then((s) => s.homeWidgets),
   );
-  expect(widgets.map((w) => w.pageId)).toEqual([ids.words]);
+  expect(widgets.filter((w) => !w.locked).map((w) => w.pageId)).toEqual([ids.words]);
 });
 
 test('home: a checkbox tick and a quick-add on the same page both stick', async () => {
@@ -250,7 +252,7 @@ test('home: a checkbox tick and a quick-add on the same page both stick', async 
   await page.waitForTimeout(800); // nothing saved later may undo either edit
   expect(await pageBody('Shortcuts')).toMatch(both);
   await expect(box).toBeChecked();
-  await expect(page.locator('main section').first()).toContainText(
+  await expect(cards().first()).toContainText(
     'Ctrl+P palette',
   );
 });

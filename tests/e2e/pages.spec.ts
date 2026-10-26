@@ -123,7 +123,7 @@ test('pages: folders, search, delete', async () => {
   await expect
     .poll(() => t.hooks((h) => h.store.pages.list()[0].folderId))
     .toBe(folderId);
-  await expect(page.getByText('No notes yet')).toBeVisible();
+  await expect(page.locator('li[draggable="true"]', { hasText: 'Spanish words' })).toHaveCount(0);
   await folderRow('Spanish').getByText('Spanish').click();
   await expect(
     page.locator('li[aria-selected]', { hasText: 'Spanish words' }),
@@ -145,7 +145,7 @@ test('pages: folders, search, delete', async () => {
 
   await t.record(800);
   await page.getByRole('button', { name: /^All notes/ }).click();
-  const rows = page.locator('li[aria-selected]');
+  const rows = page.locator('li[aria-selected]').filter({ hasNotText: 'Review later' });
   await expect(rows).toHaveCount(2);
   await rows
     .nth(0)
@@ -163,7 +163,7 @@ test('pages: folders, search, delete', async () => {
     .poll(() =>
       t.hooks((h) => h.store.pages.list().length + h.store.list().length),
     )
-    .toBe(0);
+    .toBe(1); // the built-in Review later page can't be deleted
   await expect(rows).toHaveCount(0);
 });
 

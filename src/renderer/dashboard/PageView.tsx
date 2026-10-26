@@ -3,7 +3,7 @@ import { ArrowLeft, Pin, PinOff } from 'lucide-react';
 import type { Page } from '../../shared/channels';
 import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
-import { canAdd, isPinned } from '../../shared/home-widgets';
+import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { MarkdownEditor } from './editor/MarkdownEditor';
 import { useToast } from './Toast';
 import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
@@ -117,19 +117,21 @@ export function PageView({ page, fresh, onBack }: Props) {
             >
               {status === 'saving' ? 'Saving…' : status === 'error' ? 'Not saved' : 'Saved'}
             </span>
-            {/* A disabled button shows no tooltip, so the wrapper carries it. */}
-            <span title={pinDisabled && home.widgets ? HOME_FULL : undefined}>
-              <button
-                aria-label={pinned ? 'Unpin from Home' : 'Pin to Home'}
-                title={pinned ? 'Unpin from Home' : 'Pin to Home'}
-                aria-pressed={pinned}
-                disabled={pinDisabled}
-                onClick={() => home.togglePin(shown.id)}
-                className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-              >
-                {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
-              </button>
-            </span>
+            {/* A disabled button shows no tooltip, so the wrapper carries it. The built-in page is always on Home. */}
+            {builtInPageId(home.widgets) !== shown.id && (
+              <span title={pinDisabled && home.widgets ? HOME_FULL : undefined}>
+                <button
+                  aria-label={pinned ? 'Unpin from Home' : 'Pin to Home'}
+                  title={pinned ? 'Unpin from Home' : 'Pin to Home'}
+                  aria-pressed={pinned}
+                  disabled={pinDisabled}
+                  onClick={() => home.togglePin(shown.id)}
+                  className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+                </button>
+              </span>
+            )}
           </div>
         </div>
         <input

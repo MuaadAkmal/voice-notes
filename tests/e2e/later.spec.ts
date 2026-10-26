@@ -62,3 +62,35 @@ test('ignores drops while recording', async () => {
   expect(await laterBody()).toBe('');
   await t.hooks((h) => h.gesture.toggle());
 });
+
+test('Review later is built in', async () => {
+  t = await launch();
+  const page = t.dashboard;
+  const card = page.locator('main section').filter({ has: page.locator('h2', { hasText: 'Review later' }) });
+  await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Widget options' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Size' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Remove' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: /^Inbox/ }).click();
+  const row = page.getByRole('listitem').filter({ hasText: 'Review later' });
+  await expect(row.getByText('Built-in')).toBeVisible();
+  await row.getByRole('button', { name: 'More' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Delete' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: /Pin to Home|Unpin from Home/ })).toHaveCount(0);
+});
+
+test('main keeps the page and its card even if asked to drop them', async () => {
+  t = await launch();
+  const page = t.dashboard;
+  const id = await t.hooks((h) => h.store.pages.list().find((p) => p.title === 'Review later')!.id);
+  await page.evaluate(async (id) => {
+    await window.dashboardApi.deletePages([id]);
+    await window.dashboardApi.setSettings({ homeWidgets: [] });
+  }, id);
+  expect(await t.hooks((h) => h.store.pages.list().some((p) => p.title === 'Review later'))).toBe(true);
+  await page.getByRole('button', { name: 'Home' }).first().click();
+  await expect(page.locator('main section h2', { hasText: 'Review later' })).toBeVisible();
+});

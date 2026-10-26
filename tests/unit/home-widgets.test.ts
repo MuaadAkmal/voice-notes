@@ -3,6 +3,7 @@ import type { HomeWidget } from '../../src/shared/channels';
 import {
   MAX_HOME_WIDGETS,
   addWidget,
+  builtInPageId,
   canAdd,
   ensureLocked,
   isPinned,
@@ -176,5 +177,15 @@ describe('locked widgets', () => {
     expect(canAdd(roomy)).toBe(true);
     expect(addWidget(roomy, page('x', p2))).toHaveLength(MAX_HOME_WIDGETS + 1);
     expect(canAdd([locked('l', p1), ...full()])).toBe(false);
+  });
+
+  it('unpinPage keeps the locked widget', () => {
+    expect(unpinPage([locked('l', p1), page('a', p1)], p1)).toEqual([locked('l', p1)]);
+  });
+
+  it('builtInPageId is the page of the locked widget', () => {
+    expect(builtInPageId([page('a', p2), locked('l', p1)])).toBe(p1);
+    expect(builtInPageId([page('a', p2)])).toBeNull();
+    expect(builtInPageId(null)).toBeNull();
   });
 });

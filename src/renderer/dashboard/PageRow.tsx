@@ -27,6 +27,8 @@ type Props = {
   /** Home has no room for another widget: Pin is disabled (Unpin still works). */
   homeFull: boolean;
   onTogglePin: () => void;
+  /** The built-in Review later page: can't be deleted or unpinned. */
+  builtIn?: boolean;
 };
 
 const timeOf = (ts: number) =>
@@ -47,7 +49,7 @@ export function PageRow(props: Props) {
     onDragStart,
     onDragEnd,
   } = props;
-  const { onRename, onDelete, onToggleStar, pinned, homeFull, onTogglePin } =
+  const { onRename, onDelete, onToggleStar, pinned, homeFull, onTogglePin, builtIn } =
     props;
   const [editing, setEditing] = useState(false);
   const editFromMenu = useRef(false);
@@ -110,7 +112,14 @@ export function PageRow(props: Props) {
             className="w-full rounded-md border border-input bg-background px-2 py-0.5 text-sm outline-none focus:border-ring"
           />
         ) : (
-          <p className="truncate text-sm font-medium">{page.title}</p>
+          <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+            <span className="truncate">{page.title}</span>
+            {builtIn && (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                Built-in
+              </span>
+            )}
+          </p>
         )}
         {(text || folderLabel) && (
           <div className="mt-1 flex min-w-0 items-center gap-3">
@@ -181,19 +190,23 @@ export function PageRow(props: Props) {
           <DropdownMenuItem onSelect={onToggleStar}>
             {page.starred ? 'Unstar' : 'Star'}
           </DropdownMenuItem>
-          {/* A disabled item shows no tooltip, so the wrapper carries it. */}
-          <span title={pinned === false && homeFull ? HOME_FULL : undefined}>
-            <DropdownMenuItem
-              disabled={pinned === null || (!pinned && homeFull)}
-              onSelect={onTogglePin}
-            >
-              {pinned ? 'Unpin from Home' : 'Pin to Home'}
-            </DropdownMenuItem>
-          </span>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-            Delete
-          </DropdownMenuItem>
+          {!builtIn && (
+            <>
+              {/* A disabled item shows no tooltip, so the wrapper carries it. */}
+              <span title={pinned === false && homeFull ? HOME_FULL : undefined}>
+                <DropdownMenuItem
+                  disabled={pinned === null || (!pinned && homeFull)}
+                  onSelect={onTogglePin}
+                >
+                  {pinned ? 'Unpin from Home' : 'Pin to Home'}
+                </DropdownMenuItem>
+              </span>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </li>

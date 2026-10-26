@@ -43,9 +43,13 @@ export const pinPage = (
     ? ws
     : addWidget(ws, { id: newId, type: 'page', pageId });
 
-/** Removes the page's `page` widgets; its quick-add boxes stay. */
+/** Removes the page's `page` widgets (never the locked card); its quick-add boxes stay. */
 export const unpinPage = (ws: HomeWidget[], pageId: string): HomeWidget[] =>
-  ws.filter((w) => !(w.type === 'page' && w.pageId === pageId));
+  ws.filter((w) => w.locked || !(w.type === 'page' && w.pageId === pageId));
+
+/** The built-in Review later page: the one the locked card shows. */
+export const builtInPageId = (ws: HomeWidget[] | null): string | null =>
+  ws?.find((w) => w.locked)?.pageId ?? null;
 
 /** Drops every widget (any type) whose page was deleted. */
 export const pruneWidgets = (

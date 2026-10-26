@@ -6,6 +6,9 @@ import { launch, type TestApp } from './launch';
 let t: TestApp;
 let dashboard: Page;
 const hooks: TestApp['hooks'] = (fn) => t.hooks(fn);
+// The voice note's ⋯ menu (Inbox also lists the built-in Review later page).
+const noteMenu = () =>
+  dashboard.locator('li[aria-selected]').filter({ hasNotText: 'Review later' }).getByRole('button', { name: 'More' });
 
 test.beforeEach(async () => {
   t = await launch();
@@ -41,10 +44,10 @@ test('records a note via gesture and manages it from the dashboard', async () =>
   await expect.poll(() => hooks((h) => h.store.list()[0].title)).toBe('hola');
 
   // Delete
-  await dashboard.getByRole('button', { name: 'More' }).click();
+  await noteMenu().click();
   await dashboard.getByRole('menuitem', { name: 'Delete' }).click();
   await dashboard.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-  await expect(dashboard.getByText('No notes yet')).toBeVisible();
+  await expect(dashboard.getByText('hola')).toHaveCount(0);
   expect(fs.existsSync(file)).toBe(false);
 });
 
@@ -61,7 +64,7 @@ test('records system audio when the source is set to system', async () => {
 test('cancelling the delete dialog keeps the note and the page stays clickable', async () => {
   await t.record(1200);
   await expect.poll(() => hooks((h) => h.store.list().length)).toBe(1);
-  await dashboard.getByRole('button', { name: 'More' }).click();
+  await noteMenu().click();
   await dashboard.getByRole('menuitem', { name: 'Delete' }).click();
   await dashboard.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
   await expect(dashboard.getByRole('alertdialog')).toHaveCount(0);
