@@ -7,6 +7,9 @@ import type { PullResponse, ServerRow } from './engine';
 
 type Prefs = PullResponse['prefs'];
 
+/** Which parts of the dashboard a pull touched. */
+export type PullChanges = { notes: boolean; pages: boolean; folders: boolean; prefs: boolean };
+
 const UPSERT = {
   note: `INSERT INTO notes (id, title, file_path, duration_ms, size_bytes, mime_type, status, created_at, updated_at,
            folder_id, source, kind, window_title, show, starred, transcript, transcript_lang, transcribed_at, version, deleted_at)
@@ -35,12 +38,19 @@ const TABLE = { note: 'notes', page: 'pages', folder: 'folders' } as const;
  * hasn't had acked yet are laid on top of the pulled rows, so what the user just did stays visible
  * (and the next pull, after the push, brings the server's verdict). A pulled delete always wins.
  */
-export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: Prefs) => void): void {
+export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: Prefs) => void): PullChanges {
   const { sqlite, rootDir, imagesDir } = store.syncAccess();
   const outbox = store.sync.outbox;
   const now = Date.now();
   const goneFiles: string[] = [];
   const goneImages = new Set<string>();
+
+  const changed: PullChanges = {
+    notes: res.rows.some((r) => r.entity === 'note'),
+    pages: res.rows.some((r) => r.entity === 'page'),
+    folders: res.rows.some((r) => r.entity === 'folder'),
+    prefs: res.prefs.length > 0,
+  };
 
   sqlite.transaction(() => {
     for (const row of res.rows) {
@@ -74,6 +84,7 @@ export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: 
     for (const p of store.pages.list()) for (const f of imageRefs(p.body)) goneImages.delete(f);
     for (const f of goneImages) removeQuietly(path.join(imagesDir, f));
   }
+  return changed;
 }
 
 function removeQuietly(file: string): void {

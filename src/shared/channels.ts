@@ -208,6 +208,15 @@ export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'f
 export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
+/** This PC's sync, as the Account page shows it. */
+export type SyncStatus =
+  | { mode: 'off' }
+  | { mode: 'paused'; reason: 'signed-out' }
+  | { mode: 'idle'; lastSyncedAt: number | null }
+  | { mode: 'syncing' }
+  | { mode: 'offline'; retryAt: number }
+  | { mode: 'error'; message: string };
+
 /** Who is signed in, as the window sees it: never tokens. */
 export type AccountInfo =
   | { state: 'signed-out'; error?: string }

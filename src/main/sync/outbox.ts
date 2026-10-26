@@ -19,6 +19,9 @@ const isDelete = (op: SyncOp) => op.op.endsWith('.delete');
  * makes the change, so a change is never saved without its entry (or the other way round).
  */
 export class Outbox {
+  /** Told after each recorded change (the controller syncs a few seconds later). */
+  onRecord: (() => void) | null = null;
+
   constructor(
     private readonly sqlite: Database.Database,
     private readonly state: SyncState,
@@ -43,12 +46,22 @@ export class Outbox {
       const merged = last && merge(last.op, op);
       if (merged) {
         this.sqlite.prepare('UPDATE outbox SET payload = ? WHERE seq = ?').run(JSON.stringify(merged), last.seq);
+        this.notify();
         return;
       }
     }
     this.sqlite
       .prepare('INSERT INTO outbox (mutation_id, op, entity_id, payload, base_version, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(this.newId(), op.op, entityId, JSON.stringify(op), baseVersion, this.now());
+    this.notify();
+  }
+
+  private notify(): void {
+    try {
+      this.onRecord?.();
+    } catch {
+      // a listener must never break a store write
+    }
   }
 
   pending(entityId?: string): OutboxEntry[] {

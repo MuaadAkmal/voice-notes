@@ -2,14 +2,11 @@ import type { HomeWidget, Settings } from '../../shared/channels';
 import { MAX_HOME_WIDGETS } from '../../shared/home-widgets';
 import { type FolderRow, SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import { type NoteStore, toRow } from '../store/note-store';
-import { applyPull } from './apply';
-
-// The contract between a PC and the sync server. The reference server in tests/unit/sync implements
-// it in memory; piece C implements it on Supabase.
-
 import type { PullResponse, SyncServer } from '../../shared/sync/protocol';
+import { applyPull, type PullChanges } from './apply';
 
 export type { PullResponse, PushRequest, PushResponse, ServerRow, SyncServer } from '../../shared/sync/protocol';
+export type { PullChanges } from './apply';
 
 /** How the engine reaches settings.json (main's updateSettings; records synced keys unless record: false). */
 export type SettingsPort = {
@@ -23,8 +20,9 @@ const MAX_ROUNDS = 3; // push → pull → push again at most this often per run
 
 /** Pushes this PC's waiting changes, then pulls everything new, one run at a time. */
 export class SyncEngine {
-  private running: Promise<void> | null = null;
+  private running: Promise<PullChanges> | null = null;
   private again = false;
+  private changes: PullChanges = noChanges();
 
   constructor(
     private readonly store: NoteStore,
@@ -33,8 +31,9 @@ export class SyncEngine {
   ) {}
 
   /**
-   * Turns sync on for this PC and queues everything it already has (folders before what's in them),
-   * so the first sync uploads it and merges it with the account. Already on: nothing to do.
+   * Turns sync on for this PC and queues everything it has that no account has seen yet (version 0;
+   * folders before what's in them), so the first sync uploads it and merges it with the account.
+   * Already on: nothing to do.
    */
   enable(settings: Settings): void {
     const { state, outbox } = this.store.sync;
@@ -42,20 +41,41 @@ export class SyncEngine {
     const { sqlite } = this.store.syncAccess();
     sqlite.transaction(() => {
       state.setEnabled(true);
-      for (const folder of parentsFirst(this.store.folders.list())) outbox.record({ op: 'folder.create', id: folder.id, row: folder }, 0);
-      for (const page of this.store.pages.list()) outbox.record({ op: 'page.create', id: page.id, row: page }, 0);
-      for (const note of this.store.list()) outbox.record({ op: 'note.create', id: note.id, row: toRow(note) }, 0);
+      const fresh = (entity: 'note' | 'page' | 'folder', id: string) => outbox.rowVersion(entity, id) === 0;
+      for (const folder of parentsFirst(this.store.folders.list().filter((f) => fresh('folder', f.id))))
+        outbox.record({ op: 'folder.create', id: folder.id, row: folder }, 0);
+      for (const page of this.store.pages.list().filter((p) => fresh('page', p.id)))
+        outbox.record({ op: 'page.create', id: page.id, row: page }, 0);
+      for (const note of this.store.list().filter((n) => fresh('note', n.id)))
+        outbox.record({ op: 'note.create', id: note.id, row: toRow(note) }, 0);
       // Settings wait for the first pull: the account's win, this PC only adds what the account lacks.
       state.setPendingPrefs(Object.fromEntries(SYNCED_KEYS.map((key) => [key, settings[key]])));
     })();
   }
 
-  /** A call while a run is going returns that run, and one more run follows it. */
-  sync(): Promise<void> {
+  /**
+   * Syncing with a different account than before: forget the old account's queue and cursor, then
+   * enable. Rows the old account already has (version > 0) stay on this PC only.
+   */
+  startFresh(settings: Settings): void {
+    const { state } = this.store.sync;
+    const { sqlite } = this.store.syncAccess();
+    sqlite.transaction(() => {
+      sqlite.prepare('DELETE FROM outbox').run();
+      state.setCursor(0);
+      state.setPendingPrefs(null);
+      state.setEnabled(false);
+    })();
+    this.enable(settings);
+  }
+
+  /** A call while a run is going returns that run, and one more run follows it. Resolves to what pulls changed. */
+  sync(): Promise<PullChanges> {
     if (this.running) {
       this.again = true;
       return this.running;
     }
+    this.changes = noChanges();
     this.running = (async () => {
       try {
         await this.mergeFirstPrefs();
@@ -67,6 +87,7 @@ export class SyncEngine {
           // A pull can itself queue changes (the Review later merge renames our old page): send them now.
           if (this.store.sync.outbox.pending().length && ++rounds < MAX_ROUNDS) this.again = true;
         } while (this.again);
+        return this.changes;
       } finally {
         this.running = null;
       }
@@ -96,10 +117,11 @@ export class SyncEngine {
     let res: PullResponse;
     do {
       res = await this.server.pull({ clientId: state.deviceId(), cursor: state.cursor() });
-      applyPull(this.store, res, (prefs) => {
+      const changed = applyPull(this.store, res, (prefs) => {
         for (const p of prefs) seen?.add(p.key);
         this.settings.applyRemote(prefs);
       });
+      for (const k of Object.keys(changed) as (keyof PullChanges)[]) this.changes[k] ||= changed[k];
     } while (res.hasMore);
   }
 
@@ -144,4 +166,8 @@ function parentsFirst(folders: FolderRow[]): FolderRow[] {
     left = left.filter((f) => !placed.has(f.id));
   }
   return out;
+}
+
+function noChanges(): PullChanges {
+  return { notes: false, pages: false, folders: false, prefs: false };
 }
