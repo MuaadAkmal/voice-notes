@@ -87,7 +87,11 @@ export class ReferenceServer implements SyncServer {
       return this.save({ entity, id: op.id, deleted: false, data });
     }
     if (!current || current.deleted) return current?.version ?? 0; // delete wins
-    if (op.op.endsWith('.delete')) return this.save({ ...current, deleted: true });
+    if (op.op.endsWith('.delete')) {
+      const version = this.save({ ...current, deleted: true });
+      if (entity === 'folder') this.rehome(op.id);
+      return version;
+    }
 
     if (op.op === 'page.setBody') return this.setBody(current, op.body, baseVersion, clientId, deviceName);
 
@@ -127,6 +131,16 @@ export class ReferenceServer implements SyncServer {
     const version = this.save({ ...current, data: next });
     this.logBody(current.id, { version, clientId, deviceName, op: { op: 'page.setBody', id: current.id, body } });
     return version;
+  }
+
+  /** What is still in a deleted folder (put there from another PC) moves up, as a local delete does. */
+  private rehome(folderId: string): void {
+    for (const s of [...this.store.values()]) {
+      if (s.deleted) continue;
+      const field = s.entity === 'folder' ? 'parentId' : 'folderId';
+      if (s.data[field] !== folderId) continue;
+      this.save({ ...s, data: this.place(s.entity, s.id, { ...s.data }) });
+    }
   }
 
   private logBody(pageId: string, e: BodyEvent): void {

@@ -106,6 +106,15 @@ it('anything sent into a deleted folder lands in its nearest live parent', async
   expect(s.row('folder', 'g')!.data!.parentId).toBe('top');
 });
 
+it('deleting a folder moves what is still in it up to its parent', async () => {
+  const s = new ReferenceServer();
+  await s.push({ ...A, mutations: [m({ op: 'folder.create', id: 'top', row: folder('top', 'Top') }), m({ op: 'folder.create', id: 'f', row: folder('f', 'F', 'top') })] });
+  await s.push({ ...B, mutations: [m({ op: 'note.create', id: 'n', row: note('n', 'f') }), m({ op: 'folder.create', id: 'sub', row: folder('sub', 'Sub', 'f') })] });
+  await s.push({ ...A, mutations: [m({ op: 'folder.delete', id: 'f' })] });
+  expect(s.row('note', 'n')!.data!.folderId).toBe('top');
+  expect(s.row('folder', 'sub')!.data!.parentId).toBe('top');
+});
+
 it('delete wins: a later edit of a deleted row is acked and ignored', async () => {
   const s = new ReferenceServer();
   await s.push({ ...A, mutations: [m({ op: 'note.create', id: 'n', row: note('n') }), m({ op: 'note.delete', id: 'n' })] });

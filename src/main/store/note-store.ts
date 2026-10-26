@@ -277,6 +277,11 @@ export class NoteStore {
     return removed;
   }
 
+  /** For src/main/sync only: pulled rows are written straight to the tables, without recording. */
+  syncAccess(): { sqlite: Database.Database; rootDir: string; imagesDir: string } {
+    return { sqlite: this.sqlite, rootDir: this.rootDir, imagesDir: this.imagesDir };
+  }
+
   absolutePath(note: Note): string {
     return path.join(this.rootDir, note.filePath);
   }
