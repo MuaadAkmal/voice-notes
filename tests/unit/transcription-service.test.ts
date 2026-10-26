@@ -44,6 +44,7 @@ const serverSettings = (
     provider: 'server',
     baseUrl: 'https://vm/v1',
     model: 'm',
+    localModel: null,
     ...over,
   },
 });

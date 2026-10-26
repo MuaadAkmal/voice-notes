@@ -4,7 +4,7 @@ import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
 import { MAX_DROP_FIELD } from './later';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
-import { LANGUAGE_CODES, normaliseBaseUrl } from './transcription';
+import { LANGUAGE_CODES, MODEL_IDS, normaliseBaseUrl } from './transcription';
 
 export * from './channels';
 
@@ -25,15 +25,16 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
 
 const TranscriptionSchema = z
   .object({
-    provider: z.literal('server').nullable(),
+    provider: z.enum(['server', 'local']).nullable(),
     // Stored already normalised; anything else is a hand-edited file.
     baseUrl: z
       .string()
       .max(2048)
       .refine((s) => s === '' || normaliseBaseUrl(s) === s),
     model: z.string().trim().min(1).max(200),
+    localModel: z.enum(MODEL_IDS).nullable().default(null), // absent in settings saved before the built-in provider
   })
-  .refine((t) => t.provider === null || t.baseUrl !== '');
+  .refine((t) => (t.provider === 'server' ? t.baseUrl !== '' : t.provider === 'local' ? t.localModel !== null : true));
 
 export const SettingsFieldSchemas = {
   hotkey: z.array(z.number().int().nonnegative()).min(1).max(4),

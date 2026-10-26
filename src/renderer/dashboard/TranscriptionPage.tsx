@@ -61,6 +61,7 @@ export function TranscriptionPage() {
           provider: 'server',
           baseUrl: url,
           model: model.trim(),
+          localModel: settings.transcription.localModel,
         },
       })
       .then(setSettings)

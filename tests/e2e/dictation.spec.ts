@@ -21,7 +21,7 @@ const overlay = async (app: TestApp): Promise<Page> => {
 const setUpTranscription = () =>
   page.evaluate(
     (baseUrl) =>
-      window.dashboardApi.setSettings({ transcription: { provider: 'server', baseUrl, model: 'whisper' } }),
+      window.dashboardApi.setSettings({ transcription: { provider: 'server', baseUrl, model: 'whisper', localModel: null } }),
     `http://127.0.0.1:${port}/v1`,
   );
 

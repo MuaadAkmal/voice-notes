@@ -97,8 +97,24 @@ it('ignores wrongly-typed fields', () => {
 });
 
 it('transcription settings default to not set up', () => {
-  expect(DEFAULT_SETTINGS.transcription).toEqual({ provider: null, baseUrl: '', model: 'openai/whisper-large-v3' });
+  expect(DEFAULT_SETTINGS.transcription).toEqual({
+    provider: null,
+    baseUrl: '',
+    model: 'openai/whisper-large-v3',
+    localModel: null,
+  });
   expect(DEFAULT_SETTINGS.transcribeLanguage).toBe('auto');
+});
+
+it('loads the built-in provider with its model', () => {
+  const transcription = { provider: 'local', baseUrl: '', model: 'x', localModel: 'base' };
+  fs.writeFileSync(file, JSON.stringify({ transcription }));
+  expect(loadSettings(file).transcription).toEqual(transcription);
+});
+
+it('reads settings saved before the built-in provider existed', () => {
+  fs.writeFileSync(file, JSON.stringify({ transcription: { provider: 'server', baseUrl: 'https://vm/v1', model: 'm' } }));
+  expect(loadSettings(file).transcription).toEqual({ provider: 'server', baseUrl: 'https://vm/v1', model: 'm', localModel: null });
 });
 
 it('loads valid transcription settings', () => {
@@ -113,6 +129,8 @@ it.each([
   ['un-normalised URL', { transcription: { provider: 'server', baseUrl: 'https://vm/v1/', model: 'm' } }],
   ['server without URL', { transcription: { provider: 'server', baseUrl: '', model: 'm' } }],
   ['empty model', { transcription: { provider: null, baseUrl: '', model: '' } }],
+  ['built-in without a model', { transcription: { provider: 'local', baseUrl: '', model: 'm', localModel: null } }],
+  ['unknown built-in model', { transcription: { provider: 'local', baseUrl: '', model: 'm', localModel: 'huge' } }],
 ])('falls back to defaults on %s', (_name, raw) => {
   fs.writeFileSync(file, JSON.stringify(raw));
   const s = loadSettings(file);

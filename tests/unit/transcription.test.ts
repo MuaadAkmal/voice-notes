@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import {
+  cleanTranscript,
   LANGUAGE_CODES,
   normaliseBaseUrl,
   normaliseLanguage,
