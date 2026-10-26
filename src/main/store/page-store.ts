@@ -13,6 +13,8 @@ import {
   type ImageExt,
 } from '../../shared/page-images';
 import type { FolderStore } from './folder-store';
+import type { Outbox } from '../sync/outbox';
+import { localDay, type SyncOp, taskText } from '../../shared/sync-ops';
 import { pages } from './schema';
 
 // syncedAt, version and deletedAt exist in SQL for sync but are not part of Page.
@@ -35,7 +37,12 @@ export class PageStore {
     private readonly now: () => number,
     private readonly folders: FolderStore,
     private readonly imagesDir: string,
+    private readonly outbox: Outbox,
   ) {}
+
+  private record(op: Extract<SyncOp, { op: `page.${string}` }>): void {
+    this.outbox.record(op, this.outbox.rowVersion('page', op.id));
+  }
 
   create(folderId: string | null): Page {
     if (folderId && !this.folders.get(folderId))
@@ -50,7 +57,10 @@ export class PageStore {
       createdAt: ts,
       updatedAt: ts,
     };
-    this.db.insert(pages).values(page).run();
+    this.sqlite.transaction(() => {
+      this.db.insert(pages).values(page).run();
+      this.outbox.record({ op: 'page.create', id: page.id, row: page }, 0);
+    })();
     return page;
   }
 
@@ -68,11 +78,19 @@ export class PageStore {
   }
 
   rename(id: string, title: string): Page {
-    return this.update(id, { title });
+    return this.sqlite.transaction(() => {
+      const page = this.update(id, { title });
+      this.record({ op: 'page.update', id, fields: { title } });
+      return page;
+    })();
   }
 
   setBody(id: string, body: string): Page {
-    return this.update(id, { body });
+    return this.sqlite.transaction(() => {
+      const page = this.update(id, { body });
+      this.record({ op: 'page.setBody', id, body });
+      return page;
+    })();
   }
 
   /** Adds `text` as a bullet under today's heading (see shared/learn-log), atomically. */
@@ -80,9 +98,11 @@ export class PageStore {
     return this.sqlite.transaction(() => {
       const page = this.get(id);
       if (!page) throw new Error('Page not found');
-      return this.update(id, {
-        body: appendEntry(page.body, text, new Date(this.now())),
-      });
+      const now = this.now();
+      const updated = this.update(id, { body: appendEntry(page.body, text, new Date(now)) });
+      // Sent as an append, not a new body: an edit made meanwhile on another PC keeps it.
+      this.record({ op: 'page.append', id, text, day: localDay(now) });
+      return updated;
     })();
   }
 
@@ -93,7 +113,10 @@ export class PageStore {
       if (!page) throw new Error('Page not found');
       const body = setTaskChecked(page.body, line, checked);
       if (body === null) throw new Error('Not a task');
-      return this.update(id, { body });
+      const updated = this.update(id, { body });
+      const lineText = taskText(page.body.split('\n')[line]);
+      this.record({ op: 'page.setTask', id, line, lineText, checked });
+      return updated;
     })();
   }
 
@@ -101,20 +124,28 @@ export class PageStore {
   move(ids: string[], folderId: string | null): void {
     if (folderId && !this.folders.get(folderId))
       throw new Error('Folder not found');
-    this.db
-      .update(pages)
-      .set({ folderId })
-      .where(and(inArray(pages.id, ids), live))
-      .run();
+    this.sqlite.transaction(() => {
+      const changed = this.db
+        .update(pages)
+        .set({ folderId })
+        .where(and(inArray(pages.id, ids), live))
+        .returning({ id: pages.id })
+        .all();
+      for (const { id } of changed) this.record({ op: 'page.update', id, fields: { folderId } });
+    })();
   }
 
   /** Unknown page ids are ignored. */
   setStarred(ids: string[], starred: boolean): void {
-    this.db
-      .update(pages)
-      .set({ starred })
-      .where(and(inArray(pages.id, ids), live))
-      .run();
+    this.sqlite.transaction(() => {
+      const changed = this.db
+        .update(pages)
+        .set({ starred })
+        .where(and(inArray(pages.id, ids), live))
+        .returning({ id: pages.id })
+        .all();
+      for (const { id } of changed) this.record({ op: 'page.update', id, fields: { starred } });
+    })();
   }
 
   /** Deletes the rows, then the image files no remaining page references. */
@@ -126,6 +157,7 @@ export class PageStore {
         if (!page) continue;
         for (const file of imageRefs(page.body)) doomed.add(file);
         this.db.update(pages).set({ deletedAt: this.now() }).where(eq(pages.id, id)).run(); // tombstone
+        this.record({ op: 'page.delete', id });
       }
     })();
     if (!doomed.size) return;

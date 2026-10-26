@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
@@ -10,6 +11,11 @@ import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { PageStore } from './page-store';
 import { DictationStore } from './dictation-store';
+import { Outbox } from '../sync/outbox';
+import { SyncState } from '../sync/state';
+import type { NoteRow, SyncOp } from '../../shared/sync-ops';
+
+type NoteFields = Extract<SyncOp, { op: 'note.update' }>['fields'];
 import { liveColumns, notes } from './schema';
 
 const noteColumns = liveColumns(getTableColumns(notes));
@@ -35,27 +41,32 @@ export class NoteStore {
   readonly folders: FolderStore;
   readonly pages: PageStore;
   readonly dictations: DictationStore;
+  /** Every change is also queued here (while sync is on) for the other PCs. */
+  readonly sync: { state: SyncState; outbox: Outbox };
 
   private constructor(
     private readonly rootDir: string,
     private readonly sqlite: Database.Database,
     private readonly db: BetterSQLite3Database,
     private readonly now: () => number,
+    hostname: () => string,
   ) {
     this.recordingsDir = path.join(rootDir, 'recordings');
     this.imagesDir = path.join(rootDir, 'images');
-    this.folders = new FolderStore(db, sqlite, now);
-    this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir);
+    const state = new SyncState(sqlite, hostname);
+    this.sync = { state, outbox: new Outbox(sqlite, state, now) };
+    this.folders = new FolderStore(db, sqlite, now, this.sync.outbox);
+    this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir, this.sync.outbox);
     this.dictations = new DictationStore(db, now);
   }
 
-  static open(rootDir: string, now: () => number = Date.now): NoteStore {
+  static open(rootDir: string, now: () => number = Date.now, hostname: () => string = os.hostname): NoteStore {
     fs.mkdirSync(path.join(rootDir, 'recordings'), { recursive: true });
     fs.mkdirSync(path.join(rootDir, 'images'), { recursive: true });
     const sqlite = new Database(path.join(rootDir, 'voice-notes.sqlite'));
     sqlite.pragma('journal_mode = WAL');
     migrate(sqlite);
-    return new NoteStore(rootDir, sqlite, drizzle(sqlite), now);
+    return new NoteStore(rootDir, sqlite, drizzle(sqlite), now, hostname);
   }
 
   /** Writes <id>.webm.tmp, fsyncs, renames, then inserts the row. A crash leaves an orphan reconcile() adopts. */
@@ -94,7 +105,10 @@ export class NoteStore {
       transcriptLang: null,
       transcribedAt: null,
     };
-    this.db.insert(notes).values(note).run();
+    this.sqlite.transaction(() => {
+      this.db.insert(notes).values(note).run();
+      this.sync.outbox.record({ op: 'note.create', id, row: toRow(note) }, 0);
+    })();
     return note;
   }
 
@@ -107,31 +121,45 @@ export class NoteStore {
   }
 
   rename(id: string, title: string): Note {
-    const updated = this.db
-      .update(notes)
-      .set({ title, updatedAt: this.now() })
-      .where(and(eq(notes.id, id), live))
-      .returning(noteColumns)
-      .get();
-    if (!updated) throw new Error('Note not found');
-    return updated;
+    return this.sqlite.transaction(() => {
+      const updated = this.db
+        .update(notes)
+        .set({ title, updatedAt: this.now() })
+        .where(and(eq(notes.id, id), live))
+        .returning(noteColumns)
+        .get();
+      if (!updated) throw new Error('Note not found');
+      this.recordUpdate(id, { title });
+      return updated;
+    })();
   }
 
   /** Unknown note ids are ignored. */
   setStarred(ids: string[], starred: boolean): void {
-    this.db.update(notes).set({ starred, updatedAt: this.now() }).where(and(inArray(notes.id, ids), live)).run();
+    this.sqlite.transaction(() => {
+      const changed = this.db
+        .update(notes)
+        .set({ starred, updatedAt: this.now() })
+        .where(and(inArray(notes.id, ids), live))
+        .returning({ id: notes.id })
+        .all();
+      for (const { id } of changed) this.recordUpdate(id, { starred });
+    })();
   }
 
   /** null clears the label (the raw window title is kept). */
   setShow(id: string, show: string | null): Note {
-    const updated = this.db
-      .update(notes)
-      .set({ show, updatedAt: this.now() })
-      .where(and(eq(notes.id, id), live))
-      .returning(noteColumns)
-      .get();
-    if (!updated) throw new Error('Note not found');
-    return updated;
+    return this.sqlite.transaction(() => {
+      const updated = this.db
+        .update(notes)
+        .set({ show, updatedAt: this.now() })
+        .where(and(eq(notes.id, id), live))
+        .returning(noteColumns)
+        .get();
+      if (!updated) throw new Error('Note not found');
+      this.recordUpdate(id, { show });
+      return updated;
+    })();
   }
 
   /** A fresh transcription result. Not an edit of the note, so updatedAt (sort order) stays. */
@@ -144,10 +172,17 @@ export class NoteStore {
     return this.updateTranscript(id, { transcript: text });
   }
 
-  private updateTranscript(id: string, patch: Partial<Note>): Note {
-    const updated = this.db.update(notes).set(patch).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
-    if (!updated) throw new Error('Note not found');
-    return updated;
+  private updateTranscript(id: string, patch: Pick<Partial<Note>, 'transcript' | 'transcriptLang' | 'transcribedAt'>): Note {
+    return this.sqlite.transaction(() => {
+      const updated = this.db.update(notes).set(patch).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
+      if (!updated) throw new Error('Note not found');
+      this.recordUpdate(id, patch);
+      return updated;
+    })();
+  }
+
+  private recordUpdate(id: string, fields: NoteFields): void {
+    this.sync.outbox.record({ op: 'note.update', id, fields }, this.sync.outbox.rowVersion('note', id));
   }
 
   async delete(id: string): Promise<void> {
@@ -155,13 +190,24 @@ export class NoteStore {
     if (!note) return;
     await fs.promises.rm(this.absolutePath(note), { force: true });
     // A tombstone, so the delete can reach other PCs; purgeTombstones() removes it later.
-    this.db.update(notes).set({ deletedAt: this.now() }).where(eq(notes.id, id)).run();
+    this.sqlite.transaction(() => {
+      this.db.update(notes).set({ deletedAt: this.now() }).where(eq(notes.id, id)).run();
+      this.sync.outbox.record({ op: 'note.delete', id }, this.sync.outbox.rowVersion('note', id));
+    })();
   }
 
   /** folderId null = Inbox. Unknown note ids are ignored. */
   moveNotes(ids: string[], folderId: string | null): void {
     if (folderId && !this.folders.get(folderId)) throw new Error('Folder not found');
-    this.db.update(notes).set({ folderId, updatedAt: this.now() }).where(and(inArray(notes.id, ids), live)).run();
+    this.sqlite.transaction(() => {
+      const changed = this.db
+        .update(notes)
+        .set({ folderId, updatedAt: this.now() })
+        .where(and(inArray(notes.id, ids), live))
+        .returning({ id: notes.id })
+        .all();
+      for (const { id } of changed) this.recordUpdate(id, { folderId });
+    })();
   }
 
   async deleteMany(ids: string[]): Promise<void> {
@@ -236,4 +282,10 @@ export class NoteStore {
   close(): void {
     this.sqlite.close();
   }
+}
+
+/** A note as it syncs: where its audio sits on this PC is local. */
+export function toRow(note: Note): NoteRow {
+  const { filePath: _f, status: _s, syncedAt: _y, ...row } = note;
+  return row;
 }

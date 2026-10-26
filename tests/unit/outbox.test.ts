@@ -100,7 +100,9 @@ it('a create already being sent still gets its delete', () => {
 });
 
 it('ack removes the sent changes and records the row version; release lets a failed batch go again', async () => {
+  state.setEnabled(false); // the store records its own create; this test is about the entries below
   const note = await store.create({ bytes: Buffer.from('a'), durationMs: 1, mimeType: 'audio/webm', source: 'mic' });
+  state.setEnabled(true);
   outbox.record({ op: 'note.update', id: note.id, fields: { title: 'x' } }, 0);
   outbox.record({ op: 'page.setBody', id: 'p', body: 'a' }, 0);
   const batch = outbox.takeBatch(1);
