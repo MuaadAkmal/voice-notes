@@ -128,3 +128,70 @@ it('forwards mouse press, release and move events from the hook, not keys', () =
     { type: 7, x: 3, y: 4 },
   ]);
 });
+
+describe('dictation combo (Ctrl+Win)', () => {
+  const { Ctrl, Escape } = UiohookKey;
+  let svc: HotkeyService;
+  beforeEach(() => {
+    hook = Object.assign(new EventEmitter(), { start: () => undefined, stop: () => undefined });
+    calls = [];
+    const gesture = {
+      keyDown: () => calls.push('down'),
+      keyUp: () => calls.push('up'),
+      escape: () => calls.push('esc'),
+    } as unknown as HotkeyGesture;
+    const dictation = {
+      keyDown: () => calls.push('d-down'),
+      keyUp: () => calls.push('d-up'),
+      escape: () => calls.push('d-esc'),
+    } as unknown as HotkeyGesture;
+    svc = new HotkeyService(gesture, hook);
+    svc.setCombo([Alt, Meta]);
+    svc.attachDictation(dictation);
+    svc.setDictationCombo([Ctrl, Meta]);
+    svc.start();
+  });
+
+  it('fires the dictation gesture on Ctrl+Win, not the main one', () => {
+    down(Ctrl, { ctrlKey: true });
+    down(Meta, { ctrlKey: true, metaKey: true });
+    up(Meta, { ctrlKey: true });
+    expect(calls).toEqual(['d-down', 'd-up']);
+  });
+
+  it('only one combo active: Alt+Win held, then Ctrl does not start a dictation', () => {
+    down(Alt, { altKey: true });
+    down(Meta, { altKey: true, metaKey: true });
+    down(Ctrl, { altKey: true, metaKey: true, ctrlKey: true });
+    up(Meta, { altKey: true, ctrlKey: true });
+    up(Alt, { ctrlKey: true });
+    up(Ctrl, {});
+    expect(calls).toEqual(['down', 'up']);
+  });
+
+  it('only one combo active: Ctrl+Win held, then Alt does not start a note', () => {
+    down(Ctrl, { ctrlKey: true });
+    down(Meta, { ctrlKey: true, metaKey: true });
+    down(Alt, { altKey: true, metaKey: true, ctrlKey: true });
+    expect(calls).toEqual(['d-down']);
+  });
+
+  it('Esc reaches both gestures', () => {
+    down(Escape, {});
+    expect(calls).toEqual(['esc', 'd-esc']);
+  });
+
+  it('pausing releases an active dictation', () => {
+    down(Ctrl, { ctrlKey: true });
+    down(Meta, { ctrlKey: true, metaKey: true });
+    svc.setPaused(true);
+    expect(calls).toEqual(['d-down', 'd-up']);
+  });
+
+  it('a swallowed Win key-up releases the dictation', () => {
+    down(Ctrl, { ctrlKey: true });
+    down(Meta, { ctrlKey: true, metaKey: true });
+    down(Tab, {});
+    expect(calls).toEqual(['d-down', 'd-up']);
+  });
+});
