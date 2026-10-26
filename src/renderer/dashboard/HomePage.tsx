@@ -314,7 +314,7 @@ function WidgetCard({
         gridColumn: `span ${Math.min(shown.w, metrics.cols)}`,
         gridRow: `span ${shown.h}`,
       }}
-      className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card p-3 transition-shadow ${dropping ? 'ring-2 ring-ring' : ''}`}
+      className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card p-3 shadow-sm transition-shadow hover:shadow-md dark:shadow-none ${dropping ? 'ring-2 ring-ring' : ''}`}
     >
       {/* The header is the drag handle; the whole card is the drag image. */}
       <header

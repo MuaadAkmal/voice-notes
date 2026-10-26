@@ -11,8 +11,8 @@ const OVERLAY_HEIGHT = 80;
 const TITLEBAR_HEIGHT = 40; // keep in sync with the dashboard's h-10 drag strip
 // Caption-button strip colours; `color` matches the dashboard background in each theme.
 const TITLEBAR = {
-  light: { color: '#fafaf9', symbolColor: '#44403c' },
-  dark: { color: '#0c0a09', symbolColor: '#d6d3d1' },
+  light: { color: '#f7f5f2', symbolColor: '#44403c' },
+  dark: { color: '#1f1f1f', symbolColor: '#d6d3d1' },
 };
 
 const titleBarColors = () => (nativeTheme.shouldUseDarkColors ? TITLEBAR.dark : TITLEBAR.light);
