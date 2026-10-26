@@ -63,6 +63,7 @@
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
     "@lezer/markdown": "^1.8.1",
+    "@supabase/supabase-js": "2.118.0",
     "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
