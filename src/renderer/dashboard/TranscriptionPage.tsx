@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Server } from 'lucide-react';
+import { Cpu, Server } from 'lucide-react';
 import type { KeyInfo, Settings, TestResult } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import {
@@ -10,6 +10,7 @@ import {
   type TranscribeLanguage,
 } from '../../shared/transcription';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -17,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LocalWhisperCard } from './LocalWhisperCard';
 import { useToast } from './Toast';
 
 const api = window.dashboardApi;
@@ -34,11 +36,13 @@ export function TranscriptionPage() {
   const [replacingKey, setReplacingKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
+  const [mode, setMode] = useState<'server' | 'local'>('server');
 
   useEffect(() => {
     // The fields start from what's saved; later setting changes don't overwrite what's being typed.
     api.getSettings().then((s) => {
       setSettings(s);
+      if (s.transcription.provider === 'local') setMode('local');
       setBaseUrl(s.transcription.baseUrl);
       setModel(s.transcription.model);
     });
@@ -110,22 +114,38 @@ export function TranscriptionPage() {
     <div className="mx-auto max-w-3xl px-10 py-9">
       <h1 className="text-2xl font-semibold tracking-tight">Transcription</h1>
       <p className="mt-1 mb-8 text-sm text-muted-foreground">
-        Turn voice notes into text with your own Whisper server.
+        Turn voice notes and dictation into text, on your own Whisper server or on this PC.
       </p>
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div
-          aria-current="true"
-          className="col-span-2 flex items-start gap-3 rounded-xl border-2 border-primary bg-card p-3"
-        >
-          <Server className="mt-0.5 size-4 shrink-0" />
-          <div>
-            <div className="text-sm font-medium">My server</div>
-            <div className="text-xs text-muted-foreground">
-              OpenAI-compatible endpoint, e.g. vLLM
+        {(
+          [
+            { id: 'server', icon: Server, name: 'My server', hint: 'OpenAI-compatible endpoint, e.g. vLLM' },
+            { id: 'local', icon: Cpu, name: 'Built-in', hint: 'whisper.cpp on this PC, no server needed' },
+          ] as const
+        ).map(({ id, icon: Icon, name, hint }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={mode === id}
+            onClick={() => setMode(id)}
+            className={cn(
+              'col-span-2 flex items-start gap-3 rounded-xl border-2 bg-card p-3 text-left sm:col-span-1',
+              mode === id ? 'border-primary' : 'border-border hover:border-ring',
+            )}
+          >
+            <Icon className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                {name}
+                {settings.transcription.provider === id && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">In use</span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">{hint}</div>
             </div>
-          </div>
-        </div>
+          </button>
+        ))}
         {COMING_SOON_PROVIDERS.map((name) => (
           <div
             key={name}
@@ -140,7 +160,8 @@ export function TranscriptionPage() {
         ))}
       </div>
 
-      <div className="divide-y divide-border rounded-2xl border bg-card">
+      {mode === 'local' && <LocalWhisperCard settings={settings} onSaved={setSettings} />}
+      <div className={cn('divide-y divide-border rounded-2xl border bg-card', mode === 'local' && 'hidden')}>
         <div className="space-y-4 px-5 py-4">
           <label className="block">
             <span className="text-sm font-medium">Base URL</span>
@@ -230,6 +251,9 @@ export function TranscriptionPage() {
             ))}
         </div>
 
+      </div>
+
+      <div className="mt-4 rounded-2xl border bg-card">
         <div className="flex items-center justify-between gap-6 px-5 py-4">
           <div>
             <div className="text-sm font-medium">Default language</div>
