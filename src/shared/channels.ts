@@ -91,6 +91,11 @@ export type OverlayState =
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean };
 
+/** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
+export type DropPayload = { text: string; uriList: string; html: string };
+/** A dropped item for the Review later page. title null = no usable link text. */
+export type LaterItem = { kind: 'link'; url: string; title: string | null } | { kind: 'text'; text: string };
+
 export type AudioDevice = { deviceId: string; label: string };
 
 export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string; source: RecordingSource };
