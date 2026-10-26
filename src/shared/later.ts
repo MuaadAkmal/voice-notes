@@ -2,6 +2,8 @@
 import type { DropPayload, LaterItem, OverlayState } from './channels';
 
 export const LATER_PAGE_TITLE = 'Review later';
+/** Each drop field is cut to this before parsing: only the first 500 chars of text are kept anyway. */
+export const MAX_DROP_FIELD = 20_000;
 const MAX_TEXT = 500;
 const MAX_TITLE = 200;
 
@@ -48,6 +50,10 @@ export function laterEntry(item: LaterItem, source: string | null): string {
   if (!item.title) return `[ ] <${url}>${suffix}`;
   return `[ ] [${cap(item.title, MAX_TITLE).replace(/[[\]]/g, '\\$&')}](${url})${suffix}`;
 }
+
+/** Links and text only: a file dragged past the pill must not be swallowed. */
+export const isDroppable = (types: readonly string[]): boolean =>
+  !types.includes('Files') && (types.includes('text/uri-list') || types.includes('text/plain'));
 
 /** The pill takes drops only while it is visibly resting or showing "Saved". */
 export const acceptsDrops = (s: OverlayState): boolean => (s.kind === 'idle' && s.visible) || s.kind === 'saved';

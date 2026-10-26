@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DropPayload, OverlayState } from '../../src/shared/channels';
-import { acceptsDrops, laterEntry, parseDrop } from '../../src/shared/later';
+import { acceptsDrops, isDroppable, laterEntry, parseDrop } from '../../src/shared/later';
 
 const REDDIT = 'https://www.reddit.com/r/x/comments/1/a/';
 const drop = (p: Partial<DropPayload>): DropPayload => ({ text: '', uriList: '', html: '', ...p });
@@ -101,4 +101,14 @@ describe('acceptsDrops', () => {
     [{ kind: 'error', message: 'x', retry: false }, false],
   ];
   it.each(cases)('%j → %s', (state, expected) => expect(acceptsDrops(state)).toBe(expected));
+});
+
+describe('isDroppable', () => {
+  it('takes links and text, not files', () => {
+    expect(isDroppable(['text/plain', 'text/uri-list', 'text/html'])).toBe(true);
+    expect(isDroppable(['text/plain', 'text/html'])).toBe(true);
+    expect(isDroppable(['Files'])).toBe(false);
+    expect(isDroppable(['Files', 'text/uri-list'])).toBe(false); // a file dragged from a browser download bar
+    expect(isDroppable([])).toBe(false);
+  });
 });

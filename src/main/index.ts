@@ -5,13 +5,13 @@ import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
 import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
 import { acceptsDrops } from '../shared/later';
-import { ensureLocked, keepExisting } from '../shared/home-widgets';
+import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
-import { DragWatch } from './drop/drag-watch';
+import { DragWatch, dropZone } from './drop/drag-watch';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
-import { ensureLaterPage, saveDrop } from './later';
+import { ensureLaterPage, guardWidgets, saveDrop } from './later';
 import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
@@ -278,7 +278,7 @@ async function boot(): Promise<void> {
   hotkey.setPaused(settings.hotkeyPaused);
   const dragWatch = new DragWatch({
     accepting: () => acceptsDrops(overlayState),
-    bounds: () => overlay.getBounds(),
+    bounds: () => dropZone(overlay.getBounds()),
     toDip: (p) => screen.screenToDipPoint(p),
     setDrag: (on) => overlayMouse.setDrag(on),
     later: (fn, ms) => setTimeout(fn, ms),
@@ -305,8 +305,7 @@ async function boot(): Promise<void> {
 
   function updateSettings(patch: Partial<Settings>): Settings {
     // A widget list from the dashboard (possibly stale) never loses the locked Review later card.
-    if (patch.homeWidgets && settings.laterPageId)
-      patch = { ...patch, homeWidgets: ensureLocked(patch.homeWidgets, settings.laterPageId, randomUUID()) };
+    patch = guardWidgets(patch, settings, randomUUID);
     Object.assign(settings, saveSettings(settingsFile, patch));
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.recordingSource) tray.refresh();

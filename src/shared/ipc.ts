@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
+import { MAX_DROP_FIELD } from './later';
 import { IMAGE_EXTS, MAX_IMAGE_BYTES } from './page-images';
 import { LANGUAGE_CODES, normaliseBaseUrl } from './transcription';
 
@@ -68,7 +69,8 @@ export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });
 export const DragSchema = z.object({ dx: z.number().int().min(-2000).max(2000), dy: z.number().int().min(-2000).max(2000) });
 export const ErrorSchema = z.object({ message: z.string().max(200) });
-const DropField = z.string().max(20_000);
+// A long styled selection's HTML can be huge: keep the start rather than refuse the drop.
+const DropField = z.string().max(5_000_000).transform((s) => s.slice(0, MAX_DROP_FIELD));
 export const DropPayloadSchema = z.object({ text: DropField, uriList: DropField, html: DropField });
 export const DevicesSchema = z
   .array(z.object({ deviceId: z.string().max(512), label: z.string().max(300) }))

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isDroppable, MAX_DROP_FIELD } from '../../shared/later';
 
 export type DropPhase = 'none' | 'over' | 'saved' | 'failed';
 const CONFIRM_MS = 1500;
@@ -20,24 +21,25 @@ export function useDropLater(accepting: boolean): DropPhase {
       setPhase(p);
       if (ms) timer = setTimeout(() => setPhase('none'), ms);
     };
+    const takes = (e: DragEvent) => acceptingRef.current && isDroppable(e.dataTransfer?.types ?? []);
     const onEnter = (e: DragEvent) => {
-      if (!acceptingRef.current) return;
+      if (!takes(e)) return;
       e.preventDefault();
       if (depth++ === 0) show('over');
     };
     const onOver = (e: DragEvent) => {
-      if (acceptingRef.current) e.preventDefault();
+      if (takes(e)) e.preventDefault();
     };
     const onLeave = () => {
       if (depth > 0 && --depth === 0) show('none');
     };
     const onDrop = (e: DragEvent) => {
       depth = 0;
-      if (!acceptingRef.current || !e.dataTransfer) return;
+      if (!takes(e)) return;
       e.preventDefault();
-      const dt = e.dataTransfer;
+      const get = (type: string) => e.dataTransfer!.getData(type).slice(0, MAX_DROP_FIELD);
       window.overlayApi
-        .dropLater({ text: dt.getData('text/plain'), uriList: dt.getData('text/uri-list'), html: dt.getData('text/html') })
+        .dropLater({ text: get('text/plain'), uriList: get('text/uri-list'), html: get('text/html') })
         .then((r) => (r === 'saved' ? show('saved', CONFIRM_MS) : show('none')))
         .catch(() => show('failed', CONFIRM_MS));
     };

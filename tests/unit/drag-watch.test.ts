@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from 'vitest';
-import { DragWatch } from '../../src/main/drop/drag-watch';
+import { DragWatch, dropZone } from '../../src/main/drop/drag-watch';
 
 const PRESS = 7;
 const RELEASE = 8;
@@ -60,4 +60,18 @@ it('never turns solid while the pill is not accepting drops', () => {
   input(PRESS);
   input(MOVE, 960, 970);
   expect(calls).toEqual([]);
+});
+
+it('a press within 300 ms of a release keeps it solid', () => {
+  input(PRESS);
+  input(MOVE, 960, 970);
+  input(RELEASE, 960, 970);
+  input(PRESS, 960, 970); // the next drag starts before the grace timer fires
+  input(MOVE, 960, 970);
+  pending.forEach((fn) => fn());
+  expect(calls).toEqual([true]);
+});
+
+it('the drop zone is the pill area at the bottom centre, not the whole overlay', () => {
+  expect(dropZone(BOUNDS)).toEqual({ x: 648, y: 744, width: 240, height: 56 });
 });

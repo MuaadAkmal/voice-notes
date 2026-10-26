@@ -125,9 +125,13 @@ describe('review-later settings schemas', () => {
 });
 
 describe('later:drop schema', () => {
-  it('accepts three strings and rejects oversize or missing fields', () => {
+  it('accepts three strings and rejects missing fields', () => {
     expect(DropPayloadSchema.safeParse({ text: 'a', uriList: '', html: '<b>a</b>' }).success).toBe(true);
-    expect(DropPayloadSchema.safeParse({ text: 'x'.repeat(20_001), uriList: '', html: '' }).success).toBe(false);
     expect(DropPayloadSchema.safeParse({ text: 'a', html: '' }).success).toBe(false);
+  });
+  it('truncates an oversize field instead of rejecting the drop', () => {
+    const parsed = DropPayloadSchema.parse({ text: 'x'.repeat(20_001), uriList: '', html: 'h'.repeat(300_000) });
+    expect(parsed.text).toHaveLength(20_000);
+    expect(parsed.html).toHaveLength(20_000);
   });
 });

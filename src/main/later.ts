@@ -22,6 +22,18 @@ export function ensureLaterPage(settings: Settings, pages: PageStore, newId: () 
   return Object.keys(patch).length ? patch : null;
 }
 
+/**
+ * Every settings patch carrying widgets goes through this: only the Review later page's card may be
+ * locked, and it is always present. Uses the patch's own laterPageId when it carries a new one.
+ */
+export function guardWidgets(patch: Partial<Settings>, settings: Settings, newId: () => string): Partial<Settings> {
+  const lockId = patch.laterPageId ?? settings.laterPageId;
+  if (!patch.homeWidgets || !lockId) return patch;
+  // A locked card for another page is a leftover from a recreated Review later page (or forged): drop it.
+  const kept = patch.homeWidgets.filter((w) => !w.locked || w.pageId === lockId);
+  return { ...patch, homeWidgets: ensureLocked(kept, lockId, newId()) };
+}
+
 type DropDeps = {
   pages: PageStore;
   getSettings(): Settings;

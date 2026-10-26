@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { DropPayload, Settings } from '../../src/shared/channels';
 import { DEFAULT_SETTINGS } from '../../src/main/settings';
-import { ensureLaterPage, saveDrop } from '../../src/main/later';
+import { ensureLaterPage, guardWidgets, saveDrop } from '../../src/main/later';
 import { NoteStore } from '../../src/main/store/note-store';
 
 const T0 = new Date(2026, 9, 24, 14, 32).getTime();
@@ -21,7 +21,8 @@ let settings: Settings;
 const deps = (source: string | null = 'Reddit') => ({
   pages: store.pages,
   getSettings: () => settings,
-  updateSettings: (p: Partial<Settings>) => (settings = { ...settings, ...p }),
+  // What index.ts updateSettings does: the widget guard runs on every patch.
+  updateSettings: (p: Partial<Settings>) => (settings = { ...settings, ...guardWidgets(p, settings, randomUUID) }),
   source: () => source,
   newId: randomUUID,
 });
@@ -74,4 +75,22 @@ it('saveDrop recreates a page that vanished outside the app', async () => {
   expect(saveDrop({ text: 'serendipity', uriList: '', html: '' }, deps(null))).toBe('saved');
   expect(store.pages.get(settings.laterPageId!)!.title).toBe('Review later');
   expect(laterBody()).toContain('- [ ] serendipity\n');
+});
+
+it('recreating the page during a drop leaves exactly one locked card, for the new page', async () => {
+  settings = { ...settings, ...ensureLaterPage(settings, store.pages, randomUUID)! };
+  await store.pages.deleteMany([settings.laterPageId!]);
+  saveDrop({ text: 'serendipity', uriList: '', html: '' }, deps(null));
+  expect(settings.homeWidgets.filter((w) => w.locked)).toEqual([expect.objectContaining({ pageId: settings.laterPageId })]);
+});
+
+it('guardWidgets drops locked flags for other pages and re-adds the real card', () => {
+  const later = randomUUID();
+  const other = randomUUID();
+  const patch = guardWidgets(
+    { homeWidgets: [{ id: randomUUID(), type: 'page', pageId: other, locked: true }] },
+    { ...settings, laterPageId: later },
+    () => 'w',
+  );
+  expect(patch.homeWidgets).toEqual([{ id: 'w', type: 'page', pageId: later, locked: true }]);
 });
