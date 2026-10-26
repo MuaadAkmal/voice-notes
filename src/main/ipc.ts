@@ -233,7 +233,9 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     pages.setStarred(ids, starred);
     d.pagesChanged();
   });
-  handle(Ch.PagesDeleteMany, IdListSchema, async (ids) => {
+  handle(Ch.PagesDeleteMany, IdListSchema, async (requested) => {
+    // The built-in Review later page can't be deleted, whatever the renderer asks.
+    const ids = requested.filter((id) => id !== d.getSettings().laterPageId);
     try {
       await pages.deleteMany(ids);
     } finally {

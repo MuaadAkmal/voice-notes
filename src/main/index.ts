@@ -1,13 +1,15 @@
 import { app, type BrowserWindow, desktopCapturer, nativeTheme, session } from 'electron';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
 import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
-import { keepExisting } from '../shared/home-widgets';
+import { ensureLocked, keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
+import { ensureLaterPage } from './later';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
@@ -65,6 +67,9 @@ async function boot(): Promise<void> {
   );
   if (liveWidgets.length !== settings.homeWidgets.length)
     Object.assign(settings, saveSettings(settingsFile, { homeWidgets: liveWidgets }));
+  // The built-in Review later page and its locked Home card always exist.
+  const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
+  if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
   registerNoteProtocol(store);
   registerImageProtocol(store);
 
@@ -262,6 +267,9 @@ async function boot(): Promise<void> {
   });
 
   function updateSettings(patch: Partial<Settings>): Settings {
+    // A widget list from the dashboard (possibly stale) never loses the locked Review later card.
+    if (patch.homeWidgets && settings.laterPageId)
+      patch = { ...patch, homeWidgets: ensureLocked(patch.homeWidgets, settings.laterPageId, randomUUID()) };
     Object.assign(settings, saveSettings(settingsFile, patch));
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.recordingSource) tray.refresh();
