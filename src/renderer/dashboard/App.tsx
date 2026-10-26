@@ -10,6 +10,7 @@ import { PageView } from './PageView';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
 import { TranscriptionPage } from './TranscriptionPage';
+import { AccountPage } from './AccountPage';
 import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
@@ -22,7 +23,8 @@ export type View =
   | { kind: 'folder'; id: string }
   | { kind: 'page'; id: string }
   | { kind: 'settings' }
-  | { kind: 'transcription' };
+  | { kind: 'transcription' }
+  | { kind: 'account' };
 
 const api = window.dashboardApi;
 
@@ -35,12 +37,13 @@ export function App() {
     setView(v);
     setFilter(NO_FILTER);
   };
+  const goHome = useCallback(() => setView({ kind: 'home' }), []);
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -69,7 +72,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -116,6 +119,8 @@ export function App() {
               <SettingsPage />
             ) : view.kind === 'transcription' ? (
               <TranscriptionPage />
+            ) : view.kind === 'account' ? (
+              <AccountPage onSignedOut={goHome} />
             ) : view.kind === 'page' ? (
               <PageView
                 key={view.id}

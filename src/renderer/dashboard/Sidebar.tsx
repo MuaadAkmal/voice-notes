@@ -6,6 +6,7 @@ import { cleanIpcError } from '../../shared/format';
 import { FOLDER_MIME, getDragging, notifyDropped, setDragging } from './dnd';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
+import { AccountChip } from './AccountChip';
 import type { View } from './App';
 import {
   ContextMenu,
@@ -336,6 +337,7 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
         )}
       </div>
       <div className="border-t border-sidebar-border px-3 py-3">
+        <AccountChip active={view.kind === 'account'} onOpen={() => onSelect({ kind: 'account' })} />
         <NavItem
           label="Transcription"
           active={view.kind === 'transcription'}
