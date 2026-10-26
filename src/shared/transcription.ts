@@ -41,14 +41,12 @@ export const DEFAULT_TRANSCRIPTION: TranscriptionSettings = {
   model: DEFAULT_MODEL,
 };
 
-/** Shown disabled on the Transcription page until each gets its own adapter. */
-export const COMING_SOON_PROVIDERS = [
-  'Local server',
-  'OpenAI',
-  'Groq',
-  'Built-in (whisper.cpp)',
-  'Google Gemini',
-  'Mistral Voxtral',
+/** Planned Voice Notes Cloud models, previewed on the Transcription page until the cloud backend ships. */
+export const CLOUD_TIERS = [
+  { name: 'Auto', detail: 'Picks the model by language' },
+  { name: 'Fast', detail: 'Whisper large-v3 turbo' },
+  { name: 'Most accurate', detail: 'Whisper large-v3' },
+  { name: 'Indian languages', detail: 'Hindi, Tamil, Bengali and more' },
 ] as const;
 
 /** http(s) URL without query, hash or trailing slashes; a pasted full endpoint is cut back to its base. */

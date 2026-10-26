@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Server } from 'lucide-react';
+import { Cloud, Cpu, Server } from 'lucide-react';
 import type { KeyInfo, Settings, TestResult } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import {
-  COMING_SOON_PROVIDERS,
+  CLOUD_TIERS,
   normaliseBaseUrl,
   sendsKeyInsecurely,
   TRANSCRIBE_LANGUAGES,
@@ -125,18 +125,40 @@ export function TranscriptionPage() {
             </div>
           </div>
         </div>
-        {COMING_SOON_PROVIDERS.map((name) => (
-          <div
-            key={name}
-            aria-disabled="true"
-            className="rounded-xl border bg-card p-3 opacity-50"
-          >
-            <div className="text-sm font-medium">{name}</div>
-            <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              Coming soon
-            </span>
+        <div
+          aria-disabled="true"
+          className="col-span-2 flex items-start gap-3 rounded-xl border bg-card p-3 opacity-60"
+        >
+          <Cpu className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <div className="text-sm font-medium">Built-in (whisper.cpp)</div>
+            <div className="text-xs text-muted-foreground">Runs on this PC, no server</div>
+            <ComingSoon />
           </div>
-        ))}
+        </div>
+        <div
+          aria-disabled="true"
+          className="col-span-2 rounded-xl border bg-card p-3 opacity-60 sm:col-span-4"
+        >
+          <div className="flex items-start gap-3">
+            <Cloud className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <div className="text-sm font-medium">Voice Notes Cloud</div>
+              <div className="text-xs text-muted-foreground">
+                No GPU needed. Free includes 15 min a month, Pro 120 min.
+              </div>
+              <ComingSoon />
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+            {CLOUD_TIERS.map((tier) => (
+              <div key={tier.name} className="rounded-lg bg-muted px-2.5 py-2">
+                <div className="text-xs font-medium">{tier.name}</div>
+                <div className="text-[11px] text-muted-foreground">{tier.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="divide-y divide-border rounded-2xl border bg-card">
@@ -261,5 +283,13 @@ export function TranscriptionPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ComingSoon() {
+  return (
+    <span className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+      Coming soon
+    </span>
   );
 }
