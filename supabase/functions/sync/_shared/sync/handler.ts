@@ -13,7 +13,7 @@ export type HandlerDeps = {
   core: Pick<SyncCore, 'push' | 'pull'>;
   /** Signed URLs for audio and images; without it the file routes are 404. */
   files?: Pick<FileRules, 'upload' | 'download' | 'afterPush'>;
-  /** Tells the account's other PCs to sync now (a Realtime broadcast); rom is the pushing PC. */
+  /** Tells the account's other PCs to sync now (a Realtime broadcast); `from` is the pushing PC. */
   notify?(userId: string, from: string): Promise<void>;
 };
 
