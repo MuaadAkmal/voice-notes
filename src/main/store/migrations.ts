@@ -73,6 +73,48 @@ export const MIGRATIONS: string[] = [
    );
    CREATE INDEX outbox_entity ON outbox (entity_id);
    CREATE TABLE sync_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+  // Sync files: a note's audio can be in the account but not on this PC yet ('remote'), which needs
+  // a table rebuild for the CHECK; files waiting to upload queue in file_outbox.
+  `CREATE TABLE notes_new (
+     id              TEXT PRIMARY KEY,
+     title           TEXT NOT NULL,
+     file_path       TEXT NOT NULL,
+     duration_ms     INTEGER NOT NULL,
+     size_bytes      INTEGER NOT NULL,
+     mime_type       TEXT NOT NULL,
+     status          TEXT NOT NULL CHECK (status IN ('ok', 'missing', 'remote')),
+     created_at      INTEGER NOT NULL,
+     updated_at      INTEGER NOT NULL,
+     synced_at       INTEGER,
+     folder_id       TEXT REFERENCES folders(id),
+     source          TEXT NOT NULL DEFAULT 'mic' CHECK (source IN ('mic', 'system', 'both')),
+     kind            TEXT NOT NULL DEFAULT 'note' CHECK (kind IN ('note', 'rewind')),
+     window_title    TEXT,
+     show            TEXT,
+     starred         INTEGER NOT NULL DEFAULT 0,
+     transcript      TEXT,
+     transcript_lang TEXT,
+     transcribed_at  INTEGER,
+     deleted_at      INTEGER,
+     version         INTEGER NOT NULL DEFAULT 0
+   );
+   INSERT INTO notes_new (id, title, file_path, duration_ms, size_bytes, mime_type, status, created_at, updated_at, synced_at,
+     folder_id, source, kind, window_title, show, starred, transcript, transcript_lang, transcribed_at, deleted_at, version)
+   SELECT id, title, file_path, duration_ms, size_bytes, mime_type, status, created_at, updated_at, synced_at,
+     folder_id, source, kind, window_title, show, starred, transcript, transcript_lang, transcribed_at, deleted_at, version FROM notes;
+   DROP TABLE notes;
+   ALTER TABLE notes_new RENAME TO notes;
+   CREATE INDEX notes_created_at ON notes (created_at);
+   CREATE INDEX notes_folder ON notes (folder_id);
+   CREATE INDEX notes_show ON notes (show);
+   CREATE TABLE file_outbox (
+     kind       TEXT NOT NULL CHECK (kind IN ('audio', 'image')),
+     name       TEXT NOT NULL,
+     attempts   INTEGER NOT NULL DEFAULT 0,
+     next_at    INTEGER NOT NULL DEFAULT 0,
+     created_at INTEGER NOT NULL,
+     PRIMARY KEY (kind, name)
+   );`,
 ];
 
 export function migrate(db: Database.Database): void {

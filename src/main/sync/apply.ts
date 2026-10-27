@@ -100,8 +100,8 @@ function write(sqlite: ReturnType<NoteStore['syncAccess']>['sqlite'], row: Serve
   if (row.entity === 'note') {
     const n = data as NoteRow;
     const filePath = `recordings/${n.id}.webm`;
-    // The audio itself comes in piece C; until then a note from another PC shows as missing audio.
-    const status = fs.existsSync(path.join(rootDir, filePath)) ? 'ok' : 'missing';
+    // A note from another PC: its audio downloads on first play (sync/files.ts).
+    const status = fs.existsSync(path.join(rootDir, filePath)) ? 'ok' : 'remote';
     sqlite.prepare(UPSERT.note).run({ ...n, filePath, status, starred: n.starred ? 1 : 0, version });
   } else if (row.entity === 'page') {
     const p = data as PageRow;

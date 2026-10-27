@@ -108,3 +108,13 @@ it('pulled settings are handed over after the rows', () => {
   applyPull(store, { cursor: 2, hasMore: false, rows: [], prefs: [{ key: 'transcribeLanguage', value: 'es', version: 2 }] }, (p) => seen.push(...p));
   expect(seen).toEqual([{ key: 'transcribeLanguage', value: 'es', version: 2 }]);
 });
+
+it('a pulled note without its file here is remote', () => {
+  const id = '22222222-2222-4222-8222-222222222222';
+  const row = {
+    id, title: 'From B', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
+    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null,
+  };
+  applyPull(store, pull([{ entity: 'note', id, version: 4, deleted: false, data: row }]), () => undefined);
+  expect(store.get(id)!.status).toBe('remote');
+});

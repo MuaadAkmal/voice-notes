@@ -7,7 +7,7 @@ export type Note = {
   durationMs: number;
   sizeBytes: number;
   mimeType: string;
-  status: 'ok' | 'missing';
+  status: 'ok' | 'missing' | 'remote'; // remote: in the account, not downloaded to this PC yet
   createdAt: number;
   updatedAt: number;
   syncedAt: number | null;

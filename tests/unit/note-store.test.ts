@@ -294,3 +294,15 @@ it('migration 6 adds empty transcript columns to existing notes', () => {
   expect(upgraded.get(id)).toMatchObject({ transcript: null, transcriptLang: null, transcribedAt: null });
   upgraded.close();
 });
+
+it('reconcile leaves remote notes remote, and a remote note whose file appears becomes ok', async () => {
+  const a = await store.create(audio());
+  const b = await store.create(audio());
+  const raw = new Database(path.join(root, 'voice-notes.sqlite'));
+  raw.prepare("UPDATE notes SET status = 'remote' WHERE id IN (?, ?)").run(a.id, b.id);
+  raw.close();
+  fs.rmSync(store.absolutePath(a));
+  expect((await store.reconcile()).missing).toBe(0);
+  expect(store.get(a.id)!.status).toBe('remote');
+  expect(store.get(b.id)!.status).toBe('ok');
+});

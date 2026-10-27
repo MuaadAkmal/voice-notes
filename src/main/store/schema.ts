@@ -7,7 +7,7 @@ export const notes = sqliteTable('notes', {
   durationMs: integer('duration_ms').notNull(),
   sizeBytes: integer('size_bytes').notNull(),
   mimeType: text('mime_type').notNull(),
-  status: text('status', { enum: ['ok', 'missing'] }).notNull(),
+  status: text('status', { enum: ['ok', 'missing', 'remote'] }).notNull(),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   syncedAt: integer('synced_at'),

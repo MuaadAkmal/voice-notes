@@ -241,7 +241,8 @@ export class NoteStore {
     }
     for (const note of this.list()) {
       const exists = fs.existsSync(this.absolutePath(note));
-      const status = exists ? 'ok' : 'missing';
+      // A remote note's audio is in the account: it isn't lost, just not downloaded yet.
+      const status = exists ? 'ok' : note.status === 'remote' ? 'remote' : 'missing';
       if (status !== note.status) {
         this.db.update(notes).set({ status }).where(eq(notes.id, note.id)).run();
         if (status === 'missing') result.missing++;
