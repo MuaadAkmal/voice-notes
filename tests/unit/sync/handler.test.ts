@@ -8,12 +8,14 @@ import { SyncCore } from '../../../src/shared/sync/server-core';
 const USER = '11111111-1111-4111-8111-111111111111';
 const BASE = 'https://x.supabase.co/functions/v1/sync';
 
-function setup(over: { verify?: (jwt: string) => Promise<string | null>; core?: SyncCore; bucket?: MemoryBucket } = {}) {
+function setup(
+  over: { verify?: (jwt: string) => Promise<string | null>; core?: SyncCore; bucket?: MemoryBucket; notify?: (userId: string, from: string) => Promise<void> } = {},
+) {
   const store = new MemoryStore();
   const core = over.core ?? new SyncCore(store);
   const bucket = over.bucket ?? new MemoryBucket('http://files');
   const files = new FileRules(store, bucket);
-  const deps = { verify: over.verify ?? (async (jwt: string) => (jwt === 'good' ? USER : null)), core, files };
+  const deps = { verify: over.verify ?? (async (jwt: string) => (jwt === 'good' ? USER : null)), core, files, notify: over.notify };
   const call = (route: string, body: unknown, token: string | null = 'good', raw?: string) =>
     handle(
       new Request(`${BASE}/${route}`, {
@@ -144,4 +146,26 @@ it('a bucket failure after a push still returns the acks', async () => {
   const res = await call('push', push([{ id: 'm1', op: { op: 'note.delete', id: NOTE }, baseVersion: 0 }]));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ acked: [{ id: 'm1', version: 0 }] });
+});
+it('a push with changes pings the account once, from the pushing PC', async () => {
+  const pings: string[][] = [];
+  const { call } = setup({ notify: async (u, from) => void pings.push([u, from]) });
+  await call('push', push([{ id: 'm1', op: { op: 'folder.create', id: 'f', row: folder }, baseVersion: 0 }]));
+  expect(pings).toEqual([[USER, 'A']]);
+});
+
+it('an empty push, a pull and file routes never ping', async () => {
+  const pings: string[][] = [];
+  const { call } = setup({ notify: async (u, from) => void pings.push([u, from]) });
+  await call('push', push([]));
+  await call('pull', { clientId: 'A', cursor: 0 });
+  await call('files/download', { kind: 'audio', name: '11111111-1111-4111-8111-111111111111.webm' });
+  expect(pings).toEqual([]);
+});
+
+it('a ping that fails still answers the push', async () => {
+  const { call } = setup({ notify: async () => Promise.reject(new Error('realtime down')) });
+  const res = await call('push', push([{ id: 'm1', op: { op: 'folder.create', id: 'f', row: folder }, baseVersion: 0 }]));
+  expect(res.status).toBe(200);
+  expect((await res.json()).acked).toHaveLength(1);
 });

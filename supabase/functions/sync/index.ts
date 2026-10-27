@@ -1,4 +1,4 @@
-// The `sync` Edge Function: Voice Notes' push/pull for two-PC sync, and signed URLs for audio and images. The rules, the request checks, the
+// The `sync` Edge Function: Voice Notes' push/pull for two-PC sync, signed URLs for audio and images, and a ping to the other PCs after a push. The rules, the request checks, the
 // Postgres store and its postgres.js adapter live in ./_shared (copies of src/shared, made by
 // `npm run sync:function`; the store is contract-tested through postgres.js in tests/unit/sync/pg-wire.test.ts).
 import postgres from 'npm:postgres@3.4.9';
@@ -33,4 +33,9 @@ async function verify(jwt: string): Promise<string | null> {
   return data.claims.sub as string;
 }
 
-Deno.serve((req) => handle(req, { verify, core, files }));
+/** A Realtime broadcast on the account's private topic: its other PCs sync now. No content, only who pushed. */
+async function notify(userId: string, from: string): Promise<void> {
+  await sql`select realtime.send(${JSON.stringify({ from })}::jsonb, 'changed', ${`sync:${userId}`}, true)`;
+}
+
+Deno.serve((req) => handle(req, { verify, core, files, notify }));

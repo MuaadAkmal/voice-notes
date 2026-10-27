@@ -13,6 +13,8 @@ export type HandlerDeps = {
   core: Pick<SyncCore, 'push' | 'pull'>;
   /** Signed URLs for audio and images; without it the file routes are 404. */
   files?: Pick<FileRules, 'upload' | 'download' | 'afterPush'>;
+  /** Tells the account's other PCs to sync now (a Realtime broadcast); rom is the pushing PC. */
+  notify?(userId: string, from: string): Promise<void>;
 };
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -51,6 +53,8 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
       const res = await deps.core.push(userId, push);
       // Removing deleted notes' audio is best effort: the hourly sweep catches what this misses.
       await deps.files?.afterPush(userId, push).catch((err) => console.error('[sync] files', err));
+      // A missed ping only means the other PCs sync on their timer.
+      if (push.mutations.length) await deps.notify?.(userId, push.clientId).catch((err) => console.error('[sync] ping', err));
       return json(200, res);
     }
     if (route === 'files/upload') return json(200, await deps.files!.upload(userId, readUpload(body)));
