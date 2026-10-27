@@ -1,5 +1,6 @@
 import type { FolderRow, SyncedKey } from '../sync-ops';
-import type { PullResponse, ServerRow } from './protocol';
+import { imageRefs } from '../page-images';
+import type { FileKind, PullResponse, ServerRow } from './protocol';
 import type { BodyEvent, Entity, StoredRow, SyncStore, SyncTx } from './server-core';
 
 type Account = {
@@ -54,6 +55,23 @@ export class MemoryStore implements SyncStore {
       hasMore: items.length > limit,
       rows: page.flatMap((i) => (i.row ? [i.row] : [])),
       prefs: page.flatMap((i) => (i.pref ? [i.pref] : [])),
+    };
+  }
+
+  async fileOwner(userId: string, kind: FileKind, name: string): Promise<'live' | 'deleted' | 'none'> {
+    const a = this.account(userId);
+    if (kind === 'audio') {
+      const row = a.rows.get(key('note', name.replace(/\.webm$/, '')));
+      return row ? (row.deleted ? 'deleted' : 'live') : 'none';
+    }
+    return (await this.liveFiles(userId)).images.has(name) ? 'live' : 'none';
+  }
+
+  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }> {
+    const live = [...this.account(userId).rows.values()].filter((s) => !s.deleted);
+    return {
+      audio: new Set(live.filter((s) => s.entity === 'note').map((s) => `${s.id}.webm`)),
+      images: new Set(live.filter((s) => s.entity === 'page').flatMap((s) => [...imageRefs(String(s.data.body ?? ''))])),
     };
   }
 

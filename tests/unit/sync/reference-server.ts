@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { MemoryStore, toServerRow } from '../../../src/shared/sync/memory-store';
-import type { PullRequest, PullResponse, PushRequest, PushResponse, ServerRow, SyncServer } from '../../../src/shared/sync/protocol';
+import type { FileKind, PullRequest, PullResponse, PushRequest, PushResponse, ServerRow, SyncServer } from '../../../src/shared/sync/protocol';
 import { type Entity, type StoredRow, SyncCore, type SyncStore } from '../../../src/shared/sync/server-core';
 
 // The sync server's rules for one account: SyncCore over a store. ReferenceServer keeps rows in
@@ -45,6 +45,14 @@ export class TestServer implements SyncServer {
 
   pull(req: PullRequest): Promise<PullResponse> {
     return this.core.pull(this.user, req);
+  }
+
+  fileOwner(kind: FileKind, name: string, user = this.user) {
+    return this.store.fileOwner(user, kind, name);
+  }
+
+  liveFiles(user = this.user) {
+    return this.store.liveFiles(user);
   }
 }
 

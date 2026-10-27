@@ -1,6 +1,6 @@
 import { isDescendant } from '../folders.ts';
 import { applyOp, type FolderRow, type PageRow, type RowOp, type SyncedKey, type SyncOp } from '../sync-ops.ts';
-import { PULL_PAGE_SIZE, type PullRequest, type PullResponse, type PushRequest, type PushResponse } from './protocol.ts';
+import { type FileKind, PULL_PAGE_SIZE, type PullRequest, type PullResponse, type PushRequest, type PushResponse } from './protocol.ts';
 
 // The sync server's rules for one account at a time, independent of where rows are kept: in memory
 // for the tests, in Postgres inside the Edge Function. Pure TypeScript (runs in Node and Deno).
@@ -30,6 +30,10 @@ export interface SyncTx {
 export interface SyncStore {
   transaction<T>(userId: string, fn: (tx: SyncTx) => Promise<T>): Promise<T>;
   pullSince(userId: string, cursor: number, limit: number): Promise<PullResponse>;
+  /** Audio: its note row. Image: 'live' while a live page body references it (never 'deleted'). */
+  fileOwner(userId: string, kind: FileKind, name: string): Promise<'live' | 'deleted' | 'none'>;
+  /** Live notes' audio file names and the images live pages reference. */
+  liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }>;
 }
 
 export class SyncCore {

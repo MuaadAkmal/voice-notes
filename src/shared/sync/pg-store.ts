@@ -1,5 +1,6 @@
 import type { FolderRow, SyncedKey } from '../sync-ops';
-import type { PullResponse, ServerRow } from './protocol';
+import { imageRefs } from '../page-images';
+import type { FileKind, PullResponse, ServerRow } from './protocol';
 import type { BodyEvent, Entity, StoredRow, SyncStore, SyncTx } from './server-core';
 
 // SyncStore on the Postgres tables of supabase/migrations/*_sync_rows.sql. Every statement is
@@ -150,6 +151,32 @@ export class PgStore implements SyncStore {
         .filter((i) => i.kind === 'row')
         .map((i) => ({ entity: i.entity, id: i.id, version: Number(i.version), deleted: !!i.deleted, data: i.data }) as ServerRow),
       prefs: page.filter((i) => i.kind === 'pref').map((i) => ({ key: i.key as SyncedKey, value: i.value, version: Number(i.version) })),
+    };
+  }
+
+  async fileOwner(userId: string, kind: FileKind, name: string): Promise<'live' | 'deleted' | 'none'> {
+    if (kind === 'audio') {
+      const [r] = await this.db.query<{ deleted: boolean }>(
+        "select deleted from public.sync_rows where user_id = $1 and entity = 'note' and id = $2",
+        [userId, name.replace(/\.webm$/, '')],
+      );
+      return r ? (r.deleted ? 'deleted' : 'live') : 'none';
+    }
+    const [r] = await this.db.query(
+      "select 1 from public.sync_rows where user_id = $1 and entity = 'page' and not deleted and strpos(data ->> 'body', $2) > 0 limit 1",
+      [userId, `vn-image://${name}`],
+    );
+    return r ? 'live' : 'none';
+  }
+
+  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }> {
+    const rows = await this.db.query<{ entity: Entity; id: string; body: string | null }>(
+      "select entity, id, data ->> 'body' as body from public.sync_rows where user_id = $1 and not deleted and entity in ('note', 'page')",
+      [userId],
+    );
+    return {
+      audio: new Set(rows.filter((r) => r.entity === 'note').map((r) => `${r.id}.webm`)),
+      images: new Set(rows.filter((r) => r.entity === 'page').flatMap((r) => [...imageRefs(r.body ?? '')])),
     };
   }
 

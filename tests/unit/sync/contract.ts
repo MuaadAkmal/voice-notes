@@ -6,6 +6,7 @@ let seq = 0;
 const m = (op: SyncOp, baseVersion = 0) => ({ id: `m${++seq}`, op, baseVersion });
 const A = { clientId: 'A', deviceName: 'PC-A' };
 const B = { clientId: 'B', deviceName: 'PC-B' };
+const OTHER = '22222222-2222-4222-8222-222222222222';
 const page = (id: string, body = ''): PageRow => ({ id, title: 'Notes', body, folderId: null, starred: false, createdAt: 1, updatedAt: 1 });
 const folder = (id: string, name: string, parentId: string | null = null): FolderRow => ({ id, name, parentId, createdAt: 1, updatedAt: 1 });
 const note = (id: string, folderId: string | null = null): NoteRow => ({
@@ -142,6 +143,45 @@ export function runContract(label: string, make: () => Promise<TestServer>, time
       await expect(s.push({ ...A, mutations: [create] })).rejects.toThrow('connection lost');
       expect((await s.row('page', 'p'))).toBeDefined();
       expect((await s.push({ ...A, mutations: [create] })).acked).toHaveLength(1);
+    });
+
+    it('fileOwner: audio follows its note row, an image any live page that references it', async () => {
+      const s = await make();
+      const N = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const IMG = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png';
+      expect(await s.fileOwner('audio', `${N}.webm`)).toBe('none');
+      expect(await s.fileOwner('image', IMG)).toBe('none');
+      await s.push({ ...A, mutations: [m({ op: 'note.create', id: N, row: note(N) }), m({ op: 'page.create', id: 'p', row: page('p', `x ![](vn-image://${IMG}) y`) })] });
+      expect(await s.fileOwner('audio', `${N}.webm`)).toBe('live');
+      expect(await s.fileOwner('image', IMG)).toBe('live');
+      expect(await s.fileOwner('audio', `${N}.webm`, OTHER)).toBe('none');
+      expect(await s.fileOwner('image', IMG, OTHER)).toBe('none');
+      await s.push({ ...A, mutations: [m({ op: 'note.delete', id: N }), m({ op: 'page.delete', id: 'p' })] });
+      expect(await s.fileOwner('audio', `${N}.webm`)).toBe('deleted');
+      expect(await s.fileOwner('image', IMG)).toBe('none');
+    });
+
+    it('liveFiles lists the live notes\' audio and the images live pages reference, for one account', async () => {
+      const s = await make();
+      const N1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const N2 = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      const I1 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png';
+      const I2 = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd.jpg';
+      await s.push({
+        ...A,
+        mutations: [
+          m({ op: 'note.create', id: N1, row: note(N1) }),
+          m({ op: 'note.create', id: N2, row: note(N2) }),
+          m({ op: 'page.create', id: 'p1', row: page('p1', `vn-image://${I1}`) }),
+          m({ op: 'page.create', id: 'p2', row: page('p2', `vn-image://${I2}`) }),
+        ],
+      });
+      await s.push({ ...A, mutations: [m({ op: 'note.delete', id: N2 }), m({ op: 'page.delete', id: 'p2' })] });
+      const live = await s.liveFiles();
+      expect([...live.audio]).toEqual([`${N1}.webm`]);
+      expect([...live.images]).toEqual([I1]);
+      const theirs = await s.liveFiles(OTHER);
+      expect(theirs.audio.size + theirs.images.size).toBe(0);
     });
   });
 }
