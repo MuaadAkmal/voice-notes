@@ -7,7 +7,7 @@ export type Note = {
   durationMs: number;
   sizeBytes: number;
   mimeType: string;
-  status: 'ok' | 'missing';
+  status: 'ok' | 'missing' | 'remote'; // remote: in the account, not downloaded to this PC yet
   createdAt: number;
   updatedAt: number;
   syncedAt: number | null;
@@ -146,6 +146,7 @@ export const Ch = {
   NotesRename: 'notes:rename',
   NotesDelete: 'notes:delete',
   NotesReveal: 'notes:reveal',
+  NotesFetchAudio: 'notes:fetch-audio', // id → FetchAudioResult (a remote note's audio from the account)
   SettingsGet: 'settings:get',
   SettingsSet: 'settings:set',
   HotkeyCapture: 'hotkey:capture',
@@ -215,7 +216,11 @@ export type StatusMap = Record<string, JobStatus>;
 /** What the dashboard may know about the saved API key. */
 export type KeyInfo = { saved: boolean; last4: string };
 /** What the Account page shows about sync: the state, and whether to ask "Sync this PC with your account?". */
-export type SyncView = { status: SyncStatus; needsPrompt: boolean };
+/** Bringing a remote note's audio to this PC: why it didn't work, for the toast. */
+export type FetchAudioResult = { ok: true } | { ok: false; reason: 'not-uploaded' | 'offline' | 'sync-off' | 'error' };
+
+/** filesWaiting: audio and images not uploaded yet; storageFull: the account refused the last upload for space. */
+export type SyncView = { status: SyncStatus; needsPrompt: boolean; filesWaiting: number; storageFull: boolean };
 
 /** This PC's sync, as the Account page shows it. */
 export type SyncStatus =
