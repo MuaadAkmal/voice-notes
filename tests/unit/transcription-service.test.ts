@@ -310,3 +310,14 @@ it('tests whatever provider is in use', async () => {
   expect(t.requests[0]).toMatchObject({ baseUrl: 'http://127.0.0.1:1/v1', model: 'tiny', filename: 'test.wav' });
   expect(t.local.release).toHaveBeenCalledTimes(1);
 });
+
+it('a remote note is fetched before it is transcribed', async () => {
+  let status: Note['status'] = 'remote';
+  const fetchAudio = vi.fn(async () => void (status = 'ok'));
+  const { service, deps } = setup({ fetchAudio });
+  (deps.store.get as ReturnType<typeof vi.fn>).mockImplementation(() => note({ status }));
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  expect(fetchAudio).toHaveBeenCalledWith(ID);
+  expect(deps.store.setTranscript).toHaveBeenCalled();
+});

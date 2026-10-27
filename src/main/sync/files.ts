@@ -3,7 +3,8 @@ import { imageRefs } from '../../shared/page-images';
 import type { FileKind } from '../../shared/sync/protocol';
 import type { NoteStore } from '../store/note-store';
 import type { FileEntry } from './file-outbox';
-import { type HttpSyncServer, ServerError } from './http-server';
+import type { FetchAudioResult } from '../../shared/channels';
+import { type HttpSyncServer, Offline, ServerError } from './http-server';
 
 // Moving audio and page images between this PC and the account. Uploads drain the file queue after
 // each sync (rows first, so the server knows what a file belongs to); downloads happen on first play
@@ -20,6 +21,14 @@ export class SyncOff extends Error {
   constructor() {
     super('Turn on sync to get this audio');
   }
+}
+
+/** A failed download, as the dashboard's toast needs it. */
+export function fetchFailure(err: unknown): Extract<FetchAudioResult, { ok: false }>['reason'] {
+  if (err instanceof NotUploaded) return 'not-uploaded';
+  if (err instanceof SyncOff) return 'sync-off';
+  if (err instanceof Offline) return 'offline';
+  return 'error';
 }
 
 type Server = Pick<HttpSyncServer, 'uploadUrl' | 'downloadUrl' | 'put' | 'get'>;

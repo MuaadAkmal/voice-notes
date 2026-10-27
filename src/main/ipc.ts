@@ -9,6 +9,7 @@ import {
   DevicesSchema,
   DragSchema,
   type DropPayload,
+  type FetchAudioResult,
   DropPayloadSchema,
   OverlayTitleSchema,
   CreateFolderSchema,
@@ -50,6 +51,7 @@ import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
 import type { AccountService } from './account/account';
 import type { SyncController } from './sync/controller';
+import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
@@ -177,6 +179,7 @@ type DashboardDeps = {
   localWhisper: LocalWhisper;
   account: AccountService;
   sync: SyncController;
+  files: Pick<FileSync, 'fetchAudio'>;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -202,6 +205,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.NotesReveal, IdSchema, (id) => {
     const note = d.store.get(id);
     if (note?.status === 'ok') shell.showItemInFolder(d.store.absolutePath(note));
+  });
+  handle(Ch.NotesFetchAudio, IdSchema, async (id): Promise<FetchAudioResult> => {
+    try {
+      await d.files.fetchAudio(id);
+      return { ok: true };
+    } catch (err) {
+      log.warn('[sync] audio download failed', err);
+      return { ok: false, reason: fetchFailure(err) };
+    }
   });
   handle(Ch.SettingsGet, none, () => d.getSettings());
   handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => {

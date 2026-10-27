@@ -31,6 +31,7 @@ let engine: {
   startFresh: ReturnType<typeof vi.fn<() => void>>;
 };
 let refreshed: number;
+let files: { drain: ReturnType<typeof vi.fn<() => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
 let ctl: SyncController;
 
 const last = () => views[views.length - 1];
@@ -44,6 +45,7 @@ beforeEach(() => {
   changes = [];
   script = [];
   refreshed = 0;
+  files = { drain: vi.fn(async () => ({ storageFull: false })), waiting: () => files.left, left: 0 };
   engine = {
     sync: vi.fn<() => Promise<typeof NONE>>(async () => (script.shift() ?? (async () => NONE))()),
     enable: vi.fn<() => void>(() => void (state.rec = true)),
@@ -57,6 +59,7 @@ beforeEach(() => {
     refreshSession: async () => void refreshed++,
     onView: (v) => views.push(v),
     onChanged: (c) => changes.push(c),
+    files,
   });
   ctl.start();
 });
@@ -68,7 +71,7 @@ afterEach(() => {
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
 it('is off until turned on, and asks once signed in', () => {
-  expect(ctl.view()).toEqual({ status: { mode: 'off' }, needsPrompt: true });
+  expect(ctl.view()).toEqual({ status: { mode: 'off' }, needsPrompt: true, filesWaiting: 0, storageFull: false });
   expect(engine.sync).not.toHaveBeenCalled();
 });
 
@@ -79,7 +82,7 @@ it('turning on binds the account, snapshots and syncs', async () => {
   expect(state.net).toBe(true);
   expect(engine.startFresh).toHaveBeenCalledTimes(1);
   expect(engine.sync).toHaveBeenCalledTimes(1);
-  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, needsPrompt: false });
+  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, needsPrompt: false, filesWaiting: 0, storageFull: false });
 });
 
 it('a burst of edits syncs once, 3 s after the last', async () => {
@@ -198,7 +201,7 @@ it('a different account is asked first, and starts fresh when turned on', async 
   await flush();
   user = 'u2';
   ctl.onAccountChanged();
-  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: true });
+  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: true, filesWaiting: 0, storageFull: false });
   engine.startFresh.mockClear();
   ctl.turnOn('u2');
   await flush();
@@ -221,7 +224,7 @@ it('switching off stops syncing but keeps recording', async () => {
   ctl.turnOn('u1');
   await flush();
   ctl.turnOff();
-  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: false });
+  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: false, filesWaiting: 0, storageFull: false });
   engine.sync.mockClear();
   ctl.onLocalChange();
   await vi.advanceTimersByTimeAsync(600_000);
@@ -270,4 +273,34 @@ it('no session at sync time pauses instead of erroring', async () => {
   ctl.turnOn('u1');
   await flush();
   expect(last().status).toEqual({ mode: 'paused', reason: 'signed-out' });
+});
+
+it('after a successful sync the file queue drains and the view shows filesWaiting and storageFull', async () => {
+  files.left = 3;
+  files.drain.mockImplementation(async () => {
+    files.left = 1;
+    return { storageFull: true };
+  });
+  ctl.turnOn('u1');
+  await flush();
+  expect(files.drain).toHaveBeenCalledTimes(1);
+  expect(engine.sync.mock.invocationCallOrder[0]).toBeLessThan(files.drain.mock.invocationCallOrder[0]);
+  expect(last()).toMatchObject({ status: { mode: 'idle' }, filesWaiting: 1, storageFull: true });
+});
+
+it('an offline drain backs off like a failed sync', async () => {
+  files.drain.mockImplementationOnce(async () => Promise.reject(new Offline()));
+  ctl.turnOn('u1');
+  await flush();
+  expect(last().status).toEqual({ mode: 'offline', retryAt: 1_000_000 + 30_000 });
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(files.drain).toHaveBeenCalledTimes(2);
+  expect(last().status.mode).toBe('idle');
+});
+
+it('a failed sync does not drain files', async () => {
+  script.push(async () => Promise.reject(new Offline()));
+  ctl.turnOn('u1');
+  await flush();
+  expect(files.drain).not.toHaveBeenCalled();
 });

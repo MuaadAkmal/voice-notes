@@ -28,6 +28,7 @@ import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './set
 import { applyRemotePrefs, recordPrefs } from './sync/prefs';
 import { SyncController } from './sync/controller';
 import { SyncEngine } from './sync/engine';
+import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
@@ -94,8 +95,14 @@ async function boot(): Promise<void> {
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
   if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
-  registerNoteProtocol(store);
-  registerImageProtocol(store);
+  // Audio and images from the account come through FileSync, made with the sync wiring below.
+  const filesHolder: { files?: FileSync } = {};
+  const fetcher = {
+    fetchAudio: (id: string) => (filesHolder.files ? filesHolder.files.fetchAudio(id) : Promise.reject(new SyncOff())),
+    fetchImage: (name: string) => (filesHolder.files ? filesHolder.files.fetchImage(name) : Promise.reject(new SyncOff())),
+  };
+  registerNoteProtocol(store, fetcher);
+  registerImageProtocol(store, fetcher);
 
   const overlay = createOverlayWindow(() => settings.pillPosition);
   // Only the overlay records; the dashboard just plays files through note://.
@@ -485,7 +492,7 @@ async function boot(): Promise<void> {
   });
   if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
 
-  // Two-PC sync through the `sync` Edge Function (rows; audio and images come in C2).
+  // Two-PC sync through the `sync` Edge Function: rows, then audio and images.
   let testToken: (() => Promise<string | null>) | null = null;
   const makeSyncServer = (baseUrl: string) =>
     new HttpSyncServer({
@@ -515,7 +522,24 @@ async function boot(): Promise<void> {
         }),
     },
   );
+  const fileSync = new FileSync({
+    store,
+    // Through the current server, so a test's useServer() applies to files too.
+    server: {
+      uploadUrl: (req) => syncServer.uploadUrl(req),
+      downloadUrl: (req) => syncServer.downloadUrl(req),
+      put: (url, bytes, type) => syncServer.put(url, bytes, type),
+      get: (url) => syncServer.get(url),
+    },
+    canSync: () => {
+      const info = account.current();
+      return info.state === 'signed-in' && info.userId === store.sync.state.accountId() && store.sync.state.network();
+    },
+    onNotesChanged: () => toDashboard(Ch.NotesChanged),
+  });
+  filesHolder.files = fileSync;
   const syncController: SyncController = new SyncController({
+    files: fileSync,
     engine: syncEngine,
     state: store.sync.state,
     settings: () => settings,
@@ -538,6 +562,7 @@ async function boot(): Promise<void> {
   });
   syncHolder.controller = syncController;
   store.sync.outbox.onRecord = () => syncController.onLocalChange();
+  store.sync.files.onRecord = () => syncController.onLocalChange();
   powerMonitor.on('resume', () => syncController.onResume());
   syncController.start();
   const wavBridge = new WavBridge();
@@ -552,6 +577,7 @@ async function boot(): Promise<void> {
         return true;
       }),
     notesChanged: () => toDashboard(Ch.NotesChanged),
+    fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
     },
@@ -576,6 +602,7 @@ async function boot(): Promise<void> {
     localWhisper,
     account,
     sync: syncController,
+    files: fileSync,
   });
 
   app.on('before-quit', () => {

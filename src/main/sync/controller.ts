@@ -29,6 +29,8 @@ type Deps = {
   refreshSession(): Promise<void>;
   onView(view: SyncView): void;
   onChanged(changes: PullChanges): void;
+  /** Audio and images: uploaded after each successful sync (sync/files.ts). */
+  files: { drain(): Promise<{ storageFull: boolean }>; waiting(): number };
 };
 
 const DEBOUNCE_MS = 3000;
@@ -42,6 +44,7 @@ export class SyncController {
   private retry: ReturnType<typeof setTimeout> | null = null;
   private tick: ReturnType<typeof setInterval> | null = null;
   private failures = 0;
+  private storageFull = false;
   private running: Promise<void> | null = null;
   /** A sync was asked for while one ran (an edit, Turn on, Sync now): run again right after. */
   private rerun = false;
@@ -61,7 +64,7 @@ export class SyncController {
   }
 
   view(): SyncView {
-    return { status: this.status, needsPrompt: this.needsPrompt() };
+    return { status: this.status, needsPrompt: this.needsPrompt(), filesWaiting: this.d.files.waiting(), storageFull: this.storageFull };
   }
 
   /** "Turn on" / the switch. A different account than before starts fresh; the same one resumes. */
@@ -168,11 +171,13 @@ export class SyncController {
     this.set({ mode: 'syncing' });
     try {
       const changes = await this.d.engine.sync();
+      if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
+      // Rows are on the server now, so their files can follow.
+      ({ storageFull: this.storageFull } = await this.d.files.drain());
       this.failures = 0;
       this.lastSyncedAt = Date.now();
       if (this.canSync()) this.set({ mode: 'idle', lastSyncedAt: this.lastSyncedAt });
       else this.refresh();
-      if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
     } catch (err) {
       if (err instanceof AccountChanged) {
         this.status = { mode: 'idle', lastSyncedAt: this.lastSyncedAt };

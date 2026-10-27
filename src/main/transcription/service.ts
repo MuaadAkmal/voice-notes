@@ -16,6 +16,8 @@ export type ServiceDeps = {
   /** The dashboard decodes the clip and returns 16 kHz mono WAV (main has no audio decoder). */
   toWav: (bytes: Uint8Array, mimeType: string) => Promise<Uint8Array>;
   readFile?: (absPath: string) => Promise<Uint8Array>;
+  /** Brings a remote note's audio (recorded on another PC) to this PC first. */
+  fetchAudio?: (id: string) => Promise<void>;
   transcribe?: typeof realTranscribe;
   now?: () => number;
   notesChanged: () => void;
@@ -87,8 +89,13 @@ export class TranscriptionService {
   }
 
   private async run(id: string, language: string | null): Promise<void> {
-    const note = this.d.store.get(id);
+    let note = this.d.store.get(id);
     if (!note) return; // deleted while queued
+    if (note.status === 'remote' && this.d.fetchAudio) {
+      await this.d.fetchAudio(id);
+      note = this.d.store.get(id);
+      if (!note) return;
+    }
     if (note.status !== 'ok') throw new Error(MISSING);
     const audio = await this.d.toWav(await this.readAudio(note), note.mimeType);
     // Resolved when the job starts, so a fix made on the setup page applies to queued notes too.
