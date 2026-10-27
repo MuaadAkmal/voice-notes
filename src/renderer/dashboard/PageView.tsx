@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Pin, PinOff } from 'lucide-react';
+import { EditorView } from '@codemirror/view';
 import type { Page } from '../../shared/channels';
 import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
@@ -117,8 +118,22 @@ export function PageView({ page, fresh, onBack }: Props) {
   const focusEditor = () =>
     editorHost.current?.querySelector<HTMLElement>('.cm-content')?.focus();
 
+  /** A click in the empty space beside or below the text puts the caret on the nearest line, not wherever it was. */
+  const caretAtClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget || e.button !== 0) return;
+    const dom = editorHost.current?.querySelector<HTMLElement>('.cm-editor');
+    const view = dom && EditorView.findFromDOM(dom);
+    if (!view) return;
+    e.preventDefault();
+    const box = view.contentDOM.getBoundingClientRect();
+    const x = Math.min(Math.max(e.clientX, box.left + 1), box.right - 1);
+    const pos = view.posAtCoords({ x, y: e.clientY }, false);
+    view.focus();
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+  };
+
   return (
-    <div className="min-h-full px-10 py-6">
+    <div onMouseDown={caretAtClick} className="min-h-full px-10 py-6">
       <header className="mx-auto max-w-[720px]">
         <div className="mb-5 flex items-center justify-between">
           <button
@@ -171,12 +186,7 @@ export function PageView({ page, fresh, onBack }: Props) {
       </header>
       <div
         ref={editorHost}
-        // Clicks in the empty space below the text land in the editor.
-        onMouseDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          e.preventDefault();
-          focusEditor();
-        }}
+        onMouseDown={caretAtClick}
         className="mx-auto mt-4 min-h-[60vh] max-w-[720px] cursor-text"
       >
         <MarkdownEditor
