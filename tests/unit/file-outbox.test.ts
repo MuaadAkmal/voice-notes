@@ -90,3 +90,30 @@ it('due skips entries scheduled later; later() bumps attempts', async () => {
   files.clear();
   expect(files.count()).toBe(0);
 });
+
+it('a PC that turned sync on before files synced queues all its files once', async () => {
+  const synced = await store.create(audio());
+  const fresh = await store.create(audio());
+  const remote = await store.create(audio());
+  store.sync.outbox.setRowVersion('note', synced.id, 7);
+  store.syncAccess().sqlite.prepare("UPDATE notes SET status = 'remote' WHERE id = ?").run(remote.id);
+  const img = (await store.pages.saveImage(png, 'png')).slice('vn-image://'.length);
+  const page = store.pages.create(null);
+  store.pages.setBody(page.id, `![](vn-image://${img})`);
+  store.sync.state.setEnabled(true); // turned on by an earlier version, which had no file queue
+  engine().queueExistingFiles();
+  expect(names().sort()).toEqual([`audio:${synced.id}.webm`, `audio:${fresh.id}.webm`, `image:${img}`].sort());
+  store.sync.files.clear();
+  engine().queueExistingFiles();
+  expect(names()).toEqual([]);
+});
+
+it('the catch-up does nothing while sync is off, or after enable already queued the files', async () => {
+  await store.create(audio());
+  engine().queueExistingFiles();
+  expect(names()).toEqual([]);
+  engine().enable(settings);
+  store.sync.files.clear();
+  engine().queueExistingFiles();
+  expect(names()).toEqual([]);
+});

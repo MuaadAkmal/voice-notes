@@ -86,6 +86,15 @@ export class SyncState {
     else this.sqlite.prepare("DELETE FROM sync_state WHERE key = 'prompt_dismissed_for'").run();
   }
 
+  /** Existing audio and images were queued (by enable, or the catch-up for PCs that turned sync on before files synced). */
+  filesQueued(): boolean {
+    return this.get('files_queued') === '1';
+  }
+
+  setFilesQueued(): void {
+    this.set('files_queued', '1');
+  }
+
   enabled(): boolean {
     return this.get('enabled') === '1';
   }

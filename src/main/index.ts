@@ -522,6 +522,7 @@ async function boot(): Promise<void> {
         }),
     },
   );
+  syncEngine.queueExistingFiles(); // audio and images of a PC that synced rows before files did
   const fileSync = new FileSync({
     store,
     // Through the current server, so a test's useServer() applies to files too.

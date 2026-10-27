@@ -64,8 +64,24 @@ export class SyncEngine {
       for (const note of notes) if (note.status === 'ok') files.record('audio', `${note.id}.webm`);
       for (const page of this.store.pages.list().filter((p) => fresh('page', p.id)))
         for (const img of imageRefs(page.body)) if (fs.existsSync(this.store.pages.imagePath(img))) files.record('image', img);
+      state.setFilesQueued();
       // Settings wait for the first pull: the account's win, this PC only adds what the account lacks.
       state.setPendingPrefs(Object.fromEntries(SYNCED_KEYS.map((key) => [key, settings[key]])));
+    })();
+  }
+
+  /**
+   * Once, for a PC that turned sync on before audio and images synced: queue every file it has
+   * (its rows are already in the account, so enable's version-0 rule would skip them all).
+   */
+  queueExistingFiles(): void {
+    const { state, files } = this.store.sync;
+    if (!state.enabled() || state.filesQueued()) return;
+    this.store.syncAccess().sqlite.transaction(() => {
+      for (const note of this.store.list()) if (note.status === 'ok') files.record('audio', `${note.id}.webm`);
+      for (const page of this.store.pages.list())
+        for (const img of imageRefs(page.body)) if (fs.existsSync(this.store.pages.imagePath(img))) files.record('image', img);
+      state.setFilesQueued();
     })();
   }
 
