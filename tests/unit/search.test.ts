@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { Note, Page } from '../../src/shared/channels';
 import { itemId, type Item } from '../../src/shared/items';
-import { distinctShows, filterItems, filterNotes, isFiltering, NO_FILTER } from '../../src/shared/search';
+import { distinctShows, filterItems, filterNotes, isFiltering, matchRanges, NO_FILTER } from '../../src/shared/search';
 
 const note = (id: string, over: Partial<Note> = {}): Note => ({
   id,
@@ -119,4 +119,18 @@ it('matches words in the transcript', () => {
   expect(ids(filterNotes([withTranscript, note('u')], q))).toEqual(['t']);
   const items: Item[] = [{ type: 'audio', note: withTranscript }, { type: 'audio', note: note('u') }];
   expect(filterItems(items, q).map(itemId)).toEqual([itemId(items[0])]);
+});
+
+it('matchRanges finds every word, ignoring accents and case, in original positions', () => {
+  const text = '¿Qué pasó? Que paso.';
+  const pick = (q: string) => matchRanges(text, q).map(([a, b]) => text.slice(a, b));
+  expect(pick('que')).toEqual(['Qué', 'Que']);
+  expect(pick('PASO que')).toEqual(['Qué', 'pasó', 'Que', 'paso']);
+  expect(matchRanges(text, '   ')).toEqual([]);
+  expect(matchRanges(text, 'zzz')).toEqual([]);
+});
+
+it('matchRanges merges overlapping matches', () => {
+  expect(matchRanges('banana', 'ana')).toEqual([[1, 6]]);
+  expect(matchRanges('hola mundo', 'hola ola')).toEqual([[0, 4]]);
 });

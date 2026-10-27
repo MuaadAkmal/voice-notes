@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanIpcError, dayGroupLabel, defaultTitle, formatBytes, formatDuration } from '../../src/shared/format';
+import { cleanIpcError, dayGroupLabel, defaultTitle, formatBytes, formatDuration, isDefaultTitle } from '../../src/shared/format';
 
 describe('formatBytes', () => {
   it('uses MB below a GB and GB above, like the model sizes read', () => {
@@ -41,4 +41,12 @@ describe('cleanIpcError', () => {
     expect(cleanIpcError(e)).toBe('A folder named "x" already exists here');
   });
   it('handles plain values', () => expect(cleanIpcError('boom')).toBe('boom'));
+});
+
+describe('isDefaultTitle', () => {
+  it('recognises only the untouched default title', () => {
+    expect(isDefaultTitle(defaultTitle(new Date(2026, 9, 24, 9, 5)))).toBe(true);
+    expect(isDefaultTitle('Voice note · 09:05 gracias')).toBe(false);
+    expect(isDefaultTitle('gracias')).toBe(false);
+  });
 });

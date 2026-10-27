@@ -409,6 +409,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                     }}
                     onSetupTranscription={() => onNavigate({ kind: 'transcription' })}
                     onEditTranscript={(text) => api.setTranscript(note.id, text).catch((e) => toast(cleanIpcError(e)))}
+                    query={filter.query}
                   />
                 );
               })}

@@ -9,6 +9,40 @@ export const NO_FILTER: NoteFilter = { query: '', show: null, source: null, star
 /** Lower-case and strip accents, so "que paso" finds "¿Qué pasó?". */
 export const normalize = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
+/**
+ * Where the query's words occur in `text`, matched like the search (accent- and case-insensitive), as
+ * merged [start, end) ranges of `text`, for highlighting.
+ */
+export function matchRanges(text: string, query: string): [number, number][] {
+  const words = normalize(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  // Normalised text, plus the original index each of its UTF-16 units came from.
+  let flat = '';
+  const origin: number[] = [];
+  for (let i = 0; i < text.length; ) {
+    const ch = String.fromCodePoint(text.codePointAt(i)!);
+    const n = normalize(ch);
+    flat += n;
+    for (let k = 0; k < n.length; k++) origin.push(i);
+    i += ch.length;
+  }
+  const found: [number, number][] = [];
+  for (const w of words) {
+    for (let at = flat.indexOf(w); at !== -1; at = flat.indexOf(w, at + 1)) {
+      const last = origin[at + w.length - 1];
+      found.push([origin[at], last + String.fromCodePoint(text.codePointAt(last)!).length]);
+    }
+  }
+  found.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const r of found) {
+    const prev = merged.at(-1);
+    if (prev && r[0] <= prev[1]) prev[1] = Math.max(prev[1], r[1]);
+    else merged.push([...r]);
+  }
+  return merged;
+}
+
 export const isFiltering = (f: NoteFilter) => f.query.trim() !== '' || f.show !== null || f.source !== null || f.starred;
 
 /** Every word of the query must appear in the title, show, window title or transcript; the other filters must all hold. */
