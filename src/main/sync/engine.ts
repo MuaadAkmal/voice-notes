@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import type { HomeWidget, Settings } from '../../shared/channels';
+import { imageRefs } from '../../shared/page-images';
 import { MAX_HOME_WIDGETS } from '../../shared/home-widgets';
 import { type FolderRow, SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import { type NoteStore, toRow } from '../store/note-store';
@@ -55,8 +57,13 @@ export class SyncEngine {
         outbox.record({ op: 'folder.create', id: folder.id, row: folder }, 0);
       for (const page of this.store.pages.list().filter((p) => fresh('page', p.id)))
         outbox.record({ op: 'page.create', id: page.id, row: page }, 0);
-      for (const note of this.store.list().filter((n) => fresh('note', n.id)))
-        outbox.record({ op: 'note.create', id: note.id, row: toRow(note) }, 0);
+      const notes = this.store.list().filter((n) => fresh('note', n.id));
+      for (const note of notes) outbox.record({ op: 'note.create', id: note.id, row: toRow(note) }, 0);
+      // Their files too: audio that is here, and images the never-synced pages show.
+      const { files } = this.store.sync;
+      for (const note of notes) if (note.status === 'ok') files.record('audio', `${note.id}.webm`);
+      for (const page of this.store.pages.list().filter((p) => fresh('page', p.id)))
+        for (const img of imageRefs(page.body)) if (fs.existsSync(this.store.pages.imagePath(img))) files.record('image', img);
       // Settings wait for the first pull: the account's win, this PC only adds what the account lacks.
       state.setPendingPrefs(Object.fromEntries(SYNCED_KEYS.map((key) => [key, settings[key]])));
     })();
@@ -72,6 +79,7 @@ export class SyncEngine {
     this.epoch += 1;
     sqlite.transaction(() => {
       sqlite.prepare('DELETE FROM outbox').run();
+      this.store.sync.files.clear();
       state.setCursor(0);
       state.setPendingPrefs(null);
       state.setEnabled(false);

@@ -13,6 +13,7 @@ import {
   type ImageExt,
 } from '../../shared/page-images';
 import type { FolderStore } from './folder-store';
+import type { FileOutbox } from '../sync/file-outbox';
 import type { Outbox } from '../sync/outbox';
 import { localDay, type SyncOp, taskText } from '../../shared/sync-ops';
 import { pages } from './schema';
@@ -38,6 +39,7 @@ export class PageStore {
     private readonly folders: FolderStore,
     private readonly imagesDir: string,
     private readonly outbox: Outbox,
+    private readonly files: FileOutbox,
   ) {}
 
   private record(op: Extract<SyncOp, { op: `page.${string}` }>): void {
@@ -192,6 +194,7 @@ export class PageStore {
       await fh.close();
     }
     await fs.promises.rename(tmpPath, finalPath);
+    this.files.record('image', file);
     return `vn-image://${file}`;
   }
 

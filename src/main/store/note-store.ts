@@ -11,6 +11,7 @@ import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { PageStore } from './page-store';
 import { DictationStore } from './dictation-store';
+import { FileOutbox } from '../sync/file-outbox';
 import { Outbox } from '../sync/outbox';
 import { SyncState } from '../sync/state';
 import type { NoteRow, SyncOp } from '../../shared/sync-ops';
@@ -42,7 +43,7 @@ export class NoteStore {
   readonly pages: PageStore;
   readonly dictations: DictationStore;
   /** Every change is also queued here (while sync is on) for the other PCs. */
-  readonly sync: { state: SyncState; outbox: Outbox };
+  readonly sync: { state: SyncState; outbox: Outbox; files: FileOutbox };
 
   private constructor(
     private readonly rootDir: string,
@@ -54,9 +55,9 @@ export class NoteStore {
     this.recordingsDir = path.join(rootDir, 'recordings');
     this.imagesDir = path.join(rootDir, 'images');
     const state = new SyncState(sqlite, hostname);
-    this.sync = { state, outbox: new Outbox(sqlite, state, now) };
+    this.sync = { state, outbox: new Outbox(sqlite, state, now), files: new FileOutbox(sqlite, state, now) };
     this.folders = new FolderStore(db, sqlite, now, this.sync.outbox);
-    this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir, this.sync.outbox);
+    this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir, this.sync.outbox, this.sync.files);
     this.dictations = new DictationStore(db, now);
   }
 
@@ -108,6 +109,7 @@ export class NoteStore {
     this.sqlite.transaction(() => {
       this.db.insert(notes).values(note).run();
       this.sync.outbox.record({ op: 'note.create', id, row: toRow(note) }, 0);
+      this.sync.files.record('audio', `${id}.webm`);
     })();
     return note;
   }
@@ -194,6 +196,7 @@ export class NoteStore {
     this.sqlite.transaction(() => {
       this.db.update(notes).set({ deletedAt: this.now() }).where(eq(notes.id, id)).run();
       this.sync.outbox.record({ op: 'note.delete', id }, this.sync.outbox.rowVersion('note', id));
+      this.sync.files.remove('audio', `${id}.webm`);
     })();
   }
 
