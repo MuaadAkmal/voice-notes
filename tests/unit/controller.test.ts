@@ -113,10 +113,10 @@ it('stop then audio ≥300ms saves, shows saved with the note id, then idle afte
   expect(c.state).toBe('idle');
 });
 
-it('audio <300ms is dropped without save', async () => {
+it('audio of 1 s or less is dropped without save', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
-  await c.onAudio(audio(299));
+  await c.onAudio(audio(1000));
   expect(created).toEqual([]);
   expect(lastState()).toEqual(IDLE);
   expect(c.state).toBe('idle');

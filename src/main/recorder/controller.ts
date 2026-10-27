@@ -74,7 +74,7 @@ export class RecorderController {
     private readonly sink: NoteSink,
     private readonly opts: ControllerOpts,
   ) {
-    this.minMs = opts.minMs ?? 300;
+    this.minMs = opts.minMs ?? 1000;
     this.maxMs = opts.maxMs ?? 300_000;
     this.savedMs = opts.savedMs ?? 4000;
     this.errorMs = opts.errorMs ?? 3000;
@@ -227,7 +227,8 @@ export class RecorderController {
   private async accept(audio: NewAudio, kind: NoteKind): Promise<void> {
     this.endCapture();
     this.clearTimers();
-    if (audio.durationMs < this.minMs) {
+    // A clip of a second or less is a mis-click on the hotkey or the pill, not a note.
+    if (audio.durationMs <= this.minMs) {
       this.toIdle();
       this.overlay.setState(this.opts.idleState());
       return;

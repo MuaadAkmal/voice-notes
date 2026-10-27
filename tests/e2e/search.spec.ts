@@ -11,7 +11,7 @@ const recordOver = async (title: string, noteTitle: string) => {
   await t.app.evaluate((_e, title) => {
     (globalThis as any).__voiceNotes.setForeground(() => ({ title, processName: 'chrome.exe', pid: 1 }));
   }, title);
-  await t.record(700);
+  await t.record(1500);
   await t.app.evaluate((_e, noteTitle) => {
     const s = (globalThis as any).__voiceNotes.store;
     s.rename(s.list()[0].id, noteTitle);

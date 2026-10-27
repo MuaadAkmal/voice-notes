@@ -61,9 +61,9 @@ test('folders: create, drag a note in, delete folder returns it to Inbox', async
 });
 
 test('folders: nesting, duplicate-name toast, multi-select drag, cycle refused', async () => {
-  await t.record(800);
-  await t.record(800);
-  await t.record(800);
+  await t.record(1500);
+  await t.record(1500);
+  await t.record(1500);
   await createFolder('Spanish');
   await createFolder('Films', 'Spanish');
   await shot('3-nested');

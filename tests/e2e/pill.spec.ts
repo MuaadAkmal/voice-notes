@@ -66,7 +66,7 @@ test('a plain click on the pill still toggles hands-free recording', async () =>
 test('Add title on the pill names the note just saved, then gives focus back', async () => {
   t = await launch();
   const pill = await overlay(t);
-  await t.record(1000);
+  await t.record(1500);
   await expect(pill.getByRole('button', { name: /Add title/ })).toBeVisible();
   await pill.screenshot({ path: '.superpowers/shots/pill-saved.png' });
   await pill.getByRole('button', { name: /Add title/ }).click();

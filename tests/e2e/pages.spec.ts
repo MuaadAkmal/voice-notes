@@ -143,7 +143,7 @@ test('pages: folders, search, delete', async () => {
   await expect(page.getByLabel('Search notes')).toHaveValue('hola');
   await expect(hit).toBeVisible();
 
-  await t.record(800);
+  await t.record(1500);
   await page.getByRole('button', { name: /^All notes/ }).click();
   const rows = page.locator('li[aria-selected]').filter({ hasNotText: 'Review later' });
   await expect(rows).toHaveCount(2);
