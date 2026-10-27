@@ -130,21 +130,22 @@ const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8B
 test('a note recorded on A plays on B', async () => {
   await a.record(1500);
   const noteId = await a.hooks((h) => h.store.list()[0].id);
+  await hook(a, (h, id) => h.store.rename(id, 'Plays on B'), noteId); // the server is shared: other tests' notes are remote too
   await connect(a);
   await connect(b);
   const key = `${USER}/${noteId}.webm`;
   await until(b.dashboard, async () => !!server.bucket.get('audio', key) && (await b.hooks((h) => h.store.list().length)) > 0);
 
   await b.dashboard.getByRole('button', { name: /^Inbox/ }).click();
-  const row = b.dashboard.locator('li', { has: b.dashboard.getByLabel('In your account') });
-  await expect(row).toHaveCount(1);
+  const row = b.dashboard.locator('li', { hasText: 'Plays on B' });
+  await expect(row.getByLabel('In your account')).toBeVisible();
   await b.dashboard.screenshot({ path: '.superpowers/shots/sync-remote-note.png' });
-  await row.getByRole('button', { name: 'Play' }).click();
+  await row.getByRole('button', { name: 'Play', exact: true }).click();
   await expect.poll(() => hook(b, (h, id) => h.store.get(id)?.status, noteId)).toBe('ok');
   const fileOf = (t: TestApp) => hook(t, (h, id) => h.store.absolutePath(h.store.get(id)) as string, noteId);
   expect(fs.readFileSync(await fileOf(b))).toEqual(fs.readFileSync(await fileOf(a)));
   expect(Buffer.from(server.bucket.get('audio', key)!)).toEqual(fs.readFileSync(await fileOf(a)));
-  await expect(b.dashboard.getByLabel('In your account')).toHaveCount(0);
+  await expect(row.getByLabel('In your account')).toHaveCount(0);
 });
 
 test('an image pasted on A shows on B', async () => {
