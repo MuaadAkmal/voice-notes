@@ -27,6 +27,7 @@ import { RecorderController } from './recorder/controller';
 import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
 import { applyRemotePrefs, recordPrefs } from './sync/prefs';
 import { SyncController } from './sync/controller';
+import { SyncPings, supabasePings } from './sync/pings';
 import { SyncEngine } from './sync/engine';
 import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
@@ -539,7 +540,17 @@ async function boot(): Promise<void> {
     onNotesChanged: () => toDashboard(Ch.NotesChanged),
   });
   filesHolder.files = fileSync;
+  // Under test, pings come from __voiceNotes.sync.ping instead of Realtime.
+  let testPing: ((from: string) => void) | null = null;
+  const syncPings = new SyncPings({
+    source: testing
+      ? { listen: (_user, onPing) => ((testPing = onPing), () => void (testPing = null)) }
+      : supabasePings(supabase),
+    selfId: () => store.sync.state.deviceId(),
+    onRemoteChange: () => syncController.onRemoteChange(),
+  });
   const syncController: SyncController = new SyncController({
+    pings: syncPings,
     files: fileSync,
     engine: syncEngine,
     state: store.sync.state,
@@ -637,6 +648,7 @@ async function boot(): Promise<void> {
         useServer: (url: string) => void (syncServer = makeSyncServer(url)), // a local test server
         useToken: (fn: () => Promise<string | null>) => void (testToken = fn),
         now: () => syncController.syncNow(),
+        ping: (from: string) => testPing?.(from), // as if another PC pushed
       },
     };
   }

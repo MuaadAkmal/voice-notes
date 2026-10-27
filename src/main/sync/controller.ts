@@ -4,7 +4,7 @@ import { AccountChanged } from './engine';
 import { AuthExpired, NotSignedIn, Offline, Rejected, ServerError } from './http-server';
 
 // When this PC syncs, and what the Account page says about it. The engine does the syncing; this
-// decides when (start, 3 s after edits, every 5 min, on wake, Sync now), retries with backoff, and
+// decides when (start, 3 s after edits, every 5 min, on wake, Sync now, a ping from another PC), retries with backoff, and
 // keeps one account's data out of another's.
 
 export type { SyncView } from '../../shared/channels';
@@ -31,6 +31,8 @@ type Deps = {
   onChanged(changes: PullChanges): void;
   /** Audio and images: uploaded after each successful sync (sync/files.ts). */
   files: { drain(shouldYield?: () => boolean): Promise<{ storageFull: boolean }>; waiting(): number };
+  /** Realtime pings from the account's other PCs (sync/pings.ts): listened to only while this PC syncs. */
+  pings: { update(userId: string | null): void };
 };
 
 const DEBOUNCE_MS = 3000;
@@ -55,12 +57,14 @@ export class SyncController {
     this.tick = setInterval(() => this.triggerUnlessWaiting(), TICK_MS);
     this.refresh();
     this.trigger();
+    this.syncPings();
   }
 
   stop(): void {
     if (this.tick) clearInterval(this.tick);
     this.tick = null;
     this.clearTimers();
+    this.d.pings.update(null);
   }
 
   view(): SyncView {
@@ -80,6 +84,7 @@ export class SyncController {
     this.failures = 0;
     this.refresh();
     this.trigger();
+    this.syncPings();
   }
 
   /** The switch off: no more syncing, but changes keep queueing for when it's back on. */
@@ -87,6 +92,7 @@ export class SyncController {
     this.d.state.setNetwork(false);
     this.clearTimers();
     this.refresh();
+    this.syncPings();
   }
 
   syncNow(): void {
@@ -120,11 +126,21 @@ export class SyncController {
     this.trigger();
   }
 
+  /** Another PC pushed (or the ping channel reconnected): like the timer, so a pending retry still waits. */
+  onRemoteChange(): void {
+    this.triggerUnlessWaiting();
+  }
+
   /** Signed in, out, or as someone else. */
   onAccountChanged(): void {
     if (!this.canSync()) this.clearTimers();
     this.refresh();
     this.trigger();
+    this.syncPings();
+  }
+
+  private syncPings(): void {
+    this.d.pings.update(this.canSync() ? this.d.currentUser() : null);
   }
 
   private canSync(): boolean {

@@ -33,6 +33,7 @@ let engine: {
 let refreshed: number;
 let files: { drain: ReturnType<typeof vi.fn<(shouldYield?: () => boolean) => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
 let ctl: SyncController;
+let pings: { update: ReturnType<typeof vi.fn<(userId: string | null) => void>> };
 
 const last = () => views[views.length - 1];
 
@@ -51,7 +52,9 @@ beforeEach(() => {
     enable: vi.fn<() => void>(() => void (state.rec = true)),
     startFresh: vi.fn<() => void>(() => void (state.rec = true)),
   };
+  pings = { update: vi.fn<(userId: string | null) => void>() };
   ctl = new SyncController({
+    pings,
     engine,
     state,
     settings: () => DEFAULT_SETTINGS,
@@ -320,4 +323,60 @@ it('a failed sync does not drain files', async () => {
   ctl.turnOn('u1');
   await flush();
   expect(files.drain).not.toHaveBeenCalled();
+});
+const lastPing = () => pings.update.mock.calls.at(-1)?.[0];
+
+it('pings follow sign-in and the switch', async () => {
+  expect(lastPing()).toBe(null); // started, not bound to this account yet
+  ctl.turnOn('u1');
+  await flush();
+  expect(lastPing()).toBe('u1');
+  ctl.turnOff();
+  expect(lastPing()).toBe(null);
+  ctl.turnOn('u1');
+  await flush();
+  expect(lastPing()).toBe('u1');
+  user = null;
+  ctl.onAccountChanged();
+  expect(lastPing()).toBe(null);
+  user = 'u1';
+  ctl.onAccountChanged();
+  expect(lastPing()).toBe('u1');
+  ctl.stop();
+  expect(lastPing()).toBe(null);
+});
+
+it('onRemoteChange syncs now', async () => {
+  ctl.turnOn('u1');
+  await flush();
+  engine.sync.mockClear();
+  ctl.onRemoteChange();
+  await flush();
+  expect(engine.sync).toHaveBeenCalledTimes(1);
+});
+
+it('a ping waits for a pending retry', async () => {
+  script = [async () => Promise.reject(new Offline())];
+  ctl.turnOn('u1');
+  await flush(); // fails → retry in 30 s
+  const calls = engine.sync.mock.calls.length;
+  ctl.onRemoteChange();
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(engine.sync.mock.calls.length).toBe(calls);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(engine.sync.mock.calls.length).toBe(calls + 1);
+});
+
+it('pings during a run cost one rerun', async () => {
+  let release!: () => void;
+  script = [() => new Promise((r) => (release = () => r(NONE)))];
+  ctl.turnOn('u1');
+  await flush();
+  ctl.onRemoteChange();
+  ctl.onRemoteChange();
+  ctl.onRemoteChange();
+  release();
+  await flush();
+  await flush();
+  expect(engine.sync).toHaveBeenCalledTimes(2);
 });
