@@ -336,7 +336,7 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
           <p className="px-2 py-1 text-xs text-muted-foreground/70">No folders yet. Click + to create one.</p>
         )}
       </div>
-      <div className="border-t border-sidebar-border px-3 py-3">
+      <div className="flex flex-col gap-0.5 border-t border-sidebar-border px-3 py-3">
         <AccountChip active={view.kind === 'account'} onOpen={() => onSelect({ kind: 'account' })} />
         <NavItem
           label="Transcription"

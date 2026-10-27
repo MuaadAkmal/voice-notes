@@ -8,7 +8,7 @@ import { firstName, useAccount } from './useAccount';
 import { useSync } from './useSync';
 
 const api = window.dashboardApi;
-const row = 'flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm';
+const row = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm';
 
 /** Bottom of the sidebar: Sign in, the wait for the browser, or who is signed in (opens the Account page). */
 export function AccountChip({ active, onOpen }: { active: boolean; onOpen: () => void }) {
