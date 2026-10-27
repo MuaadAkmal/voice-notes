@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
 import { startSyncServer } from './fixtures/sync-server';
 import { launch, type TestApp } from './launch';
@@ -114,4 +115,70 @@ test('two PCs stay in step: notes, an open page, and the switch', async () => {
   expect(await b.hooks((h) => h.store.list().map((n) => n.title))).not.toContain('Made while off');
   await a.dashboard.getByRole('switch', { name: 'Sync this PC' }).click();
   await until(b.dashboard, async () => (await b.hooks((h) => h.store.list().map((n) => n.title))).includes('Made while off'));
+});
+
+/** Like `hooks`, with one argument passed through. */
+const hook = <T>(t: TestApp, fn: (h: any, arg: string) => T, arg: string) => // eslint-disable-line @typescript-eslint/no-explicit-any
+  t.app.evaluate(
+    (_e, { src, value }) => new Function('h', 'a', `return (${src})(h, a)`)((globalThis as unknown as { __voiceNotes: unknown }).__voiceNotes, value),
+    { src: fn.toString(), value: arg },
+  ) as Promise<Awaited<T>>;
+
+// A 1×1 PNG, so the image actually decodes on B.
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+test('a note recorded on A plays on B', async () => {
+  await a.record(1500);
+  const noteId = await a.hooks((h) => h.store.list()[0].id);
+  await connect(a);
+  await connect(b);
+  const key = `${USER}/${noteId}.webm`;
+  await until(b.dashboard, async () => !!server.bucket.get('audio', key) && (await b.hooks((h) => h.store.list().length)) > 0);
+
+  await b.dashboard.getByRole('button', { name: /^Inbox/ }).click();
+  const row = b.dashboard.locator('li', { has: b.dashboard.getByLabel('In your account') });
+  await expect(row).toHaveCount(1);
+  await b.dashboard.screenshot({ path: '.superpowers/shots/sync-remote-note.png' });
+  await row.getByRole('button', { name: 'Play' }).click();
+  await expect.poll(() => hook(b, (h, id) => h.store.get(id)?.status, noteId)).toBe('ok');
+  const fileOf = (t: TestApp) => hook(t, (h, id) => h.store.absolutePath(h.store.get(id)) as string, noteId);
+  expect(fs.readFileSync(await fileOf(b))).toEqual(fs.readFileSync(await fileOf(a)));
+  expect(Buffer.from(server.bucket.get('audio', key)!)).toEqual(fs.readFileSync(await fileOf(a)));
+  await expect(b.dashboard.getByLabel('In your account')).toHaveCount(0);
+});
+
+test('an image pasted on A shows on B', async () => {
+  await connect(a);
+  await connect(b);
+  const name = await a.app.evaluate(async (_e, png) => {
+    const h = (globalThis as unknown as { __voiceNotes: any }).__voiceNotes; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const url = await h.store.pages.saveImage(Buffer.from(png, 'base64'), 'png');
+    const p = h.store.pages.create(null);
+    h.store.pages.rename(p.id, 'Picture page');
+    h.store.pages.setBody(p.id, `before\n\n![dot](${url})\n\nafter`);
+    h.pagesChanged();
+    return (url as string).slice('vn-image://'.length);
+  }, PNG_1PX);
+  await until(b.dashboard, async () => !!server.bucket.get('image', `${USER}/${name}`) && (await b.hooks((h) => h.store.pages.list().map((p) => p.title))).includes('Picture page'));
+
+  await b.dashboard.getByRole('button', { name: /^Inbox/ }).click();
+  await b.dashboard.locator('li', { hasText: 'Picture page' }).getByRole('button', { name: 'Open' }).click();
+  const img = b.dashboard.locator('.cm-content img');
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
+});
+
+test('deleting a note on A removes its audio from the server', async () => {
+  await a.record(1500);
+  const noteId = await a.hooks((h) => h.store.list()[0].id);
+  await connect(a);
+  const key = `${USER}/${noteId}.webm`;
+  await expect.poll(async () => {
+    await syncNow(a);
+    return !!server.bucket.get('audio', key);
+  }, { timeout: 20_000, intervals: [500] }).toBe(true);
+  await hook(a, (h, id) => h.store.delete(id), noteId);
+  await expect.poll(async () => {
+    await syncNow(a);
+    return !!server.bucket.get('audio', key);
+  }, { timeout: 20_000, intervals: [500] }).toBe(false);
 });

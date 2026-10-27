@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AudioLines, ChevronDown, Clapperboard, Copy, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
+import { AudioLines, ChevronDown, Clapperboard, Cloud, Copy, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
 import type { JobStatus, Note } from '../../shared/channels';
 import { formatDuration, isDefaultTitle } from '../../shared/format';
 import { matchRanges } from '../../shared/search';
@@ -22,6 +22,8 @@ type Props = {
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   playing: boolean;
+  /** Downloading this note's audio from the account (it was recorded on another PC). */
+  loading?: boolean;
   positionMs: number;
   onTogglePlay: () => void;
   onRename: (title: string) => void;
@@ -54,11 +56,13 @@ export function NoteRow(props: Props) {
   const textFirst = !!note.transcript && isDefaultTitle(note.title) && !editing;
   // A queued or running job hides the Transcribe actions; a failed one shows Retry instead.
   const busy = transcription !== undefined && transcription.state !== 'failed';
-  const canTranscribe = !busy && note.status === 'ok';
+  // A remote note can be transcribed too: its audio is fetched from the account first.
+  const canTranscribe = !busy && note.status !== 'missing';
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const showInput = useRef<HTMLInputElement>(null);
   const missing = note.status === 'missing';
+  const remote = note.status === 'remote';
   // MediaRecorder WebM has no duration header (<audio>.duration is Infinity), so progress uses the stored length.
   const progress = note.durationMs > 0 ? Math.min(1, Math.max(0, positionMs / note.durationMs)) : 0;
 
@@ -110,11 +114,13 @@ export function NoteRow(props: Props) {
     >
       <button
         onClick={onTogglePlay}
-        disabled={missing}
-        aria-label={playing ? 'Pause' : 'Play'}
+        disabled={missing || props.loading}
+        aria-label={props.loading ? 'Downloading' : playing ? 'Pause' : 'Play'}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {playing ? (
+        {props.loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : playing ? (
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
             <rect x="6" y="5" width="4" height="14" rx="1" />
             <rect x="14" y="5" width="4" height="14" rx="1" />
@@ -192,6 +198,11 @@ export function NoteRow(props: Props) {
                 <span className="truncate">{note.show}</span>
               </button>
             )
+          )}
+          {remote && (
+            <span title="In your account: downloads when you play it" className="text-muted-foreground">
+              <Cloud className="size-3.5" aria-label="In your account" />
+            </span>
           )}
           {note.source !== 'mic' && note.kind !== 'rewind' && (
             <span title={note.source === 'both' ? 'Mic + system audio' : 'System audio'} className="text-muted-foreground">
@@ -307,7 +318,7 @@ export function NoteRow(props: Props) {
             ) : (
               <DropdownMenuItem onSelect={onSetupTranscription}>Set up transcription</DropdownMenuItem>
             ))}
-          {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
+          {note.status === 'ok' && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
             Delete

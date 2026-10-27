@@ -27,7 +27,7 @@ export function SyncCard() {
     return (
       <div className="mt-4 rounded-2xl border bg-card p-5">
         <div className="text-base font-medium">Sync this PC with your account?</div>
-        <p className="mt-1 text-sm text-muted-foreground">Notes, pages, folders and your Home layout. Audio and images come next.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Notes, pages, folders, audio, images and your Home layout.</p>
         <div className="mt-4 flex gap-2">
           <Button size="sm" onClick={() => run(api.turnOnSync())}>
             Turn on
@@ -61,6 +61,12 @@ export function SyncCard() {
             Sync this PC
           </label>
           <p className={`mt-0.5 text-sm ${status.mode === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>{line}</p>
+          {on && view.filesWaiting > 0 && (
+            <p className="mt-0.5 text-sm text-muted-foreground">Uploading {view.filesWaiting} recordings…</p>
+          )}
+          {on && view.storageFull && (
+            <p className="mt-0.5 text-sm text-destructive">Cloud storage is full. New audio stays on this PC.</p>
+          )}
         </div>
         <Switch
           id="sync-switch"
