@@ -122,3 +122,23 @@ it('cleanup removes audio of deleted notes and images unreferenced for over 24 h
   expect(bucket.get('image', `${USER}/${IMG}`)).toBeDefined();
   expect(bucket.get('audio', `${OTHER}/${orphanAudio}`)).toBeDefined();
 });
+
+it('cleanup never removes audio uploaded for a note pushed while it ran', async () => {
+  const store = new MemoryStore();
+  const core = new SyncCore(store);
+  let clock = Date.UTC(2026, 0, 1);
+  const bucket = new MemoryBucket('http://files', () => clock);
+  // PC B pushes a note and uploads its audio right after this sweep read the live rows.
+  const racing = {
+    fileOwner: store.fileOwner.bind(store),
+    liveFiles: async (user: string) => {
+      const live = await store.liveFiles(user);
+      await core.push(user, { clientId: 'B', deviceName: 'PC-B', mutations: [{ id: 'b1', op: { op: 'note.create', id: NOTE, row: note(NOTE) }, baseVersion: 0 }] });
+      bucket.put('audio', `${USER}/${NOTE}.webm`, new Uint8Array([1]));
+      return live;
+    },
+  };
+  const rules = new FileRules(racing, bucket, () => clock);
+  await rules.afterPush(USER, { clientId: 'A', deviceName: 'PC-A', mutations: [] });
+  expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeDefined();
+});

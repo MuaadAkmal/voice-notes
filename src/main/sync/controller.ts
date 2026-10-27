@@ -30,7 +30,7 @@ type Deps = {
   onView(view: SyncView): void;
   onChanged(changes: PullChanges): void;
   /** Audio and images: uploaded after each successful sync (sync/files.ts). */
-  files: { drain(): Promise<{ storageFull: boolean }>; waiting(): number };
+  files: { drain(shouldYield?: () => boolean): Promise<{ storageFull: boolean }>; waiting(): number };
 };
 
 const DEBOUNCE_MS = 3000;
@@ -172,12 +172,11 @@ export class SyncController {
     try {
       const changes = await this.d.engine.sync();
       if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
-      // Rows are on the server now, so their files can follow.
-      ({ storageFull: this.storageFull } = await this.d.files.drain());
       this.failures = 0;
       this.lastSyncedAt = Date.now();
       if (this.canSync()) this.set({ mode: 'idle', lastSyncedAt: this.lastSyncedAt });
       else this.refresh();
+      await this.drainFiles();
     } catch (err) {
       if (err instanceof AccountChanged) {
         this.status = { mode: 'idle', lastSyncedAt: this.lastSyncedAt };
@@ -194,6 +193,20 @@ export class SyncController {
       else if (err instanceof Rejected) this.set({ mode: 'error', message: err.message });
       else this.set({ mode: 'error', message: err instanceof Error ? err.message : String(err) });
     }
+  }
+
+  /**
+   * Rows are on the server now, so their files can follow. Files never hold rows back: a waiting
+   * edit stops the drain between files, and a file failure only waits for the next sync.
+   */
+  private async drainFiles(): Promise<void> {
+    if (!this.canSync()) return;
+    try {
+      ({ storageFull: this.storageFull } = await this.d.files.drain(() => this.rerun));
+    } catch (err) {
+      console.warn('[sync] files', err instanceof Error ? err.message : err);
+    }
+    this.emit();
   }
 
   private scheduleRetry(): void {

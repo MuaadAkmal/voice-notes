@@ -4,7 +4,7 @@ import type { FileKind } from '../../shared/sync/protocol';
 import type { NoteStore } from '../store/note-store';
 import type { FileEntry } from './file-outbox';
 import type { FetchAudioResult } from '../../shared/channels';
-import { type HttpSyncServer, Offline, ServerError } from './http-server';
+import { type HttpSyncServer, Offline, Rejected, ServerError } from './http-server';
 
 // Moving audio and page images between this PC and the account. Uploads drain the file queue after
 // each sync (rows first, so the server knows what a file belongs to); downloads happen on first play
@@ -43,6 +43,7 @@ type Deps = {
 };
 
 const STORAGE_FULL_RETRY_MS = 3_600_000;
+const REFUSED_RETRY_MS = 3_600_000;
 /** A pasted image waits this long for the page body that references it to be saved and synced. */
 const IMAGE_GRACE_MS = 10 * 60_000;
 const IMAGE_TYPES: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
@@ -59,11 +60,15 @@ export class FileSync {
     return this.d.store.sync.files.count();
   }
 
-  /** Uploads what is due, one file at a time. Network failures throw (the controller backs off). */
-  async drain(): Promise<{ storageFull: boolean }> {
+  /**
+   * Uploads what is due, one file at a time. Network failures throw. `shouldYield` is asked between
+   * files: when rows are waiting to sync, the rest of the files wait for the next run.
+   */
+  async drain(shouldYield: () => boolean = () => false): Promise<{ storageFull: boolean }> {
     const { files } = this.d.store.sync;
     let storageFull = false;
     for (const entry of files.due()) {
+      if (shouldYield()) break;
       const local = this.localFile(entry);
       if (local === 'drop') {
         files.remove(entry.kind, entry.name);
@@ -82,7 +87,17 @@ export class FileSync {
         files.remove(entry.kind, entry.name);
         continue;
       }
-      if ((await this.d.server.put(answer.url, bytes, contentType(entry))) === 'storage-full') {
+      let put: 'ok' | 'storage-full';
+      try {
+        put = await this.d.server.put(answer.url, bytes, contentType(entry));
+      } catch (err) {
+        if (!(err instanceof Rejected)) throw err;
+        // Storage refused this one file: try it again later, and let the files behind it go.
+        console.warn('[sync] upload refused', entry.kind, entry.name, err.message);
+        files.later(entry.kind, entry.name, this.now() + REFUSED_RETRY_MS);
+        continue;
+      }
+      if (put === 'storage-full') {
         storageFull = true;
         files.later(entry.kind, entry.name, this.now() + STORAGE_FULL_RETRY_MS);
         continue;

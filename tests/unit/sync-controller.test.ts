@@ -31,7 +31,7 @@ let engine: {
   startFresh: ReturnType<typeof vi.fn<() => void>>;
 };
 let refreshed: number;
-let files: { drain: ReturnType<typeof vi.fn<() => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
+let files: { drain: ReturnType<typeof vi.fn<(shouldYield?: () => boolean) => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
 let ctl: SyncController;
 
 const last = () => views[views.length - 1];
@@ -288,14 +288,31 @@ it('after a successful sync the file queue drains and the view shows filesWaitin
   expect(last()).toMatchObject({ status: { mode: 'idle' }, filesWaiting: 1, storageFull: true });
 });
 
-it('an offline drain backs off like a failed sync', async () => {
+it('a file failure after the rows synced keeps sync idle, with no backoff for the rows', async () => {
   files.drain.mockImplementationOnce(async () => Promise.reject(new Offline()));
   ctl.turnOn('u1');
   await flush();
-  expect(last().status).toEqual({ mode: 'offline', retryAt: 1_000_000 + 30_000 });
-  await vi.advanceTimersByTimeAsync(30_000);
+  expect(last().status).toEqual({ mode: 'idle', lastSyncedAt: 1_000_000 });
+  engine.sync.mockClear();
+  ctl.onLocalChange(); // not held back by a retry timer
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(engine.sync).toHaveBeenCalledTimes(1);
   expect(files.drain).toHaveBeenCalledTimes(2);
-  expect(last().status.mode).toBe('idle');
+});
+
+it('an edit during a long upload asks the drain to make way', async () => {
+  let yielded = false;
+  files.drain.mockImplementationOnce(async (shouldYield?: () => boolean) => {
+    expect(shouldYield?.()).toBe(false);
+    ctl.syncNow(); // what an edit's sync does 3 s later: it waits on this run
+    yielded = !!shouldYield?.();
+    return { storageFull: false };
+  });
+  ctl.turnOn('u1');
+  await flush();
+  await flush();
+  expect(yielded).toBe(true);
+  expect(engine.sync).toHaveBeenCalledTimes(2); // the edit's rows went right after
 });
 
 it('a failed sync does not drain files', async () => {

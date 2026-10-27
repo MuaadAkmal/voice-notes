@@ -38,10 +38,14 @@ export class FileRules {
     const now = this.now();
     if (now - (this.lastSweep.get(userId) ?? -Infinity) < SWEEP_EVERY_MS) return;
     this.lastSweep.set(userId, now);
+    // Objects first, rows second: an upload URL is only issued once its row exists, so every object
+    // listed here has a row the later read sees (the other order could delete a fresh upload).
+    const listedAudio = await this.bucket.list('audio', userId);
+    const listedImages = await this.bucket.list('image', userId);
     const live = await this.store.liveFiles(userId);
-    const audio = (await this.bucket.list('audio', userId)).filter((o) => !live.audio.has(o.name));
+    const audio = listedAudio.filter((o) => !live.audio.has(o.name));
     if (audio.length) await this.bucket.remove('audio', audio.map((o) => `${userId}/${o.name}`));
-    const images = (await this.bucket.list('image', userId)).filter((o) => !live.images.has(o.name) && now - o.createdAt > IMAGE_GRACE_MS);
+    const images = listedImages.filter((o) => !live.images.has(o.name) && now - o.createdAt > IMAGE_GRACE_MS);
     if (images.length) await this.bucket.remove('image', images.map((o) => `${userId}/${o.name}`));
   }
 }

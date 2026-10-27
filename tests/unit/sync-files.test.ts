@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { UploadResponse } from '../../src/shared/sync/protocol';
 import { NoteStore } from '../../src/main/store/note-store';
 import { FileSync, NotUploaded, SyncOff } from '../../src/main/sync/files';
-import { Offline } from '../../src/main/sync/http-server';
+import { Offline, Rejected } from '../../src/main/sync/http-server';
 
 const MIN = 60_000;
 let root: string;
@@ -22,6 +22,7 @@ function fakeServer() {
     objects,
     uploadAnswer: null as UploadResponse | null,
     putAnswer: 'ok' as 'ok' | 'storage-full',
+    refuse: new Set<string>(), // urls Storage refuses with a plain 4xx
     offline: false,
     truncate: false,
     gets: 0,
@@ -36,6 +37,7 @@ function fakeServer() {
       return objects.has(key) ? { status: 'ok' as const, url: key } : { status: 'not-uploaded' as const };
     },
     async put(url: string, bytes: Uint8Array, contentType: string): Promise<'ok' | 'storage-full'> {
+      if (s.refuse.has(url)) throw new Rejected('Upload refused (400)');
       if (s.putAnswer === 'ok') {
         objects.set(url, bytes);
         s.uploads.push(`${url} ${contentType}`);
@@ -186,4 +188,31 @@ it('fetchImage downloads a missing page image', async () => {
   server.objects.set(`blob:image/${name}`, new Uint8Array([9, 9]));
   await files.fetchImage(name);
   expect([...fs.readFileSync(store.pages.imagePath(name))]).toEqual([9, 9]);
+});
+
+it('an upload Storage refuses waits an hour and the rest of the queue still uploads', async () => {
+  const bad = await store.create(audio('bad'));
+  const good = await store.create(audio('good'));
+  server.refuse.add(`blob:audio/${bad.id}.webm`);
+  expect(await files.drain()).toEqual({ storageFull: false });
+  expect(server.uploads).toEqual([`blob:audio/${good.id}.webm audio/webm`]);
+  expect(files.waiting()).toBe(1);
+  expect(store.sync.files.due()).toEqual([]); // postponed, not retried every sync
+  clock += 61 * MIN;
+  expect(store.sync.files.due().map((e) => e.attempts)).toEqual([1]);
+});
+
+it('drain stops between files when asked to yield (rows waiting), leaving the rest queued', async () => {
+  await store.create(audio('one'));
+  await store.create(audio('two'));
+  await store.create(audio('three'));
+  let uploaded = 0;
+  const put = server.put;
+  server.put = async (...args) => {
+    uploaded++;
+    return put(...args);
+  };
+  await files.drain(() => uploaded >= 1);
+  expect(uploaded).toBe(1);
+  expect(files.waiting()).toBe(2);
 });
