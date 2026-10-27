@@ -1,5 +1,7 @@
 import { SYNCED_KEYS, type SyncOp } from '../sync-ops';
-import { PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest } from './protocol';
+import { IMAGE_FILE_RE } from '../page-images';
+import type { FileRules } from './file-rules';
+import { AUDIO_FILE_RE, type DownloadRequest, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type UploadRequest } from './protocol';
 import type { SyncCore } from './server-core';
 
 // The `sync` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
@@ -9,6 +11,8 @@ export type HandlerDeps = {
   /** The user id for a valid access token, else null. */
   verify(jwt: string): Promise<string | null>;
   core: Pick<SyncCore, 'push' | 'pull'>;
+  /** Signed URLs for audio and images; without it the file routes are 404. */
+  files?: Pick<FileRules, 'upload' | 'download' | 'afterPush'>;
 };
 
 const MAX_BODY_BYTES = 1024 * 1024;
@@ -20,8 +24,11 @@ const json = (status: number, body: unknown) =>
 class BadRequest extends Error {}
 
 export async function handle(req: Request, deps: HandlerDeps): Promise<Response> {
-  const route = new URL(req.url).pathname.split('/').pop();
-  if (req.method !== 'POST' || (route !== 'push' && route !== 'pull')) return json(404, { error: 'Not found' });
+  const parts = new URL(req.url).pathname.split('/');
+  const last = parts[parts.length - 1];
+  const route = parts[parts.length - 2] === 'files' ? `files/${last}` : last;
+  const routes = deps.files ? ['push', 'pull', 'files/upload', 'files/download'] : ['push', 'pull'];
+  if (req.method !== 'POST' || !routes.includes(route)) return json(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -39,7 +46,15 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     } catch {
       throw new BadRequest('Not JSON');
     }
-    if (route === 'push') return json(200, await deps.core.push(userId, readPush(body)));
+    if (route === 'push') {
+      const push = readPush(body);
+      const res = await deps.core.push(userId, push);
+      // Removing deleted notes' audio is best effort: the hourly sweep catches what this misses.
+      await deps.files?.afterPush(userId, push).catch((err) => console.error('[sync] files', err));
+      return json(200, res);
+    }
+    if (route === 'files/upload') return json(200, await deps.files!.upload(userId, readUpload(body)));
+    if (route === 'files/download') return json(200, await deps.files!.download(userId, readDownload(body)));
     return json(200, await deps.core.pull(userId, readPull(body)));
   } catch (err) {
     if (err instanceof BadRequest) return json(400, { error: err.message });
@@ -62,6 +77,19 @@ function need(ok: boolean, what: string): asserts ok {
 function readPull(b: unknown): PullRequest {
   need(isObject(b) && str(b.clientId, 100) && count(b.cursor), 'pull');
   return { clientId: b.clientId as string, cursor: b.cursor as number };
+}
+
+const fileName = (kind: unknown, name: unknown) =>
+  typeof name === 'string' && (kind === 'audio' ? AUDIO_FILE_RE.test(name) : kind === 'image' && IMAGE_FILE_RE.test(name));
+
+function readDownload(b: unknown): DownloadRequest {
+  need(isObject(b) && fileName(b.kind, b.name), 'file');
+  return { kind: b.kind as DownloadRequest['kind'], name: b.name as string };
+}
+
+function readUpload(b: unknown): UploadRequest {
+  need(isObject(b) && fileName(b.kind, b.name) && count(b.size), 'file');
+  return { kind: b.kind as UploadRequest['kind'], name: b.name as string, size: b.size as number };
 }
 
 function readPush(b: unknown): PushRequest {

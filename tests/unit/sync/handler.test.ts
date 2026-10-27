@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { MemoryBucket } from '../../../src/shared/sync/file-bucket';
+import { FileRules } from '../../../src/shared/sync/file-rules';
 import { handle } from '../../../src/shared/sync/handler';
 import { MemoryStore } from '../../../src/shared/sync/memory-store';
 import { SyncCore } from '../../../src/shared/sync/server-core';
@@ -6,10 +8,12 @@ import { SyncCore } from '../../../src/shared/sync/server-core';
 const USER = '11111111-1111-4111-8111-111111111111';
 const BASE = 'https://x.supabase.co/functions/v1/sync';
 
-function setup(over: { verify?: (jwt: string) => Promise<string | null>; core?: SyncCore } = {}) {
+function setup(over: { verify?: (jwt: string) => Promise<string | null>; core?: SyncCore; bucket?: MemoryBucket } = {}) {
   const store = new MemoryStore();
   const core = over.core ?? new SyncCore(store);
-  const deps = { verify: over.verify ?? (async (jwt: string) => (jwt === 'good' ? USER : null)), core };
+  const bucket = over.bucket ?? new MemoryBucket('http://files');
+  const files = new FileRules(store, bucket);
+  const deps = { verify: over.verify ?? (async (jwt: string) => (jwt === 'good' ? USER : null)), core, files };
   const call = (route: string, body: unknown, token: string | null = 'good', raw?: string) =>
     handle(
       new Request(`${BASE}/${route}`, {
@@ -19,7 +23,7 @@ function setup(over: { verify?: (jwt: string) => Promise<string | null>; core?: 
       }),
       deps,
     );
-  return { store, call };
+  return { store, call, bucket };
 }
 
 const folder = { id: 'f', name: 'F', parentId: null, createdAt: 1, updatedAt: 1 };
@@ -96,4 +100,48 @@ it('a server error hides its details', async () => {
   const res = await setup({ core: core as unknown as SyncCore }).call('push', push([]));
   expect(res.status).toBe(500);
   expect(await res.text()).toBe('{"error":"Server error"}');
+});
+
+const NOTE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const noteRow = { id: NOTE, title: 'n', durationMs: 1, sizeBytes: 3, mimeType: 'audio/webm', createdAt: 1, updatedAt: 1, folderId: null, source: 'mic', kind: 'note', windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null };
+
+it('file routes need a token and a valid kind, name and size', async () => {
+  const { call } = setup();
+  expect((await call('files/upload', { kind: 'audio', name: `${NOTE}.webm`, size: 3 }, null)).status).toBe(401);
+  expect((await call('files/upload', { kind: 'video', name: `${NOTE}.webm`, size: 3 })).status).toBe(400);
+  expect((await call('files/upload', { kind: 'audio', name: '../x.webm', size: 3 })).status).toBe(400);
+  expect((await call('files/upload', { kind: 'image', name: `${NOTE}.webm`, size: 3 })).status).toBe(400);
+  expect((await call('files/upload', { kind: 'audio', name: `${NOTE}.webm`, size: -1 })).status).toBe(400);
+  expect((await call('files/download', { kind: 'audio' })).status).toBe(400);
+});
+
+it('files/upload answers from the verified account', async () => {
+  const { call } = setup();
+  await call('push', push([{ id: 'm1', op: { op: 'note.create', id: NOTE, row: noteRow }, baseVersion: 0 }]));
+  const res = await call('files/upload', { kind: 'audio', name: `${NOTE}.webm`, size: 3, userId: 'someone-else' });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ status: 'ok', url: `http://files/blob/audio/${USER}/${NOTE}.webm` });
+});
+
+it('files/download of a missing object is not-uploaded', async () => {
+  const res = await setup().call('files/download', { kind: 'audio', name: `${NOTE}.webm` });
+  expect(await res.json()).toEqual({ status: 'not-uploaded' });
+});
+
+it('a pushed note delete removes its audio from the bucket', async () => {
+  const { call, bucket } = setup();
+  await call('push', push([{ id: 'm1', op: { op: 'note.create', id: NOTE, row: noteRow }, baseVersion: 0 }]));
+  bucket.put('audio', `${USER}/${NOTE}.webm`, new Uint8Array([1, 2, 3]));
+  await call('push', push([{ id: 'm2', op: { op: 'note.delete', id: NOTE }, baseVersion: 0 }]));
+  expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeUndefined();
+});
+
+it('a bucket failure after a push still returns the acks', async () => {
+  const bucket = new MemoryBucket('http://files');
+  bucket.remove = async () => Promise.reject(new Error('storage down'));
+  bucket.list = async () => Promise.reject(new Error('storage down'));
+  const { call } = setup({ bucket });
+  const res = await call('push', push([{ id: 'm1', op: { op: 'note.delete', id: NOTE }, baseVersion: 0 }]));
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ acked: [{ id: 'm1', version: 0 }] });
 });

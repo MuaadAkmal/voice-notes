@@ -13,11 +13,14 @@ const SOURCES = [
   'folders.ts',
   'channels.ts',
   'transcription.ts',
+  'page-images.ts',
   'sync/protocol.ts',
   'sync/server-core.ts',
   'sync/pg-store.ts',
   'sync/handler.ts',
   'sync/postgres-db.ts',
+  'sync/file-rules.ts',
+  'sync/file-bucket.ts',
 ];
 const stripExt = (code: string) => code.replace(/(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2');
 
