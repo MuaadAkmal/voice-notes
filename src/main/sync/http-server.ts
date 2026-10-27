@@ -1,4 +1,14 @@
-import type { PullRequest, PullResponse, PushRequest, PushResponse, SyncServer } from '../../shared/sync/protocol';
+import type {
+  DownloadRequest,
+  DownloadResponse,
+  PullRequest,
+  PullResponse,
+  PushRequest,
+  PushResponse,
+  SyncServer,
+  UploadRequest,
+  UploadResponse,
+} from '../../shared/sync/protocol';
 
 // The app's side of the `sync` Edge Function. Failures come back as typed errors the controller acts
 // on: wait and retry (Offline, ServerError), refresh the session (AuthExpired), or stop (Rejected).
@@ -32,7 +42,13 @@ type Deps = {
   getToken(): Promise<string | null>;
   fetch: typeof fetch;
   timeoutMs?: number;
+  /** For the file bytes themselves (long recordings on a slow line). */
+  transferTimeoutMs?: number;
 };
+
+type Route = 'push' | 'pull' | 'files/upload' | 'files/download';
+/** Storage refusing a file for size or quota: keep it on this PC and try again later. */
+const STORAGE_FULL = /quota|exceeded|too large|maximum allowed size/i;
 
 export class HttpSyncServer implements SyncServer {
   constructor(private readonly d: Deps) {}
@@ -45,7 +61,44 @@ export class HttpSyncServer implements SyncServer {
     return this.call<PullResponse>('pull', req);
   }
 
-  private async call<T>(route: 'push' | 'pull', body: unknown): Promise<T> {
+  uploadUrl(req: UploadRequest): Promise<UploadResponse> {
+    return this.call<UploadResponse>('files/upload', req);
+  }
+
+  downloadUrl(req: DownloadRequest): Promise<DownloadResponse> {
+    return this.call<DownloadResponse>('files/download', req);
+  }
+
+  /** Uploads to a signed URL (no auth header: the URL carries its own short-lived token). */
+  async put(url: string, bytes: Uint8Array, contentType: string): Promise<'ok' | 'storage-full'> {
+    const res = await this.transfer(url, { method: 'PUT', headers: { 'content-type': contentType }, body: bytes as Uint8Array<ArrayBuffer> });
+    if (res.ok) return 'ok';
+    const text = await res.text().catch(() => '');
+    if (res.status === 413 || (res.status >= 400 && res.status < 500 && STORAGE_FULL.test(text))) return 'storage-full';
+    if (res.status >= 400 && res.status < 500) throw new Rejected(`Upload refused (${res.status})`);
+    throw new ServerError();
+  }
+
+  /** Downloads from a signed URL. */
+  async get(url: string): Promise<Uint8Array> {
+    const res = await this.transfer(url, { method: 'GET' });
+    if (!res.ok) throw new ServerError();
+    try {
+      return new Uint8Array(await res.arrayBuffer());
+    } catch {
+      throw new Offline(); // the connection dropped mid-file
+    }
+  }
+
+  private async transfer(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await this.d.fetch(url, { ...init, signal: AbortSignal.timeout(this.d.transferTimeoutMs ?? 600_000) });
+    } catch {
+      throw new Offline();
+    }
+  }
+
+  private async call<T>(route: Route, body: unknown): Promise<T> {
     const token = await this.d.getToken();
     if (!token) throw new NotSignedIn();
     let res: Response;

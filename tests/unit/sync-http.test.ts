@@ -53,3 +53,42 @@ it('a call that hangs times out as offline', async () => {
   );
   await expect(server.pull({ clientId: 'c', cursor: 0 })).rejects.toBeInstanceOf(Offline);
 });
+
+it('uploadUrl posts to files/upload with the token', async () => {
+  const { server, calls } = make(() => new Response(JSON.stringify({ status: 'ok', url: 'https://s/up' })));
+  await expect(server.uploadUrl({ kind: 'audio', name: 'a.webm', size: 3 })).resolves.toEqual({ status: 'ok', url: 'https://s/up' });
+  await server.downloadUrl({ kind: 'image', name: 'b.png' });
+  expect(calls.map((c) => c.url)).toEqual(['https://p.supabase.co/functions/v1/sync/files/upload', 'https://p.supabase.co/functions/v1/sync/files/download']);
+  expect((calls[0].init.headers as Record<string, string>).authorization).toBe('Bearer tok');
+});
+
+it('put maps 413 and quota errors to storage-full', async () => {
+  let res = () => new Response('{}', { status: 200 });
+  const { server, calls } = make(() => res());
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).resolves.toBe('ok');
+  expect(calls[0].init.method).toBe('PUT');
+  expect((calls[0].init.headers as Record<string, string>)['content-type']).toBe('audio/webm');
+  expect((calls[0].init.headers as Record<string, string>).authorization).toBeUndefined(); // the URL is signed
+  res = () => new Response('{}', { status: 413 });
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).resolves.toBe('storage-full');
+  res = () => new Response(JSON.stringify({ statusCode: '400', error: 'Payload too large', message: 'The object exceeded the maximum allowed size' }), { status: 400 });
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).resolves.toBe('storage-full');
+  res = () => new Response(JSON.stringify({ message: 'invalid signature' }), { status: 400 });
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).rejects.toBeInstanceOf(Rejected);
+  res = () => new Response('', { status: 503 });
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).rejects.toBeInstanceOf(ServerError);
+});
+
+it('put and get throw Offline when fetch rejects', async () => {
+  const { server } = make(() => Promise.reject(new TypeError('fetch failed')));
+  await expect(server.put('https://s/up', new Uint8Array([1]), 'audio/webm')).rejects.toBeInstanceOf(Offline);
+  await expect(server.get('https://s/down')).rejects.toBeInstanceOf(Offline);
+});
+
+it('get returns the bytes, and a failed status is a ServerError', async () => {
+  let status = 200;
+  const { server } = make(() => new Response(new Uint8Array([7, 8]), { status }));
+  expect([...(await server.get('https://s/down'))]).toEqual([7, 8]);
+  status = 500;
+  await expect(server.get('https://s/down')).rejects.toBeInstanceOf(ServerError);
+});
