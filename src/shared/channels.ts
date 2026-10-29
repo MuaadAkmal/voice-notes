@@ -237,6 +237,9 @@ export type AccountInfo =
   | { state: 'signing-in' }
   | { state: 'signed-in'; userId: string; email: string; name: string; avatar: string | null };
 
+/** One event of today's Google Calendar. Times are ms; an all-day event runs local midnight to midnight (end exclusive). */
+export type CalendarEvent = { id: string; title: string; start: number; end: number; allDay: boolean; link: string };
+
 /** The built-in provider as the Transcription page shows it. */
 export type LocalStatus = {
   available: boolean; // an engine build exists for this CPU
