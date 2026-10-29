@@ -17,6 +17,30 @@ const EVENTS = [
 ];
 
 let server: Awaited<ReturnType<typeof startConnectorsServer>>;
+
+/** Signed in with the fixture server; `connect` also finishes the consent, returning the app's loopback port. */
+async function signedIn() {
+  t = await launch();
+  await t.app.evaluate(
+    (_e, { url, user }) => {
+      const h = (globalThis as unknown as { __voiceNotes: Record<string, any> }).__voiceNotes; // eslint-disable-line @typescript-eslint/no-explicit-any
+      h.connectors.useServer(url);
+      h.connectors.useToken(async () => 'test-token');
+      h.account.setTestSession({ state: 'signed-in', userId: user, email: 'me@example.com', name: 'Test User', avatar: null });
+    },
+    { url: server.url, user: USER },
+  );
+  return t.dashboard;
+}
+
+async function connect(page: TestApp['dashboard']): Promise<number | null> {
+  await page.getByRole('button', { name: /^Connectors/ }).click();
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect.poll(() => t.hooks((h) => h.openedExternal.some((u) => u.startsWith('https://accounts.google.com/')))).toBe(true);
+  const port = await server.connect('cal@gmail.com');
+  await expect(page.getByText('Connected as cal@gmail.com')).toBeVisible({ timeout: 10_000 });
+  return port;
+}
 let t: TestApp;
 
 test.beforeAll(async () => {
@@ -83,4 +107,62 @@ test('signed out, the Connectors page asks to sign in', async () => {
   await page.getByRole('button', { name: /^Connectors/ }).click();
   await expect(page.getByText('Sign in to connect Google Calendar.')).toBeVisible();
   await page.screenshot({ path: '.superpowers/shots/connectors-signed-out.png' });
+});
+
+test("Calendar is in the sidebar only when connected, and the consent lands on the app's page", async () => {
+  const page = await signedIn();
+  await expect(page.getByRole('button', { name: /^Connectors/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Calendar/ })).toBeHidden();
+  const port = await connect(page);
+  expect(port).not.toBeNull();
+  const html = await (await fetch(`http://127.0.0.1:${port}/connectors/done?result=connected`)).text();
+  expect(html).toContain('Google Calendar connected');
+  await expect(page.getByRole('button', { name: /^Calendar/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
+  await expect(page.getByRole('button', { name: /^Calendar/ })).toBeHidden();
+});
+
+test('the month grid shows events and New event adds one', async () => {
+  const page = await signedIn();
+  await connect(page);
+  await page.getByRole('button', { name: /^Calendar/ }).click();
+  // The cell's name is the date in the app's own locale.
+  const label = await page.evaluate(() =>
+    new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+  );
+  const todayCell = page.getByRole('gridcell', { name: label, exact: true });
+  await expect(todayCell.getByText('Design review')).toBeVisible();
+  await page.screenshot({ path: '.superpowers/shots/calendar-month.png' });
+
+  await todayCell.getByText('Design review').click();
+  await expect(page.getByRole('dialog').getByText('Design review')).toBeVisible();
+  await page.getByRole('button', { name: 'Open in Google Calendar' }).click();
+  await expect.poll(() => t.hooks((h) => h.openedExternal.includes('https://www.google.com/calendar/event?eid=meet'))).toBe(true);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'New event' }).click();
+  await page.getByLabel('Title').fill('Dentist');
+  await page.getByLabel('All day').check();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText(/^Added: Dentist · /)).toBeVisible();
+  await expect(todayCell.getByText('Dentist')).toBeVisible();
+});
+
+test('Quick Add on the Home card adds one event', async () => {
+  const page = await signedIn();
+  await connect(page);
+  await page.getByRole('button', { name: "Add Today's calendar to Home" }).click();
+  await page.getByRole('button', { name: /^Home/ }).click();
+  const box = page.getByRole('textbox', { name: 'Add to calendar' });
+  await box.fill('Lunch with Sam');
+  const before = server.requests('quickAdd');
+  await box.press('Enter');
+  await box.press('Enter'); // a second Enter while the first runs must not add it twice
+  await expect(page.getByText(/^Added: Lunch with Sam · /)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Lunch with Sam/ })).toBeVisible();
+  expect(server.requests('quickAdd') - before).toBe(1);
+  await expect(box).toHaveValue('');
+  await page.screenshot({ path: '.superpowers/shots/calendar-quick-add.png' });
 });
