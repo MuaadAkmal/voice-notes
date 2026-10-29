@@ -53,19 +53,40 @@ it('401 without a token, or with one that does not verify', async () => {
   }
 });
 
-it('callback needs no token and answers a page', async () => {
+it('callback without a port answers plain text', async () => {
   const res = await setup()('GET', 'google/callback?code=c&state=unknown', null);
   expect(res.status).toBe(200);
-  expect(res.headers.get('content-type')).toMatch(/text\/html/);
-  expect(res.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'");
-  expect(await res.text()).toContain('This link has expired. Start again from Voice Notes.');
+  expect(res.headers.get('content-type')).toMatch(/^text\/plain/);
+  expect(await res.text()).toBe('This link has expired. Start again from Voice Notes.');
 });
 
-it('the callback page never echoes the query', async () => {
+it('the callback never echoes the query', async () => {
   const res = await setup()('GET', 'google/callback?state=%3Cscript%3Ex%3C%2Fscript%3E&error=%3Cb%3E', null);
-  const html = await res.text();
-  expect(html).not.toContain('<script>x');
-  expect(html).not.toContain('<b>');
+  const body = await res.text();
+  expect(body).not.toContain('<script>x');
+  expect(body).not.toContain('<b>');
+});
+
+it('callback with a port redirects to 127.0.0.1', async () => {
+  const call = setup({ core: core({ callback: async () => ({ result: 'connected' as const, returnPort: 51234 }) }) });
+  const res = await call('GET', 'google/callback?code=c&state=s', null);
+  expect(res.status).toBe(302);
+  expect(res.headers.get('location')).toBe('http://127.0.0.1:51234/connectors/done?result=connected');
+  expect(res.headers.get('cache-control')).toBe('no-store');
+});
+
+it('start passes returnPort from the body', async () => {
+  const seen: unknown[] = [];
+  const post = (body: string | undefined) =>
+    handleConnectors(
+      new Request(`${BASE}/google/start`, { method: 'POST', headers: { authorization: 'Bearer good' }, body }),
+      { verify: async () => ({ userId: USER, email: null }), core: core({ start: async (_u, _e, p) => (seen.push(p), { url: 'u' }) }), missing: [] },
+    );
+  await post(JSON.stringify({ returnPort: 51234 }));
+  await post('not json');
+  await post(undefined);
+  await post(JSON.stringify({ returnPort: '51234' }));
+  expect(seen).toEqual([51234, undefined, undefined, undefined]);
 });
 
 it('start passes the token email and returns the URL', async () => {

@@ -19,20 +19,20 @@ export class PgConnectorStore implements ConnectorStore {
 
   async putState(s: StateRow): Promise<void> {
     await this.db.query(
-      'insert into public.connector_states (state, user_id, provider, expires_at) values ($1, $2, $3, $4)',
-      [s.state, s.userId, s.provider, new Date(s.expiresAt).toISOString()],
+      'insert into public.connector_states (state, user_id, provider, expires_at, return_port) values ($1, $2, $3, $4, $5)',
+      [s.state, s.userId, s.provider, new Date(s.expiresAt).toISOString(), s.returnPort ?? null],
     );
   }
 
-  async takeState(state: string, now: number): Promise<{ userId: string; provider: Provider } | null> {
+  async takeState(state: string, now: number): Promise<{ userId: string; provider: Provider; returnPort: number | null } | null> {
     // One update, so two callbacks with the same state can't both take it.
-    const rows = await this.db.query<{ user_id: string; provider: Provider }>(
+    const rows = await this.db.query<{ user_id: string; provider: Provider; return_port: number | null }>(
       `update public.connector_states set result = $3 where state = $1 and result is null and expires_at > $2
-       returning user_id, provider`,
+       returning user_id, provider, return_port`,
       [state, new Date(now).toISOString(), TAKEN],
     );
     const r = rows[0];
-    return r ? { userId: r.user_id, provider: r.provider } : null;
+    return r ? { userId: r.user_id, provider: r.provider, returnPort: r.return_port ?? null } : null;
   }
 
   async finishState(state: string, result: CallbackResult): Promise<void> {

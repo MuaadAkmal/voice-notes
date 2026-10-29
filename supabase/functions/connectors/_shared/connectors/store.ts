@@ -14,7 +14,14 @@ export type ConnectorRow = {
   connectedAt: number;
 };
 
-export type StateRow = { state: string; userId: string; provider: Provider; expiresAt: number };
+export type StateRow = {
+  state: string;
+  userId: string;
+  provider: Provider;
+  expiresAt: number;
+  /** The app's loopback port for the page after consent; null or absent when it has none. */
+  returnPort?: number | null;
+};
 
 /** A state Google came back with, before its outcome is recorded. */
 export const TAKEN = 'taken';
@@ -22,7 +29,7 @@ export const TAKEN = 'taken';
 export interface ConnectorStore {
   putState(s: StateRow): Promise<void>;
   /** Marks the state used and says whose it was; null when unknown, used, or past `expiresAt`. */
-  takeState(state: string, now: number): Promise<{ userId: string; provider: Provider } | null>;
+  takeState(state: string, now: number): Promise<{ userId: string; provider: Provider; returnPort: number | null } | null>;
   /** Records how the round trip ended, for the app that started it to read. */
   finishState(state: string, result: CallbackResult): Promise<void>;
   /** The recorded end of `userId`'s round trip; null while it is still going (or not theirs). */

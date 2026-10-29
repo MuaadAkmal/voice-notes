@@ -10,11 +10,11 @@ export class MemoryConnectorStore implements ConnectorStore {
     this.states.set(s.state, { ...s, result: null });
   }
 
-  async takeState(state: string, now: number): Promise<{ userId: string; provider: Provider } | null> {
+  async takeState(state: string, now: number): Promise<{ userId: string; provider: Provider; returnPort: number | null } | null> {
     const s = this.states.get(state);
     if (!s || s.result !== null || s.expiresAt <= now) return null;
     s.result = TAKEN;
-    return { userId: s.userId, provider: s.provider };
+    return { userId: s.userId, provider: s.provider, returnPort: s.returnPort ?? null };
   }
 
   async finishState(state: string, result: CallbackResult): Promise<void> {

@@ -56,8 +56,8 @@ export async function startConnectorsServer(
     url: `http://127.0.0.1:${port}`,
     connect: async (email) => {
       consentEmail = email;
-      const page = await core.callback({ code: 'c', state: lastState });
-      if (page !== 'connected') throw new Error(`consent ended as ${page}`);
+      const { result } = await core.callback({ code: 'c', state: lastState });
+      if (result !== 'connected') throw new Error(`consent ended as ${result}`);
     },
     /** How many requests reached a path ending in `route` (e.g. 'google/token'). */
     requests: (route) => seen.filter((p) => p.endsWith(route)).length,

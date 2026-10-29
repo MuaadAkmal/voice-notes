@@ -24,23 +24,19 @@ const PAGES: Record<CallbackResult, string> = {
   failed: 'Something went wrong. Try again from Voice Notes.',
 };
 
-// Fixed copy only: nothing from the request ever reaches the page.
-const page = (result: CallbackResult) =>
-  new Response(
-    `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Voice Notes</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{font:16px/1.5 system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;margin:0 16px;color:#1c1917;background:#fafaf9}
-@media (prefers-color-scheme:dark){body{color:#e7e5e4;background:#1c1917}}</style></head>
-<body><p>${PAGES[result]}</p></body></html>`,
-    {
-      status: 200,
-      headers: {
-        'content-type': 'text/html; charset=utf-8',
-        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'",
-        'cache-control': 'no-store',
-      },
-    },
-  );
+// Where the browser goes after consent. The app serves the real page on its loopback port, because
+// Edge Functions on *.supabase.co rewrite text/html to text/plain. Without a port: a fixed sentence.
+// Nothing from the request ever reaches either: the host is fixed, the port came from the start call.
+const finished = ({ result, returnPort }: { result: CallbackResult; returnPort: number | null }) =>
+  returnPort
+    ? new Response(null, {
+        status: 302,
+        headers: { location: `http://127.0.0.1:${returnPort}/connectors/done?result=${result}`, 'cache-control': 'no-store' },
+      })
+    : new Response(PAGES[result], {
+        status: 200,
+        headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+      });
 
 export async function handleConnectors(req: Request, d: ConnectorsHandlerDeps): Promise<Response> {
   if (!d.core) {
@@ -58,7 +54,7 @@ export async function handleConnectors(req: Request, d: ConnectorsHandlerDeps): 
   try {
     if (key === 'GET google/callback') {
       const q = url.searchParams;
-      return page(
+      return finished(
         await d.core.callback({
           code: q.get('code') ?? undefined,
           state: q.get('state') ?? undefined,
@@ -72,7 +68,11 @@ export async function handleConnectors(req: Request, d: ConnectorsHandlerDeps): 
     const user = jwt ? await d.verify(jwt).catch(() => null) : null;
     if (!user) return json(401, { error: 'Sign in again' });
 
-    if (key === 'POST google/start') return json(200, await d.core.start(user.userId, user.email));
+    if (key === 'POST google/start') {
+      const body = (await req.json().catch(() => null)) as { returnPort?: unknown } | null;
+      const port = typeof body?.returnPort === 'number' ? body.returnPort : undefined;
+      return json(200, await d.core.start(user.userId, user.email, port));
+    }
     if (key === 'GET google/attempt') return json(200, await d.core.attempt(user.userId, url.searchParams.get('state') ?? ''));
     if (key === 'GET google/token') {
       try {

@@ -12,6 +12,12 @@ const MIGRATION = fs.readFileSync(
   path.resolve('supabase/migrations', fs.readdirSync('supabase/migrations').find((f) => f.endsWith('_connectors.sql'))!),
   'utf8',
 );
+// Every connector migration, in order: what the live tables are.
+const MIGRATIONS = fs
+  .readdirSync('supabase/migrations')
+  .filter((f) => f.includes('_connector'))
+  .sort()
+  .map((f) => fs.readFileSync(path.resolve('supabase/migrations', f), 'utf8'));
 
 // One PGlite for the file (a PGlite per test exhausts WASM memory); each test starts from empty tables.
 let shared: Promise<PGlite> | null = null;
@@ -21,7 +27,7 @@ async function pgStore(): Promise<ConnectorStore> {
     await pg.exec(`create schema auth; create table auth.users (id uuid primary key);
       create role anon; create role authenticated;
       insert into auth.users values ('${A}'), ('${B}');`);
-    await pg.exec(MIGRATION);
+    for (const m of MIGRATIONS) await pg.exec(m);
     return pg;
   })();
   const pg = await shared;
@@ -49,8 +55,14 @@ function runStoreContract(name: string, make: () => Promise<ConnectorStore>, tim
     it('a state is taken once', async () => {
       const s = await make();
       await s.putState({ state: 'st', userId: A, provider: 'google-calendar', expiresAt: 2_000_000_000_000 });
-      expect(await s.takeState('st', 1_000)).toEqual({ userId: A, provider: 'google-calendar' });
+      expect(await s.takeState('st', 1_000)).toEqual({ userId: A, provider: 'google-calendar', returnPort: null });
       expect(await s.takeState('st', 1_000)).toBeNull();
+    });
+
+    it('a state keeps its return port', async () => {
+      const s = await make();
+      await s.putState({ state: 'p', userId: A, provider: 'google-calendar', expiresAt: 2_000_000_000_000, returnPort: 51234 });
+      expect(await s.takeState('p', 1_000)).toEqual({ userId: A, provider: 'google-calendar', returnPort: 51234 });
     });
 
     it('an expired state is null', async () => {

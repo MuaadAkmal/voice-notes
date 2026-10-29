@@ -63,7 +63,7 @@ it("start returns Google's URL with the agreed params", async () => {
     login_hint: 'me@gmail.com',
     state: 'state1',
   });
-  expect(await store.takeState('state1', NOW + 599_999)).toEqual({ userId: USER, provider: 'google-calendar' });
+  expect(await store.takeState('state1', NOW + 599_999)).toEqual({ userId: USER, provider: 'google-calendar', returnPort: null });
 });
 
 it('start without an email leaves out login_hint', async () => {
@@ -89,7 +89,7 @@ it('start clears expired states', async () => {
 it('callback connects', async () => {
   const { core, store } = setup();
   await core.start(USER, null);
-  expect(await core.callback({ code: 'c', state: 'state1' })).toBe('connected');
+  expect((await core.callback({ code: 'c', state: 'state1' })).result).toBe('connected');
   expect(await core.status(USER)).toEqual({ google: { email: 'cal@gmail.com', connectedAt: NOW } });
   expect((await store.get(USER, 'google-calendar'))?.refreshToken).toBe('sealed:r1');
 });
@@ -98,25 +98,25 @@ it('a state works once', async () => {
   const { core, calls } = setup();
   await core.start(USER, null);
   await core.callback({ code: 'c', state: 'state1' });
-  expect(await core.callback({ code: 'c', state: 'state1' })).toBe('expired');
+  expect((await core.callback({ code: 'c', state: 'state1' })).result).toBe('expired');
   expect(calls.exchange).toBe(1);
 });
 
 it('a missing or expired state is expired, and Google is never asked', async () => {
   const { core, calls, now } = setup();
-  expect(await core.callback({ code: 'c' })).toBe('expired');
-  expect(await core.callback({ code: 'c', state: 'nope' })).toBe('expired');
+  expect((await core.callback({ code: 'c' })).result).toBe('expired');
+  expect((await core.callback({ code: 'c', state: 'nope' })).result).toBe('expired');
   await core.start(USER, null);
   now.t += 600_000;
-  expect(await core.callback({ code: 'c', state: 'state1' })).toBe('expired');
+  expect((await core.callback({ code: 'c', state: 'state1' })).result).toBe('expired');
   expect(calls.exchange).toBe(0);
 });
 
 it('error=access_denied is denied, and the state is used up', async () => {
   const { core, calls } = setup();
   await core.start(USER, null);
-  expect(await core.callback({ error: 'access_denied', state: 'state1' })).toBe('denied');
-  expect(await core.callback({ code: 'c', state: 'state1' })).toBe('expired');
+  expect((await core.callback({ error: 'access_denied', state: 'state1' })).result).toBe('denied');
+  expect((await core.callback({ code: 'c', state: 'state1' })).result).toBe('expired');
   expect(calls.exchange).toBe(0);
 });
 
@@ -125,19 +125,19 @@ it('refuses a grant without calendar.events', async () => {
     exchange: async () => ({ refreshToken: 'r1', scope: 'openid email', idToken: idToken({ email: 'cal@gmail.com' }) }),
   });
   await core.start(USER, null);
-  expect(await core.callback({ code: 'c', state: 'state1' })).toBe('no-calendar');
+  expect((await core.callback({ code: 'c', state: 'state1' })).result).toBe('no-calendar');
   expect(await core.status(USER)).toEqual({ google: null });
 });
 
 it('no refresh token, or an exchange that throws, is failed', async () => {
   const none = setup({ exchange: async () => ({ refreshToken: null, scope: CALENDAR_SCOPE, idToken: null }) });
   await none.core.start(USER, null);
-  expect(await none.core.callback({ code: 'c', state: 'state1' })).toBe('failed');
+  expect((await none.core.callback({ code: 'c', state: 'state1' })).result).toBe('failed');
   expect(await none.core.status(USER)).toEqual({ google: null });
 
   const thrown = setup({ exchange: async () => Promise.reject(new Error('boom')) });
   await thrown.core.start(USER, null);
-  expect(await thrown.core.callback({ code: 'c', state: 'state1' })).toBe('failed');
+  expect((await thrown.core.callback({ code: 'c', state: 'state1' })).result).toBe('failed');
 });
 
 it('attempt tells the owner how the consent ended', async () => {
@@ -188,4 +188,23 @@ it('disconnect still deletes when revoking fails, and twice is fine', async () =
   await core.disconnect(USER);
   expect(await core.status(USER)).toEqual({ google: null });
   await core.disconnect(USER);
+});
+
+it('start stores a valid return port and ignores a bad one', async () => {
+  for (const [port, kept] of [[51234, 51234], [1024, 1024], [65535, 65535], [80, null], [70000, null], [1.5, null], [NaN, null]] as const) {
+    const { core } = setup();
+    await core.start(USER, null, port);
+    expect(await core.callback({ code: 'c', state: 'state1' }), String(port)).toEqual({ result: 'connected', returnPort: kept });
+  }
+});
+
+it('an expired state has no port', async () => {
+  const { core } = setup();
+  expect(await core.callback({ code: 'c', state: 'nope' })).toEqual({ result: 'expired', returnPort: null });
+});
+
+it('a refused consent still carries the port', async () => {
+  const { core } = setup();
+  await core.start(USER, null, 51234);
+  expect(await core.callback({ error: 'access_denied', state: 'state1' })).toEqual({ result: 'denied', returnPort: 51234 });
 });

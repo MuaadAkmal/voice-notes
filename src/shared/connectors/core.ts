@@ -29,11 +29,13 @@ type Deps = {
 export class ConnectorsCore {
   constructor(private readonly d: Deps) {}
 
-  async start(userId: string, email: string | null): Promise<{ url: string }> {
+  /** `returnPort`: where the app listens for the browser after consent; anything but a plain port is ignored. */
+  async start(userId: string, email: string | null, returnPort?: number): Promise<{ url: string }> {
     const now = this.d.now();
     await this.d.store.deleteExpiredStates(now);
     const state = this.d.randomState();
-    await this.d.store.putState({ state, userId, provider: PROVIDER, expiresAt: now + STATE_TTL_MS });
+    const port = isPort(returnPort) ? returnPort : null;
+    await this.d.store.putState({ state, userId, provider: PROVIDER, expiresAt: now + STATE_TTL_MS, returnPort: port });
     const params = new URLSearchParams({
       client_id: this.d.clientId,
       redirect_uri: this.d.redirectUri,
@@ -48,12 +50,13 @@ export class ConnectorsCore {
     return { url: `${AUTH_URL}?${params}` };
   }
 
-  async callback(q: { code?: string; state?: string; error?: string }): Promise<CallbackResult> {
+  /** How the round trip ended, and the app's port to send the browser on to (null: none known). */
+  async callback(q: { code?: string; state?: string; error?: string }): Promise<{ result: CallbackResult; returnPort: number | null }> {
     const owner = q.state ? await this.d.store.takeState(q.state, this.d.now()) : null;
-    if (!owner || !q.state) return 'expired';
+    if (!owner || !q.state) return { result: 'expired', returnPort: null };
     const result = await this.finish(owner.userId, q);
     await this.d.store.finishState(q.state, result);
-    return result;
+    return { result, returnPort: owner.returnPort };
   }
 
   /** How `userId`'s round trip with `state` ended; null while the browser is still at Google. */
@@ -110,3 +113,5 @@ export class ConnectorsCore {
     return { google: row ? { email: row.accountEmail, connectedAt: row.connectedAt } : null };
   }
 }
+
+const isPort = (p: unknown): p is number => Number.isInteger(p) && (p as number) >= 1024 && (p as number) <= 65535;
