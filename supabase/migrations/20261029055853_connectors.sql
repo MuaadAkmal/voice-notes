@@ -21,6 +21,7 @@ create table public.connector_states (
   result text -- null: waiting; 'taken': Google came back; then how it ended, which the app polls
 );
 create index connector_states_expires on public.connector_states (expires_at);
+create index connector_states_user on public.connector_states (user_id);
 
 alter table public.connectors enable row level security;
 alter table public.connector_states enable row level security;
