@@ -9,6 +9,7 @@ import {
   DevicesSchema,
   DragSchema,
   type DropPayload,
+  type FetchAudioResult,
   DropPayloadSchema,
   OverlayTitleSchema,
   CreateFolderSchema,
@@ -39,15 +40,28 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
+  NewEventSchema,
+  type PomodoroAction,
+  PomodoroCommandSchema,
+  PomodoroDoneSchema,
+  PomodoroSchema,
+  type PomodoroSession,
+  QuickAddSchema,
+  RangeSchema,
 } from '../shared/ipc';
 import { normaliseBaseUrl } from '../shared/transcription';
 import { pruneWidgets } from '../shared/home-widgets';
+import type { Pomodoro } from '../shared/pomodoro';
 import type { HotkeyService } from './hotkey/service';
 import type { DictationController } from './dictation/controller';
 import type { NoteStore } from './store/note-store';
 import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
+import type { AccountService } from './account/account';
+import type { ConnectorsService } from './connectors/service';
+import type { SyncController } from './sync/controller';
+import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
@@ -66,6 +80,8 @@ type OverlayDeps = {
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
+  onPomodoro: (timer: Pomodoro) => void;
+  onPomodoroDone: (focusMs: number) => void;
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -92,6 +108,8 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     }),
   );
   ipcMain.on(Ch.FilmSaveError, from(overlay, ErrorSchema, ({ message }) => controller.onRewindError(message)));
+  ipcMain.on(Ch.PomodoroState, from(overlay, PomodoroSchema, deps.onPomodoro));
+  ipcMain.on(Ch.PomodoroDone, from(overlay, PomodoroDoneSchema, ({ focusMs }) => deps.onPomodoroDone(focusMs)));
   ipcMain.on(Ch.MediaProbeResult, from(overlay, ProbeResultSchema, ({ id, playing }) => deps.onProbeResult(id, playing)));
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
@@ -115,7 +133,9 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     Ch.RecorderAudio,
     from(overlay, AudioPayloadSchema, (a) => {
       const bytes = Buffer.from(a.bytes.buffer, a.bytes.byteOffset, a.bytes.byteLength);
-      controller.onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }).catch((e) => log.error(e));
+      controller
+        .onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }, { silent: a.silent })
+        .catch((e) => log.error(e));
     }),
   );
   ipcMain.on(
@@ -173,6 +193,12 @@ type DashboardDeps = {
   secrets: Secrets;
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
+  account: AccountService;
+  sync: SyncController;
+  connectors: ConnectorsService;
+  files: Pick<FileSync, 'fetchAudio'>;
+  /** The timer lives in the overlay; main keeps its last state and passes commands on. */
+  pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -199,6 +225,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     const note = d.store.get(id);
     if (note?.status === 'ok') shell.showItemInFolder(d.store.absolutePath(note));
   });
+  handle(Ch.NotesFetchAudio, IdSchema, async (id): Promise<FetchAudioResult> => {
+    try {
+      await d.files.fetchAudio(id);
+      return { ok: true };
+    } catch (err) {
+      log.warn('[sync] audio download failed', err);
+      return { ok: false, reason: fetchFailure(err) };
+    }
+  });
   handle(Ch.SettingsGet, none, () => d.getSettings());
   handle(Ch.SettingsSet, SettingsPatchSchema, (patch) => {
     // The built-in provider only with a downloaded model: anything else would fail every job.
@@ -209,6 +244,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     }
     return d.updateSettings(patch);
   });
+  handle(Ch.PomodoroGet, none, () => d.pomodoro.get());
+  handle(Ch.PomodoroCommand, PomodoroCommandSchema, ({ action }) => d.pomodoro.command(action));
+  handle(Ch.PomodoroSessions, none, () => d.pomodoro.sessions());
+  handle(Ch.PomodoroClearSessions, none, () => d.pomodoro.clear());
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
   handle(Ch.DevicesList, none, () => d.getDevices());
   handle(Ch.OpenRecordingsFolder, none, async () => {
@@ -254,8 +293,8 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
     return page;
   });
-  handle(Ch.PagesSetBody, SetBodySchema, ({ id, body }) => {
-    const page = pages.setBody(id, body);
+  handle(Ch.PagesSetBody, SetBodySchema, ({ id, body, expected }) => {
+    const page = pages.setBody(id, body, expected);
     d.pagesChanged();
     return page;
   });
@@ -336,6 +375,27 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     }
   });
   handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
+  handle(Ch.AccountGet, none, () => d.account.current());
+  handle(Ch.AccountSignIn, none, () => d.account.signIn());
+  handle(Ch.AccountCancel, none, () => d.account.cancel());
+  handle(Ch.AccountSignOut, none, () => d.account.signOut());
+  handle(Ch.SyncGet, none, () => d.sync.view());
+  handle(Ch.SyncTurnOn, none, () => {
+    const info = d.account.current();
+    if (info.state !== 'signed-in') throw new Error('Sign in first');
+    d.sync.turnOn(info.userId);
+  });
+  handle(Ch.SyncTurnOff, none, () => d.sync.turnOff());
+  handle(Ch.SyncNow, none, () => d.sync.syncNow());
+  handle(Ch.SyncDismissPrompt, none, () => d.sync.dismissPrompt());
+  handle(Ch.ConnectorsGet, none, () => d.connectors.current());
+  handle(Ch.ConnectorsConnect, none, () => d.connectors.connect());
+  handle(Ch.ConnectorsCancel, none, () => d.connectors.cancel());
+  handle(Ch.ConnectorsDisconnect, none, () => d.connectors.disconnect());
+  handle(Ch.CalendarToday, none, () => d.connectors.today(new Date()));
+  handle(Ch.CalendarRange, RangeSchema, ({ from, to }) => d.connectors.range(new Date(from), new Date(to)));
+  handle(Ch.CalendarCreate, NewEventSchema, (e) => d.connectors.create(e));
+  handle(Ch.CalendarQuickAdd, QuickAddSchema, ({ text }) => d.connectors.quickAdd(text));
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines, House, Mic } from 'lucide-react';
+import { AudioLines, CalendarDays, House, Mic, Plug, Timer } from 'lucide-react';
 import type { Folder } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { cleanIpcError } from '../../shared/format';
 import { FOLDER_MIME, getDragging, notifyDropped, setDragging } from './dnd';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
+import { AccountChip } from './AccountChip';
+import { useConnectors } from './useConnectors';
 import type { View } from './App';
 import {
   ContextMenu,
@@ -54,6 +56,8 @@ type Props = {
 
 export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   const toast = useToast();
+  // The Calendar tab is there only while Google Calendar is connected.
+  const calendarOn = useConnectors()?.state === 'connected';
   const [expanded, setExpanded] = useState(loadExpanded);
   const [editing, setEditing] = useState<Editing>(null);
   // Set when a menu action opens an inline input, so the menu doesn't hand focus back and blur it.
@@ -281,11 +285,25 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
           onClick={() => onSelect({ kind: 'home' })}
           icon={<House className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
         />
+        {calendarOn && (
+          <NavItem
+            label="Calendar"
+            active={view.kind === 'calendar'}
+            onClick={() => onSelect({ kind: 'calendar' })}
+            icon={<CalendarDays className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+          />
+        )}
         <NavItem
           label="Dictation"
           active={view.kind === 'dictation'}
           onClick={() => onSelect({ kind: 'dictation' })}
           icon={<Mic className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
+        <NavItem
+          label="Pomodoro"
+          active={view.kind === 'pomodoro'}
+          onClick={() => onSelect({ kind: 'pomodoro' })}
+          icon={<Timer className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
         />
         <NavItem
           label="Inbox"
@@ -335,7 +353,14 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
           <p className="px-2 py-1 text-xs text-muted-foreground/70">No folders yet. Click + to create one.</p>
         )}
       </div>
-      <div className="border-t border-sidebar-border px-3 py-3">
+      <div className="flex flex-col gap-0.5 border-t border-sidebar-border px-3 py-3">
+        <AccountChip active={view.kind === 'account'} onOpen={() => onSelect({ kind: 'account' })} />
+        <NavItem
+          label="Connectors"
+          active={view.kind === 'connectors'}
+          onClick={() => onSelect({ kind: 'connectors' })}
+          icon={<Plug className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
         <NavItem
           label="Transcription"
           active={view.kind === 'transcription'}

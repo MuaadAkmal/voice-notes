@@ -52,7 +52,7 @@ test('a note remembers the window it was recorded over', async () => {
   await t.hooks((h) =>
     h.setForeground(() => ({ title: '(2) Dark - YouTube - Google Chrome', processName: 'chrome.exe', pid: 1 })),
   );
-  await t.record(800);
+  await t.record(1500);
   const [note] = await t.hooks((h) => h.store.list());
   expect(note).toMatchObject({ kind: 'note', show: 'Dark', windowTitle: '(2) Dark - YouTube - Google Chrome' });
 });
@@ -60,7 +60,7 @@ test('a note remembers the window it was recorded over', async () => {
 test('auto-pause never presses the media key for a system-audio note', async () => {
   t = await launch();
   await t.dashboard.evaluate(() => window.dashboardApi.setSettings({ recordingSource: 'system' }));
-  await t.record(800);
+  await t.record(1500);
   expect(await t.hooks((h) => h.mediaPresses())).toBe(0);
 });
 

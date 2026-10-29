@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { AudioLines, ChevronDown, Clapperboard, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AudioLines, ChevronDown, Clapperboard, Cloud, Copy, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
 import type { JobStatus, Note } from '../../shared/channels';
-import { formatDuration } from '../../shared/format';
+import { formatDuration, isDefaultTitle } from '../../shared/format';
+import { matchRanges } from '../../shared/search';
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../shared/transcription';
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useToast } from './Toast';
 
 type Props = {
   note: Note;
@@ -20,6 +22,8 @@ type Props = {
   onDragStart: (e: React.DragEvent) => void;
   onDragEnd: () => void;
   playing: boolean;
+  /** Downloading this note's audio from the account (it was recorded on another PC). */
+  loading?: boolean;
   positionMs: number;
   onTogglePlay: () => void;
   onRename: (title: string) => void;
@@ -34,6 +38,7 @@ type Props = {
   onRetranscribe: () => void;
   onSetupTranscription: () => void;
   onEditTranscript: (text: string) => void;
+  query?: string; // the search, highlighted in the transcript
 };
 
 const timeOf = (ts: number) =>
@@ -46,13 +51,18 @@ export function NoteRow(props: Props) {
   const [editing, setEditing] = useState(false);
   const [editingShow, setEditingShow] = useState(false);
   const [editingTranscript, setEditingTranscript] = useState(false);
+  const toast = useToast();
+  // With a transcript, the untouched "Voice note · HH:MM" title only repeats the time column: the text leads.
+  const textFirst = !!note.transcript && isDefaultTitle(note.title) && !editing;
   // A queued or running job hides the Transcribe actions; a failed one shows Retry instead.
   const busy = transcription !== undefined && transcription.state !== 'failed';
-  const canTranscribe = !busy && note.status === 'ok';
+  // A remote note can be transcribed too: its audio is fetched from the account first.
+  const canTranscribe = !busy && note.status !== 'missing';
   const editFromMenu = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const showInput = useRef<HTMLInputElement>(null);
   const missing = note.status === 'missing';
+  const remote = note.status === 'remote';
   // MediaRecorder WebM has no duration header (<audio>.duration is Infinity), so progress uses the stored length.
   const progress = note.durationMs > 0 ? Math.min(1, Math.max(0, positionMs / note.durationMs)) : 0;
 
@@ -75,6 +85,17 @@ export function NoteRow(props: Props) {
     if (title && title !== note.title) onRename(title);
   };
 
+  const transcript = (
+    <Transcript
+      note={note}
+      editing={editingTranscript}
+      setEditing={setEditingTranscript}
+      onSave={props.onEditTranscript}
+      query={props.query ?? ''}
+      first={textFirst}
+    />
+  );
+
   return (
     <li
       draggable={!editing && !editingShow && !editingTranscript}
@@ -93,11 +114,13 @@ export function NoteRow(props: Props) {
     >
       <button
         onClick={onTogglePlay}
-        disabled={missing}
-        aria-label={playing ? 'Pause' : 'Play'}
+        disabled={missing || props.loading}
+        aria-label={props.loading ? 'Downloading' : playing ? 'Pause' : 'Play'}
         className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {playing ? (
+        {props.loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : playing ? (
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor">
             <rect x="6" y="5" width="4" height="14" rx="1" />
             <rect x="14" y="5" width="4" height="14" rx="1" />
@@ -122,7 +145,7 @@ export function NoteRow(props: Props) {
             }}
             className="w-full rounded-md border border-input bg-background px-2 py-0.5 text-sm outline-none focus:border-ring"
           />
-        ) : (
+        ) : textFirst ? null : (
           <button
             onClick={() => setEditing(true)}
             title="Click to rename"
@@ -131,7 +154,16 @@ export function NoteRow(props: Props) {
             {note.title}
           </button>
         )}
-        <div className="mt-1.5 flex items-center gap-3">
+        {textFirst && transcript}
+        <div className={`${textFirst ? 'mt-2' : 'mt-1.5'} flex items-center gap-3`}>
+          {note.transcriptLang && (
+            <span
+              title={`Transcript language: ${LANGUAGE_NAMES[note.transcriptLang] ?? note.transcriptLang}`}
+              className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground"
+            >
+              {note.transcriptLang}
+            </span>
+          )}
           {note.kind === 'rewind' && (
             <span
               title="Rewind: the last seconds of system audio, saved in film mode"
@@ -167,6 +199,11 @@ export function NoteRow(props: Props) {
               </button>
             )
           )}
+          {remote && (
+            <span title="In your account: downloads when you play it" className="text-muted-foreground">
+              <Cloud className="size-3.5" aria-label="In your account" />
+            </span>
+          )}
           {note.source !== 'mic' && note.kind !== 'rewind' && (
             <span title={note.source === 'both' ? 'Mic + system audio' : 'System audio'} className="text-muted-foreground">
               <Volume2 className="size-3.5" aria-label="Includes system audio" />
@@ -187,12 +224,7 @@ export function NoteRow(props: Props) {
             )
           )}
         </div>
-        <Transcript
-          note={note}
-          editing={editingTranscript}
-          setEditing={setEditingTranscript}
-          onSave={props.onEditTranscript}
-        />
+        {!textFirst && transcript}
         {transcription && <JobLine status={transcription} onRetry={() => onTranscribe()} />}
       </div>
 
@@ -205,18 +237,41 @@ export function NoteRow(props: Props) {
         />
       )}
 
-      <button
-        aria-label={note.starred ? 'Unstar' : 'Star'}
-        aria-pressed={note.starred}
-        onClick={onToggleStar}
-        className={`grid h-8 w-8 place-items-center rounded-md transition-opacity hover:bg-accent ${
-          note.starred ? 'text-amber-500' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
-        }`}
-      >
-        <Star className="size-4" fill={note.starred ? 'currentColor' : 'none'} />
-      </button>
-      <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{formatDuration(note.durationMs)}</span>
-      <span className="w-12 text-right text-xs tabular-nums text-muted-foreground/70">{timeOf(note.createdAt)}</span>
+      {/* Copy and Star appear over the duration and time on hover, so the text keeps their room. */}
+      <div className="relative flex items-center gap-4">
+        <div className="flex items-center gap-4 transition-opacity group-hover:opacity-0 group-has-[:focus-visible]:opacity-0">
+          {note.starred && <Star aria-hidden className="size-3.5 text-amber-500" fill="currentColor" />}
+          <span className="w-12 text-right text-xs tabular-nums text-muted-foreground">{formatDuration(note.durationMs)}</span>
+          <span className="w-12 text-right text-xs tabular-nums text-muted-foreground/70">{timeOf(note.createdAt)}</span>
+        </div>
+        <div className="absolute inset-y-0 right-0 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          {!!note.transcript && !editingTranscript && (
+            <button
+              aria-label="Copy transcript"
+              title="Copy transcript"
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(note.transcript ?? '')
+                  .then(() => toast('Transcript copied'))
+                  .catch(() => toast("Couldn't copy"))
+              }
+              className="grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <Copy className="size-4" />
+            </button>
+          )}
+          <button
+            aria-label={note.starred ? 'Unstar' : 'Star'}
+            aria-pressed={note.starred}
+            onClick={onToggleStar}
+            className={`grid h-8 w-8 place-items-center rounded-md hover:bg-accent ${
+              note.starred ? 'text-amber-500' : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Star className="size-4" fill={note.starred ? 'currentColor' : 'none'} />
+          </button>
+        </div>
+      </div>
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -263,7 +318,7 @@ export function NoteRow(props: Props) {
             ) : (
               <DropdownMenuItem onSelect={onSetupTranscription}>Set up transcription</DropdownMenuItem>
             ))}
-          {!missing && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
+          {note.status === 'ok' && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
             Delete
@@ -279,8 +334,10 @@ function Transcript(props: {
   editing: boolean;
   setEditing: (on: boolean) => void;
   onSave: (text: string) => void;
+  query: string;
+  first: boolean; // leads the row (no title above)
 }) {
-  const { note, editing, setEditing, onSave } = props;
+  const { note, editing, setEditing, onSave, query, first } = props;
   const cancelled = useRef(false);
   if (note.transcript === null) return null;
   if (editing) {
@@ -300,28 +357,83 @@ function Transcript(props: {
           cancelled.current = true;
           e.currentTarget.blur();
         }}
-        className="mt-2 block w-full resize-none rounded-md border border-input bg-background px-2 py-1 text-xs leading-relaxed outline-none [field-sizing:content] focus:border-ring"
+        className={`${first ? '' : 'mt-2'} block w-full resize-none rounded-md border border-input bg-background px-2 py-1 text-xs leading-relaxed outline-none [field-sizing:content] focus:border-ring`}
       />
     );
   }
+  if (note.transcript === '') return <div className="mt-2 text-xs italic text-muted-foreground">No speech detected</div>;
+  return <TranscriptText text={note.transcript} query={query} first={first} onEdit={() => setEditing(true)} />;
+}
+
+const CLAMP_LINES = 4;
+
+function highlight(text: string, ranges: [number, number][]) {
+  if (ranges.length === 0) return text;
+  const parts: React.ReactNode[] = [];
+  let at = 0;
+  for (const [start, end] of ranges) {
+    parts.push(text.slice(at, start));
+    parts.push(
+      <mark key={start} className="rounded-sm bg-amber-200/70 text-inherit dark:bg-amber-400/30">
+        {text.slice(start, end)}
+      </mark>,
+    );
+    at = end;
+  }
+  parts.push(text.slice(at));
+  return parts;
+}
+
+/** The transcript as the row's body, like a message: full-colour text, clamped with Show more when long. */
+function TranscriptText(props: { text: string; query: string; first: boolean; onEdit: () => void }) {
+  const { text, query, first, onEdit } = props;
+  const body = useRef<HTMLSpanElement>(null);
+  const ranges = matchRanges(text, query);
+  // A search opens the transcript, so a match past the fourth line is still visible.
+  const [expanded, setExpanded] = useState(ranges.length > 0);
+  const matched = ranges.length > 0;
+  useEffect(() => setExpanded(matched), [matched]);
+  const [overflows, setOverflows] = useState(false);
+
+  // Longer than CLAMP_LINES lines, measured from the full height so it holds whether or not it's clamped.
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    const measure = () => {
+      const line = parseFloat(getComputedStyle(el).lineHeight);
+      setOverflows(el.scrollHeight > line * CLAMP_LINES + 1);
+    };
+    measure();
+    const resize = new ResizeObserver(measure);
+    resize.observe(el);
+    return () => resize.disconnect();
+  }, [text]);
+
   return (
-    <button
-      aria-label="Show transcript"
-      title="Click to edit"
-      onClick={() => setEditing(true)}
-      className="mt-2 flex w-full items-start gap-2 text-left text-xs leading-relaxed text-muted-foreground hover:text-foreground"
-    >
-      {note.transcriptLang && (
-        <span className="mt-px shrink-0 rounded bg-muted px-1 text-[10px] font-medium uppercase">
-          {note.transcriptLang}
+    <div className={first ? '' : 'mt-2.5'}>
+      <button
+        aria-label="Show transcript"
+        title="Click to edit"
+        onClick={onEdit}
+        className="block w-full cursor-text text-left text-sm leading-relaxed text-foreground/90"
+      >
+        <span
+          ref={body}
+          className="block whitespace-pre-line"
+          style={expanded ? undefined : { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: CLAMP_LINES, overflow: 'hidden' }}
+        >
+          {highlight(text, ranges)}
         </span>
+      </button>
+      {overflows && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
       )}
-      {note.transcript === '' ? (
-        <span className="italic">No speech detected</span>
-      ) : (
-        <span className="line-clamp-2 whitespace-pre-line">{note.transcript}</span>
-      )}
-    </button>
+    </div>
   );
 }
 

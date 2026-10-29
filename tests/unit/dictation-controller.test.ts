@@ -10,6 +10,8 @@ let blocked: boolean;
 let transcribe: (wav: Uint8Array, signal: AbortSignal) => Promise<string>;
 let save: (text: string, app: string | null) => void;
 let paste: (text: string) => Promise<void>;
+let calendarOn: boolean;
+let calendarAdd: (text: string) => Promise<{ ok: boolean; message: string }>;
 let ctl: DictationController;
 
 const audio = (durationMs: number) => ({ bytes: new Uint8Array([1, 2, 3]), durationMs });
@@ -25,6 +27,11 @@ beforeEach(() => {
   save = (text, app) => log.push(`save:${text}:${app}`);
   paste = async (text) => {
     log.push(`paste:${text}`);
+  };
+  calendarOn = false;
+  calendarAdd = async (text) => {
+    log.push(`add:${text}`);
+    return { ok: true, message: 'Added · Lunch · Fri 30 Oct, 13:00' };
   };
   const ports: DictationPorts = {
     overlay: {
@@ -42,6 +49,7 @@ beforeEach(() => {
     save: (text, app) => save(text, app),
     paste: (text) => paste(text),
     idleState: () => IDLE,
+    calendar: { enabled: () => calendarOn, add: (text) => calendarAdd(text) },
     onIdle: () => log.push('idle'),
     onCaptureStart: () => log.push('capture-start'),
     onCaptureEnd: () => log.push('capture-end'),
@@ -212,4 +220,47 @@ it('dismissFlash stops a pending error flash from resetting the pill', async () 
   ctl.dismissFlash();
   await vi.advanceTimersByTimeAsync(3000);
   expect(states).toHaveLength(n);
+});
+
+it('voice to calendar: a trigger adds an event instead of pasting', async () => {
+  calendarOn = true;
+  transcribe = async () => 'Calendar, lunch tomorrow 1pm.';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log).toContain('save:📅 Calendar, lunch tomorrow 1pm.:Slack');
+  expect(log).toContain('add:lunch tomorrow 1pm');
+  expect(log.some((l) => l.startsWith('paste:'))).toBe(false);
+  expect(states.slice(-2)).toEqual([
+    { kind: 'busy', message: 'Adding to calendar…' },
+    { kind: 'done', message: 'Added · Lunch · Fri 30 Oct, 13:00' },
+  ]);
+  expect(ctl.state).toBe('idle');
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(states.at(-1)).toEqual(IDLE);
+});
+
+it('voice to calendar: a failed add says why, then pastes the text', async () => {
+  calendarOn = true;
+  transcribe = async () => 'Calendar lunch at 1';
+  calendarAdd = async () => ({ ok: false, message: "Can't reach Google." });
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(states.at(-1)).toEqual({ kind: 'error', message: "Can't reach Google.", retry: false });
+  expect(log).toContain('paste:Calendar lunch at 1');
+  expect(ctl.state).toBe('idle');
+});
+
+it('voice to calendar: off, or no trigger, pastes as usual', async () => {
+  transcribe = async () => 'Calendar lunch at 1';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  calendarOn = true;
+  transcribe = async () => 'Schedule is tight';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log.filter((l) => l.startsWith('paste:') || l.startsWith('add:'))).toEqual(['paste:Calendar lunch at 1', 'paste:Schedule is tight']);
 });

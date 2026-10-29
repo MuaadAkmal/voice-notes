@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Pin, PinOff } from 'lucide-react';
+import { EditorView } from '@codemirror/view';
 import type { Page } from '../../shared/channels';
 import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
 import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { MarkdownEditor } from './editor/MarkdownEditor';
+import { shouldTakeRemoteBody } from '../../shared/sync/page-refresh';
 import { useToast } from './Toast';
 import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
 
@@ -32,6 +34,12 @@ export function PageView({ page, fresh, onBack }: Props) {
   const [title, setTitle] = useState(shown.title);
   const titleInput = useRef<HTMLInputElement>(null);
   const editorHost = useRef<HTMLDivElement>(null);
+  // The editor reads its text only when it mounts: a body from another PC remounts it (new key).
+  const [editorKey, setEditorKey] = useState(0);
+  const localBody = useRef(shown.body);
+  // The stored text this editor's edits build on: what it loaded, then what it last saved. A save based
+  // on text that changed underneath (another PC's edit while you typed) keeps the other text as a copy.
+  const baseBody = useRef(shown.body);
   const home = useHomeWidgets();
   const pinned = isPinned(home.widgets ?? [], shown.id);
   const pinDisabled = home.widgets === null || (!pinned && !canAdd(home.widgets));
@@ -44,7 +52,8 @@ export function PageView({ page, fresh, onBack }: Props) {
   const [saver] = useState(() => {
     const s: DebouncedSaver<string> = new DebouncedSaver<string>(
       async (body) => {
-        await api.setPageBody(shown.id, body);
+        await api.setPageBody(shown.id, body, baseBody.current);
+        baseBody.current = body;
         if (!s.pending) setStatus('saved');
       },
       SAVE_DELAY_MS,
@@ -79,6 +88,17 @@ export function PageView({ page, fresh, onBack }: Props) {
     if (fresh) titleInput.current?.select(); // select() also focuses
   }, [fresh]);
 
+  // Changed on another PC: show it, unless you're working in the page (your text wins locally, and the
+  // server's keep-both rule settles it when your save syncs).
+  useEffect(() => {
+    const focused = !!editorHost.current?.contains(document.activeElement);
+    if (shouldTakeRemoteBody({ dirty: saver.pending, focused, localBody: localBody.current, remoteBody: shown.body })) {
+      localBody.current = shown.body;
+      baseBody.current = shown.body;
+      setEditorKey((k) => k + 1);
+    }
+  }, [shown.body, saver]);
+
   // Renamed elsewhere (e.g. from the list): follow, unless the title is being edited here.
   useEffect(() => {
     if (document.activeElement !== titleInput.current) setTitle(shown.title);
@@ -98,8 +118,22 @@ export function PageView({ page, fresh, onBack }: Props) {
   const focusEditor = () =>
     editorHost.current?.querySelector<HTMLElement>('.cm-content')?.focus();
 
+  /** A click in the empty space beside or below the text puts the caret on the nearest line, not wherever it was. */
+  const caretAtClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget || e.button !== 0) return;
+    const dom = editorHost.current?.querySelector<HTMLElement>('.cm-editor');
+    const view = dom && EditorView.findFromDOM(dom);
+    if (!view) return;
+    e.preventDefault();
+    const box = view.contentDOM.getBoundingClientRect();
+    const x = Math.min(Math.max(e.clientX, box.left + 1), box.right - 1);
+    const pos = view.posAtCoords({ x, y: e.clientY }, false);
+    view.focus();
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+  };
+
   return (
-    <div className="min-h-full px-10 py-6">
+    <div onMouseDown={caretAtClick} className="min-h-full px-10 py-6">
       <header className="mx-auto max-w-[720px]">
         <div className="mb-5 flex items-center justify-between">
           <button
@@ -152,17 +186,14 @@ export function PageView({ page, fresh, onBack }: Props) {
       </header>
       <div
         ref={editorHost}
-        // Clicks in the empty space below the text land in the editor.
-        onMouseDown={(e) => {
-          if (e.target !== e.currentTarget) return;
-          e.preventDefault();
-          focusEditor();
-        }}
+        onMouseDown={caretAtClick}
         className="mx-auto mt-4 min-h-[60vh] max-w-[720px] cursor-text"
       >
         <MarkdownEditor
+          key={editorKey}
           value={shown.body}
           onChange={(body) => {
+            localBody.current = body;
             saver.push(body);
             setStatus('saving');
           }}

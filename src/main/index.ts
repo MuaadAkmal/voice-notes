@@ -1,4 +1,5 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, screen, session } from 'electron';
+import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, powerMonitor, screen, session, shell } from 'electron';
+import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
 import { cleanTranscript } from '../shared/transcription';
+import { OFF as POMODORO_OFF, type Pomodoro } from '../shared/pomodoro';
 import { DictationController } from './dictation/controller';
 import { electronClipboard } from './dictation/clipboard';
 import { pasteText } from './dictation/paste';
@@ -24,6 +26,16 @@ import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
 import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
+import { applyRemotePrefs, recordPrefs } from './sync/prefs';
+import { SyncController } from './sync/controller';
+import { SyncPings, supabasePings } from './sync/pings';
+import { SyncEngine } from './sync/engine';
+import { FileSync, SyncOff } from './sync/files';
+import { HttpSyncServer } from './sync/http-server';
+import { ConnectorsClient } from './connectors/client';
+import { GoogleCalendar } from './connectors/google-calendar';
+import { ConnectorsService } from './connectors/service';
+import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
 import { resolveEndpoint } from './transcription/endpoint';
@@ -32,6 +44,10 @@ import { safeStorageCipher, Secrets } from './transcription/secrets';
 import { TranscriptionService } from './transcription/service';
 import { WavBridge } from './transcription/wav-bridge';
 import { createTray } from './tray';
+import { AccountService } from './account/account';
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
+import { SessionStore } from './account/session-store';
+import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -47,10 +63,12 @@ const PROBE_TIMEOUT_MS = 2000;
 const DICTATION_PRUNE_MS = 60 * 60_000;
 let isQuitting = false;
 let dashboard: BrowserWindow | null = null;
+let onDashboardFocus: () => void = () => undefined; // set in boot
 
 function showDashboard(): void {
   if (!dashboard || dashboard.isDestroyed()) {
     dashboard = createDashboardWindow();
+    dashboard.on('focus', () => onDashboardFocus());
     dashboard.on('close', (e) => {
       if (isQuitting) return;
       e.preventDefault();
@@ -73,6 +91,7 @@ async function boot(): Promise<void> {
   nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
   const store = NoteStore.open(userData);
   log.info('[store] reconcile', await store.reconcile());
+  log.info('[store] purged tombstones', store.purgeTombstones(Date.now()));
   // Widgets whose page no longer exists (deleted while pruning failed, or removed outside the app).
   const liveWidgets = keepExisting(
     settings.homeWidgets,
@@ -84,8 +103,14 @@ async function boot(): Promise<void> {
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
   if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
-  registerNoteProtocol(store);
-  registerImageProtocol(store);
+  // Audio and images from the account come through FileSync, made with the sync wiring below.
+  const filesHolder: { files?: FileSync } = {};
+  const fetcher = {
+    fetchAudio: (id: string) => (filesHolder.files ? filesHolder.files.fetchAudio(id) : Promise.reject(new SyncOff())),
+    fetchImage: (name: string) => (filesHolder.files ? filesHolder.files.fetchImage(name) : Promise.reject(new SyncOff())),
+  };
+  registerNoteProtocol(store, fetcher);
+  registerImageProtocol(store, fetcher);
 
   const overlay = createOverlayWindow(() => settings.pillPosition);
   // Only the overlay records; the dashboard just plays files through note://.
@@ -190,7 +215,7 @@ async function boot(): Promise<void> {
   const gesture = new HotkeyGesture();
   const controller = new RecorderController(
     {
-      start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source }),
+      start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source, ping: settings.dictationSound }),
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
       rewind: (seconds) => send(Ch.FilmSave, { seconds }),
@@ -285,6 +310,14 @@ async function boot(): Promise<void> {
       }).catch((err) => log.error('[dictation] paste failed', err));
     },
     idleState,
+    calendar: {
+      // needs-reconnect too, so the pill says why instead of pasting "Calendar, …" silently.
+      enabled: () => settings.voiceToCalendar && ['connected', 'needs-reconnect'].includes(connectors.current().state),
+      add: async (text) => {
+        const r = await connectors.quickAdd(text);
+        return 'event' in r ? { ok: true, message: `Added · ${formatAdded(r.event)}` } : { ok: false, message: addErrorText(r.error) };
+      },
+    },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
     onCaptureEnd: () => autoPause.end(),
@@ -299,6 +332,7 @@ async function boot(): Promise<void> {
   overlay.webContents.on('did-finish-load', () => {
     setOverlayState(idleState());
     send(Ch.FilmMode, { on: settings.filmMode }); // a reloaded overlay restarts the buffer
+    send(Ch.PomodoroConfig, settings.pomodoro);
   });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     log.error('[overlay] renderer gone', details.reason);
@@ -306,6 +340,8 @@ async function boot(): Promise<void> {
   });
 
   let devices: AudioDevice[] = [];
+  // The overlay's pomodoro, as it last reported it (the dashboard's Pomodoro page shows it).
+  let pomodoro: Pomodoro = POMODORO_OFF;
   registerOverlayIpc({
     overlay,
     overlayMouse,
@@ -365,6 +401,14 @@ async function boot(): Promise<void> {
         throw err;
       }
     },
+    onPomodoro: (timer) => {
+      pomodoro = timer;
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.PomodoroChanged, timer);
+    },
+    onPomodoroDone: (focusMs) => {
+      store.pomodoro.add(focusMs);
+      toDashboard(Ch.PomodoroSessionsChanged);
+    },
   });
 
   const rewind = () => {
@@ -412,10 +456,12 @@ async function boot(): Promise<void> {
     },
   });
 
-  function updateSettings(patch: Partial<Settings>): Settings {
+  /** record: false for settings that just arrived from the account (they must not be sent back). */
+  function updateSettings(patch: Partial<Settings>, opts: { record?: boolean } = {}): Settings {
     // A widget list from the dashboard (possibly stale) never loses the locked Review later card.
     patch = guardWidgets(patch, settings, randomUUID);
     Object.assign(settings, saveSettings(settingsFile, patch));
+    if (opts.record !== false) recordPrefs(patch, store.sync.outbox);
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.dictationHotkey) hotkey.setDictationCombo(settings.dictationHotkey);
     if (patch.recordingSource) tray.refresh();
@@ -434,12 +480,180 @@ async function boot(): Promise<void> {
     }
     // Not over a saved flash: that would wipe "Add title" (or a title being typed).
     if (patch.showIdlePill !== undefined || patch.filmMode !== undefined) controller.refreshIdle();
+    if (patch.pomodoro) send(Ch.PomodoroConfig, settings.pomodoro);
     if (patch.theme) nativeTheme.themeSource = settings.theme; // fires 'updated' → caption buttons recolour
     toDashboard(Ch.SettingsChanged);
     return { ...settings };
   }
 
   const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
+
+  const syncHolder: { controller?: SyncController } = {}; // set below; the account callback needs it
+  const connectorsHolder: { service?: ConnectorsService } = {};
+  // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
+  const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
+  const testing = process.env.VOICE_NOTES_TEST === '1';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      flowType: 'pkce',
+      storage: sessionStore,
+      persistSession: true,
+      autoRefreshToken: !testing, // tests never talk to Supabase
+      detectSessionInUrl: false,
+    },
+    // Electron's network stack, so the system proxy applies (as for the built-in model downloads).
+    global: { fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string | Request), init) },
+  });
+  const account = new AccountService({
+    auth: supabase.auth,
+    store: sessionStore,
+    // Under test the browser is never opened: the URL is recorded like every other external link.
+    openExternal: async (url) => {
+      if (testing) openedExternal.push(url);
+      else await shell.openExternal(url);
+    },
+    fetchImage: fetchAvatar,
+    focusApp: showDashboard,
+    onChange: (info) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
+      syncHolder.controller?.onAccountChanged();
+      connectorsHolder.service?.onAccountChanged();
+    },
+  });
+  if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
+
+  // Two-PC sync through the `sync` Edge Function: rows, then audio and images.
+  let testToken: (() => Promise<string | null>) | null = null;
+  const makeSyncServer = (baseUrl: string) =>
+    new HttpSyncServer({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      // A token only for the account this PC syncs with: never another account's, even mid-switch.
+      getToken: async () => {
+        if (testToken) return testToken();
+        const session = (await supabase.auth.getSession()).data.session;
+        return session && session.user.id === store.sync.state.accountId() ? session.access_token : null;
+      },
+      fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
+    });
+  let syncServer = makeSyncServer(SUPABASE_URL);
+  const syncEngine = new SyncEngine(
+    store,
+    { push: (req: PushRequest) => syncServer.push(req), pull: (req: PullRequest) => syncServer.pull(req) },
+    {
+      get: () => settings,
+      update: (patch, opts) => updateSettings(patch, opts),
+      applyRemote: (prefs) =>
+        applyRemotePrefs(prefs, {
+          getSettings: () => settings,
+          updateSettings: (patch, opts) => updateSettings(patch, opts),
+          pages: store.pages,
+          deviceName: store.sync.state.deviceName(),
+        }),
+    },
+  );
+  syncEngine.queueExistingFiles(); // audio and images of a PC that synced rows before files did
+  const fileSync = new FileSync({
+    store,
+    // Through the current server, so a test's useServer() applies to files too.
+    server: {
+      uploadUrl: (req) => syncServer.uploadUrl(req),
+      downloadUrl: (req) => syncServer.downloadUrl(req),
+      put: (url, bytes, type) => syncServer.put(url, bytes, type),
+      get: (url) => syncServer.get(url),
+    },
+    canSync: () => {
+      const info = account.current();
+      return info.state === 'signed-in' && info.userId === store.sync.state.accountId() && store.sync.state.network();
+    },
+    onNotesChanged: () => toDashboard(Ch.NotesChanged),
+  });
+  filesHolder.files = fileSync;
+  // Under test, pings come from __voiceNotes.sync.ping instead of Realtime.
+  let testPing: ((from: string) => void) | null = null;
+  const syncPings = new SyncPings({
+    source: testing
+      ? { listen: (_user, onPing) => ((testPing = onPing), () => void (testPing = null)) }
+      : supabasePings(supabase),
+    selfId: () => store.sync.state.deviceId(),
+    onRemoteChange: () => syncController.onRemoteChange(),
+  });
+  const syncController: SyncController = new SyncController({
+    pings: syncPings,
+    files: fileSync,
+    engine: syncEngine,
+    state: store.sync.state,
+    settings: () => settings,
+    currentUser: () => {
+      const info = account.current();
+      return info.state === 'signed-in' ? info.userId : null;
+    },
+    refreshSession: async () => {
+      if (!testToken) await supabase.auth.refreshSession();
+    },
+    onView: (view) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.SyncChanged, view);
+    },
+    onChanged: (changes) => {
+      // Settings arrive through updateSettings, which already tells both windows.
+      if (changes.notes) toDashboard(Ch.NotesChanged);
+      if (changes.pages) toDashboard(Ch.PagesChanged);
+      if (changes.folders) toDashboard(Ch.FoldersChanged);
+    },
+  });
+  syncHolder.controller = syncController;
+  store.sync.outbox.onRecord = () => syncController.onLocalChange();
+  store.sync.files.onRecord = () => syncController.onLocalChange();
+  powerMonitor.on('resume', () => syncController.onResume());
+  syncController.start();
+
+  // Google Calendar through the `connectors` Edge Function: it keeps the refresh token, main gets
+  // short-lived access tokens and calls Google itself.
+  let testConnectorsToken: (() => Promise<string | null>) | null = null;
+  const connectorsFetch: typeof fetch = (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init);
+  const makeConnectors = (baseUrl: string, calendarUrl?: string) => {
+    const client = new ConnectorsClient({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      getToken: async () => {
+        if (testConnectorsToken) return testConnectorsToken();
+        return (await supabase.auth.getSession()).data.session?.access_token ?? null;
+      },
+      fetch: connectorsFetch,
+    });
+    return { client, calendar: new GoogleCalendar({ token: () => client.token(), fetch: connectorsFetch, baseUrl: calendarUrl }) };
+  };
+  let connectorsApi = makeConnectors(SUPABASE_URL);
+  const connectors = new ConnectorsService({
+    client: {
+      start: (returnPort) => connectorsApi.client.start(returnPort),
+      status: () => connectorsApi.client.status(),
+      attempt: (state) => connectorsApi.client.attempt(state),
+      disconnect: () => connectorsApi.client.disconnect(),
+    },
+    calendar: {
+      todayEvents: (now) => connectorsApi.calendar.todayEvents(now),
+      events: (from, to) => connectorsApi.calendar.events(from, to),
+      create: (e) => connectorsApi.calendar.create(e),
+      quickAdd: (text) => connectorsApi.calendar.quickAdd(text),
+      clear: () => connectorsApi.calendar.clear(),
+    },
+    userId: () => {
+      const info = account.current();
+      return info.state === 'signed-in' ? info.userId : null;
+    },
+    openExternal: async (url) => {
+      if (testing) openedExternal.push(url);
+      else await shell.openExternal(url);
+    },
+    focusApp: showDashboard,
+    onChange: (info) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.ConnectorsChanged, info);
+    },
+  });
+  connectorsHolder.service = connectors;
+  onDashboardFocus = () => connectors.onFocus();
+  void connectors.refresh();
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,
@@ -452,6 +666,7 @@ async function boot(): Promise<void> {
         return true;
       }),
     notesChanged: () => toDashboard(Ch.NotesChanged),
+    fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
     },
@@ -474,6 +689,19 @@ async function boot(): Promise<void> {
     secrets,
     wavBridge,
     localWhisper,
+    account,
+    sync: syncController,
+    connectors,
+    files: fileSync,
+    pomodoro: {
+      get: () => pomodoro,
+      command: (action) => send(Ch.PomodoroCommand, { action }),
+      sessions: () => store.pomodoro.list(),
+      clear: () => {
+        store.pomodoro.clear();
+        toDashboard(Ch.PomodoroSessionsChanged);
+      },
+    },
   });
 
   app.on('before-quit', () => {
@@ -481,6 +709,7 @@ async function boot(): Promise<void> {
     autoPause.end(); // quitting mid-note must not leave the film paused
   });
   app.on('will-quit', () => {
+    syncController.stop();
     localWhisper.stop(); // never leave whisper-server.exe running
     hotkey.stop();
     store.close();
@@ -501,6 +730,19 @@ async function boot(): Promise<void> {
       dictation,
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine
+      account, // setTestSession(info): signed in or out without Google
+      sync: {
+        useServer: (url: string) => void (syncServer = makeSyncServer(url)), // a local test server
+        useToken: (fn: () => Promise<string | null>) => void (testToken = fn),
+        now: () => syncController.syncNow(),
+        ping: (from: string) => testPing?.(from), // as if another PC pushed
+      },
+      connectors: {
+        // A local stand-in for the function, which also serves the Calendar API under /calendar/v3.
+        useServer: (url: string) => void (connectorsApi = makeConnectors(url, `${url}/calendar/v3`)),
+        useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
+        service: connectors,
+      },
     };
   }
 
@@ -517,4 +759,20 @@ if (!app.requestSingleInstanceLock()) {
     log.error('[boot] failed', err);
     app.quit();
   });
+}
+
+const AVATAR_MAX_BYTES = 1024 * 1024;
+
+/** The Google photo as a data: URL (the dashboard's CSP stays closed to the web), or null. */
+async function fetchAvatar(url: string): Promise<string | null> {
+  try {
+    const res = await net.fetch(url, { signal: AbortSignal.timeout(5000) });
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !/^image\/(png|jpeg|webp|gif)/.test(type)) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > AVATAR_MAX_BYTES) return null;
+    return `data:${type.split(';')[0]};base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }

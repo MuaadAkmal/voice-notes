@@ -12,7 +12,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Same signature as before the Sonner switch, so call sites are unchanged. */
-export const useToast = () => (message: string) => {
-  toast(message);
+/** Same signature as before the Sonner switch, so call sites are unchanged; `action` adds a button. */
+export const useToast = () => (message: string, action?: { label: string; onClick: () => void }) => {
+  toast(message, action ? { action } : undefined);
 };

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
+import { DEFAULT_POMODORO } from '../shared/pomodoro';
 import { DEFAULT_TRANSCRIPTION, type ModelId } from '../shared/transcription';
 
 // uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
@@ -33,6 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   dictationHotkey: [CTRL, META],
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,
+  voiceToCalendar: true,
+  pomodoro: DEFAULT_POMODORO,
 };
 
 function readRaw(file: string): Record<string, unknown> {

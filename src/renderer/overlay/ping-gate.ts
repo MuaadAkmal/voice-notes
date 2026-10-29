@@ -7,6 +7,10 @@ export function markPing(ms: number): void {
   endsAt = Date.now() + ms;
 }
 
+export function pingSounding(): boolean {
+  return Date.now() < endsAt;
+}
+
 /** Resolves once no ping is sounding; if one is, `settleMs` after it ends (for a probe that looks back in time). */
 export function afterPing(settleMs = 0): Promise<void> {
   const wait = endsAt - Date.now();

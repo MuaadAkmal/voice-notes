@@ -70,19 +70,6 @@ function Waveform({ analyser, source, onSilentChange }: WaveformProps) {
 
   return <canvas ref={canvas} style={{ width: WAVE_W, height: WAVE_H }} aria-hidden />;
 }
-function Timer({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, []);
-  const s = Math.max(0, Math.floor((now - startedAt) / 1000));
-  return (
-    <span className="w-9 text-right font-mono text-xs tabular-nums text-white/80">
-      {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}
-    </span>
-  );
-}
 
 const MIC_PATH = 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Zm-7 9a7 7 0 0 0 14 0M12 19v2';
 const SPEAKER_PATH = 'M4 9v6h4l5 4V5L8 9H4Zm12.5-.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12';
@@ -198,6 +185,7 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
       onMouseEnter={() => {
         clearTimeout(linger.current);
         setOpen(true);
+        pomo.seen();
         hover.onMouseEnter();
       }}
       onMouseLeave={() => {
@@ -305,7 +293,6 @@ export function Pill({ state, analyser, pomo }: PillProps) {
               </span>
             )}
           </div>
-          <Timer startedAt={state.startedAt} />
           {state.mode === 'handsfree' && <HandsFreeGlyph />}
           {state.mode === 'handsfree' && (
             <button
@@ -335,5 +322,7 @@ export function Pill({ state, analyser, pomo }: PillProps) {
       ) : (
         <div data-morph className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
       );
+    case 'done':
+      return <div data-morph className={`${shell} h-10 bg-emerald-600/95 px-5 text-sm`}>{state.message}</div>;
   }
 }

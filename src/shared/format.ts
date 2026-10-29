@@ -10,6 +10,9 @@ export function defaultTitle(date: Date): string {
   return `Voice note · ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
+/** True for the "Voice note · HH:MM" title a note gets when it's saved without one. */
+export const isDefaultTitle = (title: string) => /^Voice note · \d{2}:\d{2}$/.test(title);
+
 const startOfDay = (ts: number) => {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);

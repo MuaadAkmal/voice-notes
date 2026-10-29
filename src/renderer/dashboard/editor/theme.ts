@@ -14,7 +14,12 @@ const baseTheme = EditorView.theme({
   '.cm-scroller': { fontFamily: 'var(--font-sans)', lineHeight: '1.7' },
   '.cm-content': { padding: '8px 0 40vh', caretColor: 'var(--foreground)' },
   '.cm-line': { padding: '0' },
-  '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--foreground)' },
+  // CodeMirror's default caret is a sub-pixel hairline that's easy to lose after a click; draw a solid 2px bar.
+  '.cm-cursor, .cm-dropCursor': {
+    borderLeft: '2px solid var(--foreground)',
+    marginLeft: '-1px',
+    borderRadius: '1px',
+  },
   '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, ::selection':
     { backgroundColor: 'color-mix(in oklch, var(--primary) 18%, transparent)' },
 

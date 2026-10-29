@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { FilePlus, Search, Star, X } from 'lucide-react';
-import type { Folder, Note, Page } from '../../shared/channels';
+import type { FetchAudioResult, Folder, Note, Page } from '../../shared/channels';
 import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, type SourceFilter } from '../../shared/search';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
@@ -15,6 +15,14 @@ import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useHomeWidgets } from './useHomeWidgets';
 import { useTranscription } from './useTranscription';
+
+/** Why a remote note's audio couldn't be brought to this PC. */
+const FETCH_FAILED: Record<Extract<FetchAudioResult, { ok: false }>['reason'], string> = {
+  'not-uploaded': "This audio hasn't reached your account yet. It uploads when the PC that recorded it is online.",
+  offline: "Couldn't download: you're offline.",
+  'sync-off': 'Turn on sync to get this audio.',
+  error: "Couldn't download this audio.",
+};
 
 const api = window.dashboardApi;
 
@@ -55,6 +63,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const confirm = useConfirm();
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
@@ -160,13 +169,23 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   };
 
   // One shared <audio>: starting a note stops whatever was playing.
-  const togglePlay = (note: Note) => {
+  const togglePlay = async (note: Note) => {
     const el = audio.current;
     if (!el) return;
     if (playingId === note.id) {
       el.pause();
       setPlayingId(null);
       return;
+    }
+    if (note.status === 'remote') {
+      // Recorded on another PC: bring its audio here first.
+      setLoadingId(note.id);
+      const res = await api.fetchAudio(note.id);
+      setLoadingId(null);
+      if (!res.ok) {
+        toast(FETCH_FAILED[res.reason]);
+        return;
+      }
     }
     el.src = `note://${note.id}`;
     setPositionMs(0);
@@ -393,6 +412,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                     {...common}
                     note={note}
                     playing={playingId === note.id}
+              loading={loadingId === note.id}
                     positionMs={playingId === note.id ? positionMs : 0}
                     onTogglePlay={() => togglePlay(note)}
                     onRename={(t) => api.renameNote(note.id, t).catch((e) => toast(cleanIpcError(e)))}
@@ -409,6 +429,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                     }}
                     onSetupTranscription={() => onNavigate({ kind: 'transcription' })}
                     onEditTranscript={(text) => api.setTranscript(note.id, text).catch((e) => toast(cleanIpcError(e)))}
+                    query={filter.query}
                   />
                 );
               })}

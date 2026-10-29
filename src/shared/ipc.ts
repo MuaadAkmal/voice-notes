@@ -21,6 +21,7 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
     h: Span,
   }),
   z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid(), w: Span, h: Span, locked: z.literal(true).optional() }),
+  z.object({ id: z.uuid(), type: z.literal('calendar'), w: Span, h: Span }),
 ]);
 
 const TranscriptionSchema = z
@@ -56,6 +57,17 @@ export const SettingsFieldSchemas = {
   dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
+  voiceToCalendar: z.boolean(),
+  pomodoro: z.object({
+    focusMin: z.number().int().min(1).max(120),
+    shortBreakMin: z.number().int().min(1).max(60),
+    longBreakMin: z.number().int().min(1).max(60),
+    longBreakEvery: z.number().int().min(2).max(10),
+    autoStartBreaks: z.boolean(),
+    autoStartFocus: z.boolean(),
+    sound: z.boolean(),
+    dailyGoal: z.number().int().min(1).max(24),
+  }),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -65,6 +77,8 @@ export const AudioPayloadSchema = z.object({
   durationMs: z.number().nonnegative().finite(),
   mimeType: z.string().min(1).max(100),
   source: SourceSchema,
+  /** A voice note that never rose above silence (rewinds don't set it). */
+  silent: z.boolean().optional(),
 });
 
 export const IdSchema = z.uuid();
@@ -105,7 +119,11 @@ export const SetShowSchema = z.object({
 });
 
 export const CreatePageSchema = z.object({ folderId: IdSchema.nullable() });
-export const SetBodySchema = z.object({ id: IdSchema, body: z.string().max(5 * 1024 * 1024) });
+export const SetBodySchema = z.object({
+  id: IdSchema,
+  body: z.string().max(5 * 1024 * 1024),
+  expected: z.string().max(5 * 1024 * 1024).optional(), // the text the edit was based on (PageView)
+});
 export const AppendEntrySchema = z.object({ id: IdSchema, text: z.string().trim().min(1).max(500) });
 export const SetTaskSchema = z.object({ id: IdSchema, line: z.number().int().min(0), checked: z.boolean() });
 export const SaveImageSchema = z.object({
@@ -151,3 +169,26 @@ export const WavReplySchema = z.union([
   }),
 ]);
 export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });
+
+const PomodoroCurrent = {
+  phase: z.enum(['focus', 'break']),
+  long: z.boolean(),
+  durationMs: z.number().int().positive(),
+  done: z.number().int().nonnegative(),
+};
+export const PomodoroSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('off') }),
+  z.object({ status: z.literal('running'), endsAt: z.number().finite(), ...PomodoroCurrent }),
+  z.object({ status: z.literal('paused'), remainingMs: z.number().nonnegative().finite(), ...PomodoroCurrent }),
+]);
+export const PomodoroDoneSchema = z.object({ focusMs: z.number().int().min(60_000).max(120 * 60_000) });
+export const PomodoroCommandSchema = z.object({ action: z.enum(['start', 'pause', 'resume', 'skip', 'stop']) });
+
+const DAY_MS = 86_400_000;
+export const RangeSchema = z
+  .object({ from: z.number().int(), to: z.number().int() })
+  .refine((r) => r.to > r.from && r.to - r.from <= 62 * DAY_MS);
+export const NewEventSchema = z
+  .object({ title: z.string().trim().min(1).max(1000), allDay: z.boolean(), start: z.number().int(), end: z.number().int() })
+  .refine((e) => e.end > e.start && e.end - e.start <= 366 * DAY_MS);
+export const QuickAddSchema = z.object({ text: z.string().trim().min(1).max(1000) });

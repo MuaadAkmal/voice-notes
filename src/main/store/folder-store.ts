@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { eq } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull } from 'drizzle-orm';
 import type { Folder } from '../../shared/channels';
 import { isDescendant } from '../../shared/folders';
-import { folders, notes, pages } from './schema';
+import type { Outbox } from '../sync/outbox';
+import { folders, liveColumns, notes, pages } from './schema';
+
+const folderColumns = liveColumns(getTableColumns(folders));
+const live = isNull(folders.deletedAt);
 
 const MAX_NAME = 100;
 
@@ -14,14 +18,19 @@ export class FolderStore {
     private readonly db: BetterSQLite3Database,
     private readonly sqlite: Database.Database,
     private readonly now: () => number,
+    private readonly outbox: Outbox,
   ) {}
 
+  private recordUpdate(id: string, fields: Partial<Pick<Folder, 'name' | 'parentId' | 'updatedAt'>>): void {
+    this.outbox.record({ op: 'folder.update', id, fields }, this.outbox.rowVersion('folder', id));
+  }
+
   list(): Folder[] {
-    return this.db.select().from(folders).all();
+    return this.db.select(folderColumns).from(folders).where(live).all();
   }
 
   get(id: string): Folder | undefined {
-    return this.db.select().from(folders).where(eq(folders.id, id)).get();
+    return this.db.select(folderColumns).from(folders).where(and(eq(folders.id, id), live)).get();
   }
 
   create(name: string, parentId: string | null): Folder {
@@ -30,7 +39,10 @@ export class FolderStore {
     this.assertFree(clean, parentId);
     const ts = this.now();
     const folder: Folder = { id: randomUUID(), name: clean, parentId, createdAt: ts, updatedAt: ts };
-    this.db.insert(folders).values(folder).run();
+    this.sqlite.transaction(() => {
+      this.db.insert(folders).values(folder).run();
+      this.outbox.record({ op: 'folder.create', id: folder.id, row: folder }, 0);
+    })();
     return folder;
   }
 
@@ -38,7 +50,11 @@ export class FolderStore {
     const folder = this.require(id);
     const clean = cleanName(name);
     this.assertFree(clean, folder.parentId, id);
-    return this.update(id, { name: clean });
+    return this.sqlite.transaction(() => {
+      const folder = this.update(id, { name: clean });
+      this.recordUpdate(id, { name: clean, updatedAt: folder.updatedAt });
+      return folder;
+    })();
   }
 
   move(id: string, parentId: string | null): Folder {
@@ -48,20 +64,39 @@ export class FolderStore {
       if (isDescendant(this.list(), id, parentId)) throw new Error("Can't move a folder into itself");
     }
     this.assertFree(folder.name, parentId, id);
-    return this.update(id, { parentId });
+    return this.sqlite.transaction(() => {
+      const moved = this.update(id, { parentId });
+      this.recordUpdate(id, { parentId, updatedAt: moved.updatedAt });
+      return moved;
+    })();
   }
 
   /** Moves the folder's notes, pages and subfolders up to its parent (renaming clashes "Name (2)"), then deletes it. */
   delete(id: string): void {
     const folder = this.require(id);
     this.sqlite.transaction(() => {
-      this.db.update(notes).set({ folderId: folder.parentId }).where(eq(notes.folderId, id)).run();
-      this.db.update(pages).set({ folderId: folder.parentId }).where(eq(pages.folderId, id)).run();
+      const folderId = folder.parentId;
+      const movedNotes = this.db
+        .update(notes)
+        .set({ folderId })
+        .where(and(eq(notes.folderId, id), isNull(notes.deletedAt)))
+        .returning({ id: notes.id })
+        .all();
+      for (const n of movedNotes) this.outbox.record({ op: 'note.update', id: n.id, fields: { folderId } }, this.outbox.rowVersion('note', n.id));
+      const movedPages = this.db
+        .update(pages)
+        .set({ folderId })
+        .where(and(eq(pages.folderId, id), isNull(pages.deletedAt)))
+        .returning({ id: pages.id })
+        .all();
+      for (const p of movedPages) this.outbox.record({ op: 'page.update', id: p.id, fields: { folderId } }, this.outbox.rowVersion('page', p.id));
       for (const child of this.list().filter((f) => f.parentId === id)) {
         const name = this.freeName(child.name, folder.parentId, child.id);
-        this.update(child.id, { parentId: folder.parentId, name });
+        const moved = this.update(child.id, { parentId: folder.parentId, name });
+        this.recordUpdate(child.id, { parentId: folder.parentId, name, updatedAt: moved.updatedAt });
       }
-      this.db.delete(folders).where(eq(folders.id, id)).run();
+      this.db.update(folders).set({ deletedAt: this.now() }).where(eq(folders.id, id)).run(); // tombstone
+      this.outbox.record({ op: 'folder.delete', id }, this.outbox.rowVersion('folder', id));
     })();
   }
 
@@ -70,7 +105,7 @@ export class FolderStore {
       .update(folders)
       .set({ ...patch, updatedAt: this.now() })
       .where(eq(folders.id, id))
-      .returning()
+      .returning(folderColumns)
       .get()!;
   }
 

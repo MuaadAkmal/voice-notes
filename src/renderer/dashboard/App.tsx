@@ -7,22 +7,30 @@ import { HomePage } from './HomePage';
 import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
+import { PomodoroPage } from './PomodoroPage';
+import { CalendarPage } from './CalendarPage';
+import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
 import { TranscriptionPage } from './TranscriptionPage';
+import { AccountPage } from './AccountPage';
 import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 
 export type View =
   | { kind: 'home' }
   | { kind: 'dictation' }
+  | { kind: 'pomodoro' }
   | { kind: 'inbox' }
   | { kind: 'all' }
   | { kind: 'starred' }
   | { kind: 'folder'; id: string }
   | { kind: 'page'; id: string }
   | { kind: 'settings' }
-  | { kind: 'transcription' };
+  | { kind: 'transcription' }
+  | { kind: 'account' }
+  | { kind: 'connectors' }
+  | { kind: 'calendar' };
 
 const api = window.dashboardApi;
 
@@ -35,12 +43,13 @@ export function App() {
     setView(v);
     setFilter(NO_FILTER);
   };
+  const goHome = useCallback(() => setView({ kind: 'home' }), []);
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [pages, setPages] = useState<Page[] | null>(null);
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -69,7 +78,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -109,13 +118,21 @@ export function App() {
           <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} onNewPage={newPage} />
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'home' ? (
-              <HomePage pages={pages} onOpenPage={openPage} />
+              <HomePage pages={pages} onOpenPage={openPage} onOpenConnectors={() => navigate({ kind: 'connectors' })} />
             ) : view.kind === 'dictation' ? (
               <DictationPage />
+            ) : view.kind === 'pomodoro' ? (
+              <PomodoroPage />
             ) : view.kind === 'settings' ? (
               <SettingsPage />
             ) : view.kind === 'transcription' ? (
               <TranscriptionPage />
+            ) : view.kind === 'connectors' ? (
+              <ConnectorsPage />
+            ) : view.kind === 'calendar' ? (
+              <CalendarPage onOpenConnectors={() => navigate({ kind: 'connectors' })} />
+            ) : view.kind === 'account' ? (
+              <AccountPage onSignedOut={goHome} />
             ) : view.kind === 'page' ? (
               <PageView
                 key={view.id}

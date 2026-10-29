@@ -13,6 +13,9 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
+  NewEventSchema,
+  QuickAddSchema,
+  RangeSchema,
 } from '../../src/shared/ipc';
 import { MAX_IMAGE_BYTES } from '../../src/shared/page-images';
 
@@ -133,5 +136,40 @@ describe('later:drop schema', () => {
     const parsed = DropPayloadSchema.parse({ text: 'x'.repeat(20_001), uriList: '', html: 'h'.repeat(300_000) });
     expect(parsed.text).toHaveLength(20_000);
     expect(parsed.html).toHaveLength(20_000);
+  });
+});
+
+describe('calendar widget schema', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  it('accepts a calendar widget with an optional size', () => {
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar' }] }).success).toBe(true);
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar', w: 2, h: 3 }] }).success).toBe(true);
+  });
+  it('rejects a bad id or size', () => {
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id: 'x', type: 'calendar' }] }).success).toBe(false);
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar', w: 9 }] }).success).toBe(false);
+  });
+});
+
+describe('calendar event schemas', () => {
+  const DAY = 86_400_000;
+  const ok = { title: 'Lunch', allDay: false, start: 1_000, end: 2_000 };
+  it('NewEvent trims the title and checks the times', () => {
+    expect(NewEventSchema.parse({ ...ok, title: '  Lunch ' }).title).toBe('Lunch');
+    expect(NewEventSchema.safeParse({ ...ok, title: '   ' }).success).toBe(false);
+    expect(NewEventSchema.safeParse({ ...ok, title: 'x'.repeat(1001) }).success).toBe(false);
+    expect(NewEventSchema.safeParse({ ...ok, end: 1_000 }).success).toBe(false);
+    expect(NewEventSchema.safeParse({ ...ok, end: 1_000 + 367 * DAY }).success).toBe(false);
+    expect(NewEventSchema.safeParse({ ...ok, end: 1_000 + 366 * DAY }).success).toBe(true);
+  });
+  it('QuickAdd needs 1–1000 characters', () => {
+    expect(QuickAddSchema.safeParse({ text: ' ' }).success).toBe(false);
+    expect(QuickAddSchema.safeParse({ text: 'x'.repeat(1001) }).success).toBe(false);
+    expect(QuickAddSchema.parse({ text: ' Lunch 1pm ' }).text).toBe('Lunch 1pm');
+  });
+  it('Range runs forward, at most 62 days', () => {
+    expect(RangeSchema.safeParse({ from: 0, to: 42 * DAY }).success).toBe(true);
+    expect(RangeSchema.safeParse({ from: 5, to: 5 }).success).toBe(false);
+    expect(RangeSchema.safeParse({ from: 0, to: 63 * DAY }).success).toBe(false);
   });
 });

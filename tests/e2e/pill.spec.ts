@@ -17,7 +17,7 @@ test.afterEach(async () => {
   await t.close();
 });
 
-test('shows "No sound" when the input is silent, and still saves', async () => {
+test('shows "No sound" when the input is silent, and does not save a silent note', async () => {
   t = await launch({ fakeAudioFile: 'tests/e2e/fixtures/silence.wav' });
   const pill = await overlay(t);
   await t.hooks((h) => h.gesture.toggle());
@@ -25,7 +25,8 @@ test('shows "No sound" when the input is silent, and still saves', async () => {
   await expect(pill.getByTitle('No sound — check mic/source')).toBeVisible();
   await pill.screenshot({ path: '.superpowers/shots/pill-nosound.png' });
   await t.hooks((h) => h.gesture.toggle());
-  await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
+  await expect(pill.getByText('Nothing heard · not saved')).toBeVisible();
+  expect(await t.hooks((h) => h.store.list().length)).toBe(0);
 });
 
 test('dragging the pill moves the window and remembers it, without recording', async () => {
@@ -66,7 +67,7 @@ test('a plain click on the pill still toggles hands-free recording', async () =>
 test('Add title on the pill names the note just saved, then gives focus back', async () => {
   t = await launch();
   const pill = await overlay(t);
-  await t.record(1000);
+  await t.record(1500);
   await expect(pill.getByRole('button', { name: /Add title/ })).toBeVisible();
   await pill.screenshot({ path: '.superpowers/shots/pill-saved.png' });
   await pill.getByRole('button', { name: /Add title/ }).click();

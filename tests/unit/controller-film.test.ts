@@ -63,7 +63,7 @@ it('stores the window context captured when recording started', async () => {
   c.handleGesture('start');
   context = { windowTitle: 'something else', show: null }; // focus moved while recording
   c.handleGesture('stop');
-  await c.onAudio(audio(1000));
+  await c.onAudio(audio(1500));
   expect(created[0]).toMatchObject({ kind: 'note', windowTitle: 'Dark | Netflix - Google Chrome', show: 'Dark' });
 });
 
@@ -71,7 +71,7 @@ it('no context available stores nulls', async () => {
   context = null;
   c.handleGesture('start');
   c.handleGesture('stop');
-  await c.onAudio(audio(1000));
+  await c.onAudio(audio(1500));
   expect(created[0]).toMatchObject({ windowTitle: null, show: null });
 });
 
@@ -123,7 +123,7 @@ it('rewind audio or errors arriving late never touch a new recording, and record
   expect(created).toEqual([]);
   c.handleGesture('cancel');
   c.rewind();
-  await c.onAudio(audio(1000));
+  await c.onAudio(audio(1500));
   c.onCaptureError('No microphone');
   expect(c.state).toBe('rewinding');
 });
@@ -133,7 +133,7 @@ it('refreshIdle re-sends idle only when nothing else is on the pill', async () =
   expect(lastState()).toEqual(IDLE);
   c.handleGesture('start');
   c.handleGesture('stop');
-  await c.onAudio(audio(1000));
+  await c.onAudio(audio(1500));
   const n = states.length;
   c.refreshIdle(); // the saved flash (and a title typed into it) must survive a settings change
   expect(states).toHaveLength(n);
@@ -161,14 +161,14 @@ it('capture end fires on cancel, capture error and a recorder that ended itself'
   c.handleGesture('start');
   c.onCaptureError('No microphone');
   c.handleGesture('start');
-  await c.onAudio(audio(1000)); // mic unplugged mid-recording
+  await c.onAudio(audio(1500)); // mic unplugged mid-recording
   expect(captures).toEqual(['start:mic', 'end', 'start:mic', 'end', 'start:mic', 'end']);
 });
 
 it('stop then audio fires capture end only once', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
-  await c.onAudio(audio(1000));
+  await c.onAudio(audio(1500));
   expect(captures).toEqual(['start:mic', 'end']);
 });
 
