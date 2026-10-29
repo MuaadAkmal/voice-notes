@@ -140,6 +140,17 @@ it('no refresh token, or an exchange that throws, is failed', async () => {
   expect(await thrown.core.callback({ code: 'c', state: 'state1' })).toBe('failed');
 });
 
+it('attempt tells the owner how the consent ended', async () => {
+  const { core } = setup({
+    exchange: async () => ({ refreshToken: 'r1', scope: 'openid email', idToken: null }),
+  });
+  await core.start(USER, null);
+  expect(await core.attempt(USER, 'state1')).toEqual({ result: null });
+  await core.callback({ code: 'c', state: 'state1' });
+  expect(await core.attempt(USER, 'state1')).toEqual({ result: 'no-calendar' });
+  expect(await core.attempt('22222222-2222-4222-8222-222222222222', 'state1')).toEqual({ result: null });
+});
+
 it('token refreshes with the decrypted token', async () => {
   const { core, calls } = setup();
   await core.start(USER, null);

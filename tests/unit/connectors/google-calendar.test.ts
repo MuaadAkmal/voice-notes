@@ -114,3 +114,20 @@ it('clear forgets the token', async () => {
   await cal.todayEvents(NOW);
   expect(tokens()).toBe(2);
 });
+
+it('a token fetched before clear() is not kept', async () => {
+  let release!: () => void;
+  let n = 0;
+  const fetch = (async () => new Response(JSON.stringify({ items: [] }), { status: 200 })) as typeof globalThis.fetch;
+  const cal = new GoogleCalendar({
+    token: () => (++n === 1 ? new Promise((r) => (release = () => r({ accessToken: 'old', expiresIn: 3600 }))) : Promise.resolve({ accessToken: 'new', expiresIn: 3600 })),
+    fetch,
+    baseUrl: 'https://cal.test/v3',
+  });
+  const first = cal.todayEvents(NOW);
+  cal.clear(); // signed out while the token was on its way
+  release();
+  await first;
+  await cal.todayEvents(NOW);
+  expect(n).toBe(2);
+});

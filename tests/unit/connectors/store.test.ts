@@ -68,6 +68,18 @@ function runStoreContract(name: string, make: () => Promise<ConnectorStore>, tim
       expect(await s.takeState('old', 50)).toBeNull(); // gone, even asked as if it were still live
     });
 
+    it('a taken state reports its result once finished, only to its owner', async () => {
+      const s = await make();
+      await s.putState({ state: 'st', userId: A, provider: 'google-calendar', expiresAt: 2_000_000_000_000 });
+      expect(await s.stateResult(A, 'st')).toBeNull();
+      await s.takeState('st', 1_000);
+      expect(await s.stateResult(A, 'st')).toBeNull(); // taken, not finished
+      await s.finishState('st', 'no-calendar');
+      expect(await s.stateResult(A, 'st')).toBe('no-calendar');
+      expect(await s.stateResult(B, 'st')).toBeNull();
+      expect(await s.takeState('st', 1_000)).toBeNull();
+    });
+
     it('put upserts', async () => {
       const s = await make();
       await s.put(row());

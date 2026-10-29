@@ -1,4 +1,4 @@
-import type { ConnectorsStatus, TokenResponse } from '../../shared/connectors/protocol';
+import type { CallbackResult, ConnectorsStatus, TokenResponse } from '../../shared/connectors/protocol';
 import { AuthExpired, NotSignedIn, Offline } from '../sync/http-server';
 
 // The app's side of the `connectors` Edge Function. The refresh token stays there; this only ever
@@ -34,6 +34,11 @@ export class ConnectorsClient {
 
   status(): Promise<ConnectorsStatus> {
     return this.call('GET', 'status');
+  }
+
+  /** How the consent with this state ended; null while the browser is still at Google. */
+  attempt(state: string): Promise<{ result: CallbackResult | null }> {
+    return this.call('GET', `google/attempt?state=${encodeURIComponent(state)}`);
   }
 
   token(): Promise<TokenResponse> {

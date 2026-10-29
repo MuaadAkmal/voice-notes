@@ -1,4 +1,5 @@
-import { type CallbackResult, type ConnectorsCore, NotConnected, Revoked } from './core';
+import { type ConnectorsCore, NotConnected, Revoked } from './core';
+import type { CallbackResult } from './protocol';
 
 // The `connectors` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
 // The account always comes from the verified token, except on Google's redirect, where the one-time
@@ -8,7 +9,7 @@ export type ConnectorsHandlerDeps = {
   /** The user for a valid access token, else null. */
   verify(jwt: string): Promise<{ userId: string; email: string | null } | null>;
   /** Null when a secret is missing: every route then says which. */
-  core: Pick<ConnectorsCore, 'start' | 'callback' | 'token' | 'disconnect' | 'status'> | null;
+  core: Pick<ConnectorsCore, 'start' | 'callback' | 'attempt' | 'token' | 'disconnect' | 'status'> | null;
   missing: string[];
 };
 
@@ -51,7 +52,7 @@ export async function handleConnectors(req: Request, d: ConnectorsHandlerDeps): 
   const last = parts[parts.length - 1];
   const route = parts[parts.length - 2] === 'google' ? `google/${last}` : last;
   const key = `${req.method} ${route}`;
-  const routes = ['POST google/start', 'GET google/callback', 'GET google/token', 'POST google/disconnect', 'GET status'];
+  const routes = ['POST google/start', 'GET google/callback', 'GET google/attempt', 'GET google/token', 'POST google/disconnect', 'GET status'];
   if (!routes.includes(key)) return json(404, { error: 'Not found' });
 
   try {
@@ -72,6 +73,7 @@ export async function handleConnectors(req: Request, d: ConnectorsHandlerDeps): 
     if (!user) return json(401, { error: 'Sign in again' });
 
     if (key === 'POST google/start') return json(200, await d.core.start(user.userId, user.email));
+    if (key === 'GET google/attempt') return json(200, await d.core.attempt(user.userId, url.searchParams.get('state') ?? ''));
     if (key === 'GET google/token') {
       try {
         return json(200, await d.core.token(user.userId));

@@ -606,10 +606,14 @@ async function boot(): Promise<void> {
     client: {
       start: () => connectorsApi.client.start(),
       status: () => connectorsApi.client.status(),
+      attempt: (state) => connectorsApi.client.attempt(state),
       disconnect: () => connectorsApi.client.disconnect(),
     },
     calendar: { todayEvents: (now) => connectorsApi.calendar.todayEvents(now), clear: () => connectorsApi.calendar.clear() },
-    signedIn: () => account.current().state === 'signed-in',
+    userId: () => {
+      const info = account.current();
+      return info.state === 'signed-in' ? info.userId : null;
+    },
     openExternal: async (url) => {
       if (testing) openedExternal.push(url);
       else await shell.openExternal(url);

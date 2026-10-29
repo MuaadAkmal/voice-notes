@@ -17,6 +17,7 @@ type Deps = {
 
 export class GoogleCalendar {
   private cached: { accessToken: string; expiresAt: number } | null = null;
+  private generation = 0; // bumped by clear(): a token already on its way is then not kept
 
   constructor(private readonly d: Deps) {}
 
@@ -37,6 +38,7 @@ export class GoogleCalendar {
 
   clear(): void {
     this.cached = null;
+    this.generation++;
   }
 
   private async get(url: string): Promise<Response> {
@@ -51,8 +53,9 @@ export class GoogleCalendar {
   private async accessToken(): Promise<string> {
     const now = this.d.now?.() ?? Date.now();
     if (this.cached && this.cached.expiresAt - EARLY_MS > now) return this.cached.accessToken;
+    const generation = this.generation;
     const t = await this.d.token();
-    this.cached = { accessToken: t.accessToken, expiresAt: now + t.expiresIn * 1000 };
+    if (generation === this.generation) this.cached = { accessToken: t.accessToken, expiresAt: now + t.expiresIn * 1000 };
     return t.accessToken;
   }
 }

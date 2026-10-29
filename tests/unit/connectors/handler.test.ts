@@ -92,6 +92,14 @@ it('token, disconnect and status answer as agreed', async () => {
   expect(await (await call('GET', 'status')).json()).toEqual({ google: null });
 });
 
+it('attempt needs a token and passes the state', async () => {
+  let seen: [string, string] | null = null;
+  const call = setup({ core: core({ attempt: async (u, s) => ((seen = [u, s]), { result: 'denied' as const }) }) });
+  expect((await call('GET', 'google/attempt?state=st1', null)).status).toBe(401);
+  expect(await (await call('GET', 'google/attempt?state=st1')).json()).toEqual({ result: 'denied' });
+  expect(seen).toEqual([USER, 'st1']);
+});
+
 it('a thrown error is a bare 500', async () => {
   const call = setup({ core: core({ status: async () => Promise.reject(new Error('db password wrong')) }) });
   const res = await call('GET', 'status');

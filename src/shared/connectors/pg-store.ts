@@ -1,4 +1,5 @@
-import type { ConnectorRow, ConnectorStore, Provider, StateRow } from './store';
+import type { CallbackResult } from './protocol';
+import { type ConnectorRow, type ConnectorStore, type Provider, type StateRow, TAKEN } from './store';
 
 /** The slice of a Postgres client the store needs (postgres.js in the function, PGlite in tests). */
 export type ConnectorDb = { query<T>(text: string, params?: unknown[]): Promise<T[]> };
@@ -24,12 +25,27 @@ export class PgConnectorStore implements ConnectorStore {
   }
 
   async takeState(state: string, now: number): Promise<{ userId: string; provider: Provider } | null> {
-    const rows = await this.db.query<{ user_id: string; provider: Provider; expires_at: Date | string }>(
-      'delete from public.connector_states where state = $1 returning user_id, provider, expires_at',
-      [state],
+    // One update, so two callbacks with the same state can't both take it.
+    const rows = await this.db.query<{ user_id: string; provider: Provider }>(
+      `update public.connector_states set result = $3 where state = $1 and result is null and expires_at > $2
+       returning user_id, provider`,
+      [state, new Date(now).toISOString(), TAKEN],
     );
     const r = rows[0];
-    return r && new Date(r.expires_at).getTime() > now ? { userId: r.user_id, provider: r.provider } : null;
+    return r ? { userId: r.user_id, provider: r.provider } : null;
+  }
+
+  async finishState(state: string, result: CallbackResult): Promise<void> {
+    await this.db.query('update public.connector_states set result = $2 where state = $1', [state, result]);
+  }
+
+  async stateResult(userId: string, state: string): Promise<CallbackResult | null> {
+    const rows = await this.db.query<{ result: string | null }>(
+      'select result from public.connector_states where state = $1 and user_id = $2',
+      [state, userId],
+    );
+    const r = rows[0]?.result;
+    return r && r !== TAKEN ? (r as CallbackResult) : null;
   }
 
   async deleteExpiredStates(now: number): Promise<void> {

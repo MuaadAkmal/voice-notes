@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TodayResult } from '../../../shared/channels';
 import { eventPhase, formatEventTime, msUntilMidnight } from '../../../shared/calendar-format';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ const MESSAGES: Record<Exclude<Extract<TodayResult, { error: string }>['error'],
 export function CalendarWidget({ onOpenConnectors }: { onOpenConnectors: () => void }) {
   const [result, setResult] = useState<TodayResult | null>(null);
   const [now, setNow] = useState(Date.now());
+  const lastState = useRef<string | null>(null);
 
   const load = useCallback(() => {
     setNow(Date.now());
@@ -26,7 +27,12 @@ export function CalendarWidget({ onOpenConnectors }: { onOpenConnectors: () => v
     load();
     const every = setInterval(load, REFRESH_MS);
     window.addEventListener('focus', load);
-    const off = api.onConnectorsChanged(load);
+    // Reload when the connection really changes (connected, disconnected…), not on every push.
+    const off = api.onConnectorsChanged((info) => {
+      if (info.state === lastState.current) return;
+      lastState.current = info.state;
+      load();
+    });
     return () => {
       clearInterval(every);
       window.removeEventListener('focus', load);

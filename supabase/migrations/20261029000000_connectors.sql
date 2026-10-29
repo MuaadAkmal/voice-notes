@@ -17,7 +17,8 @@ create table public.connector_states (
   state text primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
   provider text not null,
-  expires_at timestamptz not null
+  expires_at timestamptz not null,
+  result text -- null: waiting; 'taken': Google came back; then how it ended, which the app polls
 );
 create index connector_states_expires on public.connector_states (expires_at);
 

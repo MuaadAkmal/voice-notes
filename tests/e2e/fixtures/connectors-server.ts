@@ -13,7 +13,7 @@ import { CALENDAR_SCOPE } from '../../../src/shared/connectors/protocol';
 export async function startConnectorsServer(
   user: { userId: string; email: string },
   events: unknown[],
-): Promise<{ url: string; connect(email: string): Promise<void>; close(): Promise<void> }> {
+): Promise<{ url: string; connect(email: string): Promise<void>; requests(route: string): number; close(): Promise<void> }> {
   let consentEmail = '';
   let lastState = '';
   let n = 0;
@@ -36,7 +36,9 @@ export async function startConnectorsServer(
   });
   const deps = { verify: async () => user, core, missing: [] };
 
+  const seen: string[] = [];
   const server = http.createServer(async (req, res) => {
+    seen.push(new URL(req.url ?? '/', 'http://x').pathname);
     if (req.url?.startsWith('/calendar/v3/calendars/primary/events')) {
       res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ items: events }));
       return;
@@ -57,6 +59,8 @@ export async function startConnectorsServer(
       const page = await core.callback({ code: 'c', state: lastState });
       if (page !== 'connected') throw new Error(`consent ended as ${page}`);
     },
+    /** How many requests reached a path ending in `route` (e.g. 'google/token'). */
+    requests: (route) => seen.filter((p) => p.endsWith(route)).length,
     close: () => new Promise((r) => server.close(() => r())),
   };
 }

@@ -1,6 +1,6 @@
 import type { TokenCipher } from './crypto.ts';
 import { emailFromIdToken, type GoogleOAuth, InvalidGrant } from './google-oauth.ts';
-import { CALENDAR_SCOPE, type ConnectorsStatus, type TokenResponse } from './protocol.ts';
+import { CALENDAR_SCOPE, type CallbackResult, type ConnectorsStatus, type TokenResponse } from './protocol.ts';
 import type { ConnectorStore } from './store.ts';
 
 // The rules of the `connectors` Edge Function: start a consent round trip, finish it from Google's
@@ -9,7 +9,7 @@ import type { ConnectorStore } from './store.ts';
 export class NotConnected extends Error {}
 export class Revoked extends Error {}
 
-export type CallbackResult = 'connected' | 'expired' | 'denied' | 'no-calendar' | 'failed';
+export type { CallbackResult };
 
 const PROVIDER = 'google-calendar';
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -50,7 +50,18 @@ export class ConnectorsCore {
 
   async callback(q: { code?: string; state?: string; error?: string }): Promise<CallbackResult> {
     const owner = q.state ? await this.d.store.takeState(q.state, this.d.now()) : null;
-    if (!owner) return 'expired';
+    if (!owner || !q.state) return 'expired';
+    const result = await this.finish(owner.userId, q);
+    await this.d.store.finishState(q.state, result);
+    return result;
+  }
+
+  /** How `userId`'s round trip with `state` ended; null while the browser is still at Google. */
+  async attempt(userId: string, state: string): Promise<{ result: CallbackResult | null }> {
+    return { result: await this.d.store.stateResult(userId, state) };
+  }
+
+  private async finish(userId: string, q: { code?: string; error?: string }): Promise<CallbackResult> {
     if (q.error || !q.code) return 'denied';
     try {
       const grant = await this.d.google.exchange(q.code, this.d.redirectUri);
@@ -58,7 +69,7 @@ export class ConnectorsCore {
       if (!grant.scope.split(' ').includes(CALENDAR_SCOPE)) return 'no-calendar';
       if (!grant.refreshToken) return 'failed';
       await this.d.store.put({
-        userId: owner.userId,
+        userId,
         provider: PROVIDER,
         accountEmail: (grant.idToken && emailFromIdToken(grant.idToken)) || '',
         refreshToken: await this.d.cipher.encrypt(grant.refreshToken),

@@ -58,3 +58,9 @@ it('disconnect accepts 204', async () => {
   await c.disconnect();
   expect([seen[0].url, seen[0].method]).toEqual(['https://p.supabase.co/functions/v1/connectors/google/disconnect', 'POST']);
 });
+
+it('attempt asks about one consent by its state', async () => {
+  const { c, seen } = client(() => json(200, { result: 'denied' }));
+  expect(await c.attempt('st 1')).toEqual({ result: 'denied' });
+  expect(seen[0].url).toBe('https://p.supabase.co/functions/v1/connectors/google/attempt?state=st%201');
+});

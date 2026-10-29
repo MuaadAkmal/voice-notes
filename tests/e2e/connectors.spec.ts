@@ -71,6 +71,10 @@ test('connect Google Calendar, see today on Home, disconnect', async () => {
 
   await page.getByRole('button', { name: /^Home/ }).click();
   await expect(page.getByText('Connect Google Calendar to see today here.')).toBeVisible();
+  // Not connected, the card must not keep asking: one load, then quiet.
+  const asked = server.requests('google/token');
+  await page.waitForTimeout(2000);
+  expect(server.requests('google/token') - asked).toBeLessThanOrEqual(1);
 });
 
 test('signed out, the Connectors page asks to sign in', async () => {

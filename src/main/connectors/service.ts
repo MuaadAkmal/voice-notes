@@ -1,15 +1,17 @@
 import type { CalendarEvent, ConnectorsInfo, TodayResult } from '../../shared/channels';
+import type { CallbackResult } from '../../shared/connectors/protocol';
 import { NotSignedIn, Offline } from '../sync/http-server';
 import { type ConnectorsClient, NotConnected, Revoked } from './client';
 import type { GoogleCalendar } from './google-calendar';
 
 // The Google Calendar connection, run in main. Connecting opens Google's consent in the browser; Google
-// sends the browser to the `connectors` function, so this only waits for the function to say connected.
+// sends the browser to the `connectors` function, so this only asks the function how that consent ended.
 
 type Deps = {
-  client: Pick<ConnectorsClient, 'start' | 'status' | 'disconnect'>;
+  client: Pick<ConnectorsClient, 'start' | 'status' | 'attempt' | 'disconnect'>;
   calendar: Pick<GoogleCalendar, 'todayEvents' | 'clear'>;
-  signedIn(): boolean;
+  /** The signed-in account, or null. */
+  userId(): string | null;
   openExternal(url: string): Promise<void>;
   focusApp(): void;
   onChange(info: ConnectorsInfo): void;
@@ -20,12 +22,21 @@ type Deps = {
 
 const FOCUS_REFRESH_MS = 60_000;
 const NO_ANSWER = "Didn't hear back from Google. Try again.";
+const REFUSED: Partial<Record<CallbackResult, string>> = {
+  denied: "Google Calendar wasn't connected.",
+  'no-calendar': "Calendar access wasn't granted. Tick the calendar box and try again.",
+  failed: 'Something went wrong at Google. Try again.',
+  expired: NO_ANSWER,
+};
 
 export class ConnectorsService {
   private info: ConnectorsInfo = { state: 'signed-out' };
   private running: Promise<void> | null = null;
   private abort: AbortController | null = null;
   private lastFocus = -Infinity;
+  private user: string | null = null;
+  // Bumped when the account changes: answers that were on their way for the old one are dropped.
+  private generation = 0;
 
   constructor(private readonly d: Deps) {}
 
@@ -34,22 +45,33 @@ export class ConnectorsService {
   }
 
   async refresh(): Promise<void> {
-    if (!this.d.signedIn()) return this.set({ state: 'signed-out' });
-    if (this.running) return; // the connect loop owns the state until it ends
+    this.user = this.d.userId();
+    if (!this.user) return this.set({ state: 'signed-out' });
+    if (this.connecting()) return; // the connect loop owns the state until it ends
+    const generation = this.generation;
     try {
       const { google } = await this.d.client.status();
-      if (!this.running) this.set(google ? { state: 'connected', email: google.email } : { state: 'disconnected' });
+      if (generation !== this.generation || this.connecting()) return;
+      if (google) this.set({ state: 'connected', email: google.email });
+      // The server forgets a revoked connection; keep saying why until it is connected again.
+      else if (this.info.state !== 'needs-reconnect') this.set({ state: 'disconnected' });
     } catch (err) {
+      if (generation !== this.generation) return;
       if (err instanceof NotSignedIn) return this.set({ state: 'signed-out' });
       // Offline at start: say so rather than guess; a known state is kept.
       if (this.info.state === 'signed-out') this.set({ state: 'disconnected', error: message(err) });
     }
   }
 
-  /** Signed in, out, or as someone else: whatever was in flight belonged to the old account. */
+  /** Called on every account event; only a different account (or signing in or out) resets anything. */
   onAccountChanged(): void {
+    if (this.d.userId() === this.user) return;
+    this.generation++;
     this.abort?.abort();
     this.d.calendar.clear();
+    // Whatever this PC knew was about the old account.
+    if (!this.d.userId()) this.set({ state: 'signed-out' });
+    else if (this.info.state !== 'connected' && this.info.state !== 'disconnected') this.set({ state: 'disconnected' });
     void this.refresh();
   }
 
@@ -82,12 +104,14 @@ export class ConnectorsService {
   }
 
   async today(now: Date): Promise<TodayResult> {
-    if (!this.d.signedIn()) return { error: 'signed-out' };
+    if (!this.d.userId()) return { error: 'signed-out' };
+    const generation = this.generation;
     let events: CalendarEvent[];
     try {
       events = await this.d.calendar.todayEvents(now);
     } catch (err) {
-      if (err instanceof Revoked) {
+      if (generation !== this.generation) return { error: 'failed' };
+      if (err instanceof Revoked || (err instanceof NotConnected && this.info.state === 'needs-reconnect')) {
         this.set({ state: 'needs-reconnect' });
         return { error: 'needs-reconnect' };
       }
@@ -102,26 +126,35 @@ export class ConnectorsService {
     return { events };
   }
 
+  private connecting(): boolean {
+    return !!this.abort && !this.abort.signal.aborted;
+  }
+
   private async run(): Promise<void> {
-    if (!this.d.signedIn()) return this.set({ state: 'signed-out' });
+    this.user = this.d.userId();
+    if (!this.user) return this.set({ state: 'signed-out' });
     const abort = new AbortController();
     this.abort = abort;
     this.set({ state: 'connecting' });
     try {
       const { url } = await this.d.client.start();
+      const state = new URL(url).searchParams.get('state') ?? '';
       if (abort.signal.aborted) return;
       await this.d.openExternal(url);
       const deadline = Date.now() + (this.d.timeoutMs ?? 300_000);
       while (Date.now() < deadline) {
         await sleep(this.d.pollMs ?? 2000, abort.signal);
         if (abort.signal.aborted) return;
-        const { google } = await this.d.client.status();
+        const { result } = await this.d.client.attempt(state);
         if (abort.signal.aborted) return;
-        if (google) {
-          this.set({ state: 'connected', email: google.email });
-          this.d.focusApp();
+        if (result === 'connected') {
+          const { google } = await this.d.client.status();
+          if (abort.signal.aborted) return;
+          this.set(google ? { state: 'connected', email: google.email } : { state: 'disconnected', error: NO_ANSWER });
+          if (google) this.d.focusApp();
           return;
         }
+        if (result) return this.set({ state: 'disconnected', error: REFUSED[result] ?? NO_ANSWER });
       }
       this.set({ state: 'disconnected', error: NO_ANSWER });
     } catch (err) {
@@ -131,7 +164,9 @@ export class ConnectorsService {
     }
   }
 
+  /** Publishes only a change: the Home card reloads on every push, and reloading can set the same state again. */
   private set(info: ConnectorsInfo): void {
+    if (JSON.stringify(info) === JSON.stringify(this.info)) return;
     this.info = info;
     this.d.onChange(info);
   }
