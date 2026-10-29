@@ -18,6 +18,8 @@ import { getDragging, setDragging, WIDGET_MIME } from './dnd';
 import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
 import { PageWidget } from './widgets/PageWidget';
 import { QuickAddWidget } from './widgets/QuickAddWidget';
+import { CalendarWidget } from './widgets/CalendarWidget';
+import { todayTitle } from '../../shared/calendar-format';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -51,9 +53,10 @@ type GridMetrics = { cols: number; cellW: number };
 type Props = {
   pages: Page[] | null;
   onOpenPage: (id: string) => void;
+  onOpenConnectors: () => void;
 };
 
-export function HomePage({ pages, onOpenPage }: Props) {
+export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
   const { widgets, save, run } = useHomeWidgets();
   // The card a widget is being dragged over.
   const [dropId, setDropId] = useState<string | null>(null);
@@ -188,7 +191,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
               title={
                 widget.type === 'quick-add'
                   ? widget.label
-                  : (page?.title ?? "Today's calendar")
+                  : (page?.title ?? todayTitle(new Date()))
               }
               onTitleClick={
                 widget.type === 'page' && page ? () => onOpenPage(page.id) : undefined
@@ -209,6 +212,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
                 />
               )}
               {widget.type === 'page' && page && <PageWidget page={page} />}
+              {widget.type === 'calendar' && <CalendarWidget onOpenConnectors={onOpenConnectors} />}
             </WidgetCard>
           ))}
         </div>
