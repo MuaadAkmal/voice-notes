@@ -609,7 +609,13 @@ async function boot(): Promise<void> {
       attempt: (state) => connectorsApi.client.attempt(state),
       disconnect: () => connectorsApi.client.disconnect(),
     },
-    calendar: { todayEvents: (now) => connectorsApi.calendar.todayEvents(now), clear: () => connectorsApi.calendar.clear() },
+    calendar: {
+      todayEvents: (now) => connectorsApi.calendar.todayEvents(now),
+      events: (from, to) => connectorsApi.calendar.events(from, to),
+      create: (e) => connectorsApi.calendar.create(e),
+      quickAdd: (text) => connectorsApi.calendar.quickAdd(text),
+      clear: () => connectorsApi.calendar.clear(),
+    },
     userId: () => {
       const info = account.current();
       return info.state === 'signed-in' ? info.userId : null;

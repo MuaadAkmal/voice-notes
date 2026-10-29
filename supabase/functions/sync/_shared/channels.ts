@@ -203,6 +203,9 @@ export const Ch = {
   ConnectorsCancel: 'connectors:cancel',
   ConnectorsDisconnect: 'connectors:disconnect',
   CalendarToday: 'calendar:today',
+  CalendarRange: 'calendar:range',
+  CalendarCreate: 'calendar:create',
+  CalendarQuickAdd: 'calendar:quick-add',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',

@@ -1,4 +1,4 @@
-import type { CalendarEvent, ConnectorsInfo, TodayResult } from '../../shared/channels';
+import type { AddResult, CalendarError, ConnectorsInfo, NewEvent, RangeResult, TodayResult } from '../../shared/channels';
 import type { CallbackResult } from '../../shared/connectors/protocol';
 import { NotSignedIn, Offline } from '../sync/http-server';
 import { type ConnectorsClient, NotConnected, Revoked } from './client';
@@ -10,7 +10,7 @@ import { listenForReturn } from './return-page';
 
 type Deps = {
   client: Pick<ConnectorsClient, 'start' | 'status' | 'attempt' | 'disconnect'>;
-  calendar: Pick<GoogleCalendar, 'todayEvents' | 'clear'>;
+  calendar: Pick<GoogleCalendar, 'todayEvents' | 'events' | 'create' | 'quickAdd' | 'clear'>;
   /** The signed-in account, or null. */
   userId(): string | null;
   openExternal(url: string): Promise<void>;
@@ -106,12 +106,28 @@ export class ConnectorsService {
     this.set({ state: 'disconnected' });
   }
 
-  async today(now: Date): Promise<TodayResult> {
+  today(now: Date): Promise<TodayResult> {
+    return this.guard(async () => ({ events: await this.d.calendar.todayEvents(now) }));
+  }
+
+  range(from: Date, to: Date): Promise<RangeResult> {
+    return this.guard(async () => ({ events: await this.d.calendar.events(from, to) }));
+  }
+
+  create(e: NewEvent): Promise<AddResult> {
+    return this.guard(async () => ({ event: await this.d.calendar.create(e) }));
+  }
+
+  quickAdd(text: string): Promise<AddResult> {
+    return this.guard(async () => ({ event: await this.d.calendar.quickAdd(text) }));
+  }
+
+  /** A Calendar call, its failure as the word the window shows; a revoked connection also moves the state. */
+  private async guard<T>(fn: () => Promise<T>): Promise<T | { error: CalendarError }> {
     if (!this.d.userId()) return { error: 'signed-out' };
     const generation = this.generation;
-    let events: CalendarEvent[];
     try {
-      events = await this.d.calendar.todayEvents(now);
+      return await fn();
     } catch (err) {
       if (generation !== this.generation) return { error: 'failed' };
       if (err instanceof Revoked || (err instanceof NotConnected && this.info.state === 'needs-reconnect')) {
@@ -126,7 +142,6 @@ export class ConnectorsService {
       if (err instanceof Offline) return { error: 'offline' };
       return { error: 'failed' };
     }
-    return { events };
   }
 
   private connecting(): boolean {

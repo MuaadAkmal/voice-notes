@@ -40,6 +40,9 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
+  NewEventSchema,
+  QuickAddSchema,
+  RangeSchema,
 } from '../shared/ipc';
 import { normaliseBaseUrl } from '../shared/transcription';
 import { pruneWidgets } from '../shared/home-widgets';
@@ -372,6 +375,9 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.ConnectorsCancel, none, () => d.connectors.cancel());
   handle(Ch.ConnectorsDisconnect, none, () => d.connectors.disconnect());
   handle(Ch.CalendarToday, none, () => d.connectors.today(new Date()));
+  handle(Ch.CalendarRange, RangeSchema, ({ from, to }) => d.connectors.range(new Date(from), new Date(to)));
+  handle(Ch.CalendarCreate, NewEventSchema, (e) => d.connectors.create(e));
+  handle(Ch.CalendarQuickAdd, QuickAddSchema, ({ text }) => d.connectors.quickAdd(text));
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

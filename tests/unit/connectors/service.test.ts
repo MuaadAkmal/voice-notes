@@ -21,6 +21,7 @@ type Opts = {
   status?: () => Promise<ConnectorsStatus>;
   listen?: ConstructorParameters<typeof ConnectorsService>[0]['listen'];
   pollMs?: number;
+  calendar?: Partial<ConstructorParameters<typeof ConnectorsService>[0]['calendar']>;
 };
 
 function setup(o: Opts = {}) {
@@ -48,7 +49,14 @@ function setup(o: Opts = {}) {
       },
       disconnect: async () => void calls.disconnect++,
     },
-    calendar: { todayEvents: o.events ?? (async () => [EVENT]), clear: () => void calls.cleared++ },
+    calendar: {
+      todayEvents: o.events ?? (async () => [EVENT]),
+      events: async () => [EVENT],
+      create: async () => EVENT,
+      quickAdd: async () => EVENT,
+      clear: () => void calls.cleared++,
+      ...o.calendar,
+    },
     userId: () => auth.user,
     openExternal: async (u) => void calls.opened.push(u),
     focusApp: () => void calls.focused++,
@@ -270,4 +278,46 @@ it('the listener is aborted when connect ends', async () => {
   const { svc } = setup({ attempts: ['connected'], listen: async (o) => ((signal = o.signal), { port: 1, arrived: new Promise<void>(() => undefined) }) });
   await svc.connect();
   expect(signal.aborted).toBe(true);
+});
+
+const RANGE = [new Date(2026, 8, 28), new Date(2026, 10, 9)] as const;
+const LUNCH = { title: 'Lunch', allDay: false, start: 1, end: 2 };
+
+it('range returns the events for the dates asked', async () => {
+  let asked: Date[] = [];
+  const { svc } = setup({ calendar: { events: async (from, to) => ((asked = [from, to]), [EVENT]) } });
+  expect(await svc.range(...RANGE)).toEqual({ events: [EVENT] });
+  expect(asked).toEqual([...RANGE]);
+});
+
+it('range maps errors like today', async () => {
+  const revoked = setup({ calendar: { events: async () => Promise.reject(new Revoked()) } });
+  expect(await revoked.svc.range(...RANGE)).toEqual({ error: 'needs-reconnect' });
+  expect(revoked.svc.current()).toEqual({ state: 'needs-reconnect' });
+  const nc = setup({ calendar: { events: async () => Promise.reject(new NotConnected()) } });
+  expect(await nc.svc.range(...RANGE)).toEqual({ error: 'not-connected' });
+  const off = setup({ calendar: { events: async () => Promise.reject(new Offline()) } });
+  expect(await off.svc.range(...RANGE)).toEqual({ error: 'offline' });
+});
+
+it('create returns the event', async () => {
+  let sent: unknown;
+  const { svc } = setup({ calendar: { create: async (e) => ((sent = e), EVENT) } });
+  expect(await svc.create(LUNCH)).toEqual({ event: EVENT });
+  expect(sent).toEqual(LUNCH);
+});
+
+it('quickAdd 400 is failed', async () => {
+  const { svc } = setup({ calendar: { quickAdd: async () => Promise.reject(new Error('Google Calendar answered 400')) } });
+  expect(await svc.quickAdd('???')).toEqual({ error: 'failed' });
+});
+
+it('signed out never calls Google', async () => {
+  let calls = 0;
+  const count = async () => (calls++, EVENT);
+  const { svc } = setup({ user: null, calendar: { create: count, quickAdd: count, events: async () => (calls++, []) } });
+  expect(await svc.create(LUNCH)).toEqual({ error: 'signed-out' });
+  expect(await svc.quickAdd('x')).toEqual({ error: 'signed-out' });
+  expect(await svc.range(...RANGE)).toEqual({ error: 'signed-out' });
+  expect(calls).toBe(0);
 });
