@@ -74,13 +74,14 @@ export function CalendarWidget({ onOpenConnectors }: { onOpenConnectors: () => v
               type="button"
               onClick={() => e.link && api.openExternal(e.link)}
               title="Open in Google Calendar"
-              className={`flex w-full items-baseline gap-2 rounded px-1 py-0.5 text-left hover:bg-muted ${phase === 'past' ? 'text-muted-foreground' : ''}`}
+              className={`flex w-full flex-col rounded px-1.5 py-1 text-left hover:bg-muted ${phase === 'past' ? 'text-muted-foreground' : ''}`}
             >
-              <span className="flex w-24 shrink-0 items-center gap-1.5 tabular-nums text-muted-foreground">
+              {/* Title over time: the card is often one column wide. */}
+              <span className={`break-words ${phase === 'now' ? 'font-medium' : ''}`}>{e.title}</span>
+              <span className="flex items-center gap-1.5 tabular-nums text-[11px] text-muted-foreground">
                 {phase === 'now' && <span aria-label="Now" className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
                 {formatEventTime(e)}
               </span>
-              <span className={`min-w-0 break-words ${phase === 'now' ? 'font-medium' : ''}`}>{e.title}</span>
             </button>
           </li>
         );
