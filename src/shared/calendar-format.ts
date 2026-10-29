@@ -1,4 +1,4 @@
-import type { CalendarEvent } from './channels';
+import type { CalendarError, CalendarEvent } from './channels';
 
 // How the calendar card and tab show times; pure so it is unit-tested.
 
@@ -50,4 +50,12 @@ export function formatEventRange(e: CalendarEvent, locale?: string): string {
 export function formatAdded(e: CalendarEvent, locale?: string): string {
   const when = e.allDay ? dayLabel(e.start, locale) : `${dayLabel(e.start, locale)}, ${timeLabel(e.start, locale)}`;
   return `${e.title} · ${when}`;
+}
+
+/** Why adding an event didn't work, as a toast says it. */
+export function addErrorText(error: CalendarError): string {
+  if (error === 'needs-reconnect') return 'Google access was removed. Reconnect from Connectors.';
+  if (error === 'not-connected' || error === 'signed-out') return 'Connect Google Calendar from Connectors first.';
+  if (error === 'offline') return "Can't reach Google.";
+  return "Couldn't add the event.";
 }

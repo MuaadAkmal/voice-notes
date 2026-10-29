@@ -7,6 +7,7 @@ import { HomePage } from './HomePage';
 import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
+import { CalendarPage } from './CalendarPage';
 import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
@@ -26,7 +27,8 @@ export type View =
   | { kind: 'settings' }
   | { kind: 'transcription' }
   | { kind: 'account' }
-  | { kind: 'connectors' };
+  | { kind: 'connectors' }
+  | { kind: 'calendar' };
 
 const api = window.dashboardApi;
 
@@ -45,7 +47,7 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' } | { kind: 'connectors' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -74,7 +76,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account' && view.kind !== 'connectors')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -123,6 +125,8 @@ export function App() {
               <TranscriptionPage />
             ) : view.kind === 'connectors' ? (
               <ConnectorsPage />
+            ) : view.kind === 'calendar' ? (
+              <CalendarPage onOpenConnectors={() => navigate({ kind: 'connectors' })} />
             ) : view.kind === 'account' ? (
               <AccountPage onSignedOut={goHome} />
             ) : view.kind === 'page' ? (
