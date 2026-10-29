@@ -57,6 +57,7 @@ export const SettingsFieldSchemas = {
   dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
+  voiceToCalendar: z.boolean(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

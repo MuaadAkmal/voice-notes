@@ -1,6 +1,7 @@
 import type { GestureEvent } from '../hotkey/gesture';
 import type { OverlayState } from '../../shared/ipc';
 import { MIN_DICTATION_MS } from '../../shared/dictation';
+import { parseCalendarCommand } from '../../shared/calendar-command';
 
 export type DictationPorts = {
   overlay: { start(deviceId: string | null, ping: boolean): void; stop(): void; cancel(): void; setState(s: OverlayState): void };
@@ -17,6 +18,12 @@ export type DictationPorts = {
   save(text: string, app: string | null): void;
   paste(text: string): Promise<void>;
   idleState(): OverlayState;
+  /** Voice to calendar: a transcript starting with a trigger becomes an event instead of being pasted. */
+  calendar?: {
+    enabled(): boolean;
+    /** Quick Add; the message is fit for the pill ("Added · Lunch · Fri 30 Oct, 13:00" or why not). */
+    add(text: string): Promise<{ ok: boolean; message: string }>;
+  };
   /** Back to idle (keep the gesture in step). */
   onIdle?(): void;
   onCaptureStart?(): void;
@@ -29,11 +36,12 @@ export type DictationPorts = {
   maxMs?: number;
 };
 
-type State = 'idle' | 'listening' | 'stopping' | 'transcribing' | 'pasting';
+type State = 'idle' | 'listening' | 'stopping' | 'transcribing' | 'adding' | 'pasting';
 
 /**
  * One dictation: idle → listening → stopping → transcribing → pasting → idle.
  * The text is stored before it is pasted, so a paste into the wrong place is never lost.
+ * A calendar command goes transcribing → adding instead, and is pasted only if adding the event failed.
  */
 export class DictationController {
   private _state: State = 'idle';
@@ -138,13 +146,26 @@ export class DictationController {
       this.fail('No speech heard');
       return;
     }
+    const command = this.p.calendar?.enabled() ? parseCalendarCommand(text) : null;
     try {
-      this.p.save(text, this.app);
+      this.p.save(command ? `📅 ${text}` : text, this.app);
     } catch {
       // Still paste: losing the panel entry is better than losing the text.
     }
+    if (command && this.p.calendar) {
+      this._state = 'adding';
+      this.p.overlay.setState({ kind: 'busy', message: 'Adding to calendar…' });
+      const r = await this.p.calendar.add(command.text).catch(() => ({ ok: false, message: "Couldn't add the event." }));
+      if (r.ok) {
+        this.toIdle();
+        this.flash(r.message, 'done');
+        return;
+      }
+      this.flash(r.message); // then paste, so nothing is lost
+    } else {
+      this.p.overlay.setState(this.p.idleState());
+    }
     this._state = 'pasting';
-    this.p.overlay.setState(this.p.idleState());
     try {
       await this.p.paste(text);
     } catch {
@@ -174,9 +195,9 @@ export class DictationController {
     this.flash(message);
   }
 
-  private flash(message: string): void {
+  private flash(message: string, kind: 'error' | 'done' = 'error'): void {
     this.clearFlash();
-    this.p.overlay.setState({ kind: 'error', message, retry: false });
+    this.p.overlay.setState(kind === 'done' ? { kind, message } : { kind, message, retry: false });
     this.flashTimer = setTimeout(() => {
       this.flashTimer = null;
       this.p.overlay.setState(this.p.idleState());

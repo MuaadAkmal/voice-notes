@@ -78,6 +78,7 @@ export type Settings = {
   dictationHotkey: number[]; // uiohook keycodes: hold to dictate into the focused app
   dictationHotkeyLabel: string;
   dictationSound: boolean; // a ping when dictation starts listening
+  voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -94,7 +95,8 @@ export type OverlayState =
   | { kind: 'recording'; mode: RecordingMode; startedAt: number; source: RecordingSource; dictation?: true }
   // micOnly: 'both' was requested but system audio failed; titled: confirmation after a title was added
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
-  | { kind: 'error'; message: string; retry: boolean };
+  | { kind: 'error'; message: string; retry: boolean }
+  | { kind: 'done'; message: string }; // a short success, e.g. a dictation added to the calendar
 
 /** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
 export type DropPayload = { text: string; uriList: string; html: string };

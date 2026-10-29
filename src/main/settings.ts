@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dictationHotkey: [CTRL, META],
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,
+  voiceToCalendar: true,
 };
 
 function readRaw(file: string): Record<string, unknown> {

@@ -1,3 +1,5 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { startConnectorsServer } from './fixtures/connectors-server';
 import { launch, type TestApp } from './launch';
@@ -170,4 +172,40 @@ test('Quick Add on the Home card adds one event', async () => {
   expect(server.requests('quickAdd') - before).toBe(1);
   await expect(box).toHaveValue('');
   await page.screenshot({ path: '.superpowers/shots/calendar-quick-add.png' });
+
+  await page.getByRole('button', { name: /^Connectors/ }).click();
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
+});
+
+test('voice to calendar: a "Calendar, …" dictation adds an event and pastes nothing', async () => {
+  // A fake Whisper server that always hears the command.
+  const whisper = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ text: ' Calendar, lunch tomorrow 1pm.' })));
+  });
+  await new Promise<void>((r) => whisper.listen(0, '127.0.0.1', r));
+  try {
+    const page = await signedIn();
+    await connect(page);
+    await expect(page.getByRole('switch', { name: 'Voice to calendar' })).toBeChecked();
+    const baseUrl = `http://127.0.0.1:${(whisper.address() as AddressInfo).port}/v1`;
+    await page.evaluate((u) => window.dashboardApi.setSettings({ transcription: { provider: 'server', baseUrl: u, model: 'whisper', localModel: null } }), baseUrl);
+    const overlay = t.app.windows().find((w) => w.url().includes('/overlay/'));
+    const before = server.requests('quickAdd');
+
+    await t.hooks((h) => h.dictationGesture.toggle());
+    await page.waitForTimeout(1500);
+    await t.hooks((h) => h.dictationGesture.toggle());
+
+    await expect(overlay!.getByTestId('pill')).toContainText('Added · lunch tomorrow 1pm · ', { timeout: 10_000 });
+    expect(server.requests('quickAdd') - before).toBe(1);
+    expect(await t.hooks((h) => h.pasted)).toEqual([]);
+
+    await page.getByRole('button', { name: /^Connectors/ }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
+  } finally {
+    whisper.close();
+  }
 });

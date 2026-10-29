@@ -335,5 +335,7 @@ export function Pill({ state, analyser, pomo }: PillProps) {
       ) : (
         <div data-morph className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
       );
+    case 'done':
+      return <div data-morph className={`${shell} h-10 bg-emerald-600/95 px-5 text-sm`}>{state.message}</div>;
   }
 }

@@ -46,6 +46,7 @@ import { createTray } from './tray';
 import { AccountService } from './account/account';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
+import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -308,6 +309,14 @@ async function boot(): Promise<void> {
       }).catch((err) => log.error('[dictation] paste failed', err));
     },
     idleState,
+    calendar: {
+      // needs-reconnect too, so the pill says why instead of pasting "Calendar, …" silently.
+      enabled: () => settings.voiceToCalendar && ['connected', 'needs-reconnect'].includes(connectors.current().state),
+      add: async (text) => {
+        const r = await connectors.quickAdd(text);
+        return 'event' in r ? { ok: true, message: `Added · ${formatAdded(r.event)}` } : { ok: false, message: addErrorText(r.error) };
+      },
+    },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
     onCaptureEnd: () => autoPause.end(),
