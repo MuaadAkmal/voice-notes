@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { isSilent, rmsOf } from '../../shared/audio-level';
 import type { RecordingSource } from '../../shared/channels';
 import { toWav } from '../common/to-wav';
 import { openSystemAudio, trackOpening } from './capture';
 import { playPing } from './ping';
+import { afterPing, pingSounding } from './ping-gate';
 
 const MIME = 'audio/webm;codecs=opus';
 const BITRATE = 32_000;
@@ -11,6 +13,9 @@ const MIC_WARM_MS = 30_000;
 // In "both", lift the voice a little so a comment isn't buried under the film.
 const MIC_GAIN = 1.4;
 const SYSTEM_GAIN = 1.0;
+// A note is kept only if some sound was heard: HEARD_SAMPLES loudness checks, one every SAMPLE_MS.
+const SAMPLE_MS = 100;
+const HEARD_SAMPLES = 3;
 
 type Pending = 'stop' | 'cancel' | null;
 type Mic = { media: MediaStream; deviceId: string | null; ctx: AudioContext; analyser: AnalyserNode };
@@ -35,6 +40,7 @@ export function useRecorder(): AnalyserNode | null {
   const starting = useRef(false);
   const pending = useRef<Pending>(null);
   const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopPing = useRef(false); // play the stop tone when this clip ends
 
   useEffect(() => {
     const api = window.overlayApi;
@@ -134,29 +140,44 @@ export function useRecorder(): AnalyserNode | null {
       if (!rec || rec.state === 'inactive') return;
       if (mode === 'cancel') rec.onstop = null;
       rec.stop();
+      // After stop, so a loopback clip doesn't record its own tone.
+      if (stopPing.current) playPing('stop');
+      stopPing.current = false;
       scheduleMicRelease();
     };
 
-    api.onStart(async ({ deviceId, source, dictation }) => {
+    api.onStart(async ({ deviceId, source, ping, dictation }) => {
       if (releaseTimer.current) clearTimeout(releaseTimer.current);
       // The latest command wins: a start while capture is still opening voids a queued stop/cancel.
       pending.current = null;
       if (starting.current || recorder.current) return;
       starting.current = true;
-      if (dictation?.ping) playPing();
+      const sound = dictation ? dictation.ping : !!ping;
+      if (sound) playPing();
+      stopPing.current = sound;
       let clip: Clip | null = null;
       try {
         clip = await trackOpening(openClip(deviceId, source));
         const opened = clip;
+        // System audio would record the start tone: let it finish first.
+        if (opened.source !== 'mic') await afterPing();
         const rec = new MediaRecorder(clip.stream, { mimeType: MIME, audioBitsPerSecond: BITRATE });
         const chunks: Blob[] = [];
         const t0 = performance.now();
         rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+        // Is anything louder than silence? The start tone in the mic doesn't count.
+        let heard = 0;
+        const level = new Float32Array(opened.analyser.fftSize);
+        const sampler = setInterval(() => {
+          if (pingSounding()) return;
+          opened.analyser.getFloatTimeDomainData(level);
+          if (!isSilent(rmsOf(level))) heard++;
+        }, SAMPLE_MS);
         rec.onstop = async () => {
           const durationMs = performance.now() - t0;
           const bytes = new Uint8Array(await new Blob(chunks, { type: MIME }).arrayBuffer());
           if (!dictation) {
-            api.sendAudio({ bytes, durationMs, mimeType: MIME, source: opened.source });
+            api.sendAudio({ bytes, durationMs, mimeType: MIME, source: opened.source, silent: heard < HEARD_SAMPLES });
             return;
           }
           // Dictation goes straight to the Whisper server, which wants WAV.
@@ -169,6 +190,7 @@ export function useRecorder(): AnalyserNode | null {
         };
         // Runs on stop and on cancel (onstop is nulled for cancel; listeners are not).
         rec.addEventListener('stop', () => {
+          clearInterval(sampler);
           opened.dispose();
           setAnalyser(null);
         });

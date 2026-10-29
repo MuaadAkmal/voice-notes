@@ -218,9 +218,19 @@ export class RecorderController {
     this.fail(message);
   }
 
-  /** Accepted while 'stopping', or while 'recording' when the recorder ended on its own (e.g. mic unplugged). */
-  async onAudio(audio: NewAudio): Promise<void> {
+  /**
+   * Accepted while 'stopping', or while 'recording' when the recorder ended on its own (e.g. mic unplugged).
+   * `silent`: the overlay heard nothing the whole clip; it isn't kept.
+   */
+  async onAudio(audio: NewAudio, { silent = false }: { silent?: boolean } = {}): Promise<void> {
     if (this._state !== 'stopping' && this._state !== 'recording') return;
+    if (silent && audio.durationMs > this.minMs) {
+      this.endCapture();
+      this.clearTimers();
+      this.toIdle();
+      this.flash({ kind: 'error', message: 'Nothing heard · not saved', retry: false }, this.errorMs);
+      return;
+    }
     await this.accept(audio, 'note');
   }
 

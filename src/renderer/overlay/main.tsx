@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { OverlayState } from '../../shared/channels';
 import { acceptsDrops } from '../../shared/later';
+import { Confetti } from './Confetti';
 import { DropPill, Pill } from './Pill';
 import { useDrag } from './useDrag';
 import { useDropLater } from './useDropLater';
@@ -20,6 +21,11 @@ function Overlay() {
   const drop = useDropLater(acceptsDrops(state));
   const pill = useRef<HTMLDivElement>(null);
   useMorph(pill);
+  // A finished focus phase gets a burst of confetti.
+  const [confetti, setConfetti] = useState(false);
+  useEffect(() => {
+    if (pomo.ended === 'focus') setConfetti(true);
+  }, [pomo.ended]);
 
   useEffect(() => window.overlayApi.onState(setState), []);
   // Device ids are origin-scoped, so the overlay (which records) is the one that lists them.
@@ -42,6 +48,7 @@ function Overlay() {
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">
+      {confetti && <Confetti onDone={() => setConfetti(false)} />}
       <div {...drag} ref={pill} className="touch-none" data-testid="pill">
         {drop === 'none' ? <Pill state={state} analyser={analyser} pomo={pomo} /> : <DropPill phase={drop} />}
       </div>

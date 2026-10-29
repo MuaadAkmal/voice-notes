@@ -7,6 +7,7 @@ import { HomePage } from './HomePage';
 import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
+import { PomodoroPage } from './PomodoroPage';
 import { CalendarPage } from './CalendarPage';
 import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
@@ -19,6 +20,7 @@ import { ConfirmProvider } from './ConfirmDialog';
 export type View =
   | { kind: 'home' }
   | { kind: 'dictation' }
+  | { kind: 'pomodoro' }
   | { kind: 'inbox' }
   | { kind: 'all' }
   | { kind: 'starred' }
@@ -47,7 +49,7 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -76,7 +78,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -119,6 +121,8 @@ export function App() {
               <HomePage pages={pages} onOpenPage={openPage} onOpenConnectors={() => navigate({ kind: 'connectors' })} />
             ) : view.kind === 'dictation' ? (
               <DictationPage />
+            ) : view.kind === 'pomodoro' ? (
+              <PomodoroPage />
             ) : view.kind === 'settings' ? (
               <SettingsPage />
             ) : view.kind === 'transcription' ? (

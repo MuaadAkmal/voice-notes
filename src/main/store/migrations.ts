@@ -115,6 +115,13 @@ export const MIGRATIONS: string[] = [
      created_at INTEGER NOT NULL,
      PRIMARY KEY (kind, name)
    );`,
+  // Finished pomodoro focus sessions, for the Pomodoro page (this PC only, never synced).
+  `CREATE TABLE pomodoro_sessions (
+     id           TEXT PRIMARY KEY,
+     completed_at INTEGER NOT NULL,
+     focus_ms     INTEGER NOT NULL
+   );
+   CREATE INDEX pomodoro_sessions_completed_at ON pomodoro_sessions (completed_at);`,
 ];
 
 export function migrate(db: Database.Database): void {

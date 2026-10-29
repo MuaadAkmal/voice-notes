@@ -85,9 +85,9 @@ export function SettingsPage() {
           </Button>
         </Row>
 
-        <Row title="Dictation start sound" hint="A soft ping when dictation starts listening.">
+        <Row title="Start and stop sound" hint="A soft ping when a voice note or dictation starts and stops.">
           <Switch
-            aria-label="Dictation start sound"
+            aria-label="Start and stop sound"
             checked={settings.dictationSound}
             onCheckedChange={(v) => update({ dictationSound: v })}
           />
@@ -209,7 +209,7 @@ export function SettingsPage() {
   );
 }
 
-function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+export function Row({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-6 px-5 py-4">
       <div>

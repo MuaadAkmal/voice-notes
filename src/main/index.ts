@@ -11,6 +11,7 @@ import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
 import { cleanTranscript } from '../shared/transcription';
+import { OFF as POMODORO_OFF, type Pomodoro } from '../shared/pomodoro';
 import { DictationController } from './dictation/controller';
 import { electronClipboard } from './dictation/clipboard';
 import { pasteText } from './dictation/paste';
@@ -214,7 +215,7 @@ async function boot(): Promise<void> {
   const gesture = new HotkeyGesture();
   const controller = new RecorderController(
     {
-      start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source }),
+      start: (deviceId, source) => send(Ch.RecorderStart, { deviceId, source, ping: settings.dictationSound }),
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
       rewind: (seconds) => send(Ch.FilmSave, { seconds }),
@@ -331,6 +332,7 @@ async function boot(): Promise<void> {
   overlay.webContents.on('did-finish-load', () => {
     setOverlayState(idleState());
     send(Ch.FilmMode, { on: settings.filmMode }); // a reloaded overlay restarts the buffer
+    send(Ch.PomodoroConfig, settings.pomodoro);
   });
   overlay.webContents.on('render-process-gone', (_e, details) => {
     log.error('[overlay] renderer gone', details.reason);
@@ -338,6 +340,8 @@ async function boot(): Promise<void> {
   });
 
   let devices: AudioDevice[] = [];
+  // The overlay's pomodoro, as it last reported it (the dashboard's Pomodoro page shows it).
+  let pomodoro: Pomodoro = POMODORO_OFF;
   registerOverlayIpc({
     overlay,
     overlayMouse,
@@ -396,6 +400,14 @@ async function boot(): Promise<void> {
         log.error('[later] drop not saved', err);
         throw err;
       }
+    },
+    onPomodoro: (timer) => {
+      pomodoro = timer;
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.PomodoroChanged, timer);
+    },
+    onPomodoroDone: (focusMs) => {
+      store.pomodoro.add(focusMs);
+      toDashboard(Ch.PomodoroSessionsChanged);
     },
   });
 
@@ -468,6 +480,7 @@ async function boot(): Promise<void> {
     }
     // Not over a saved flash: that would wipe "Add title" (or a title being typed).
     if (patch.showIdlePill !== undefined || patch.filmMode !== undefined) controller.refreshIdle();
+    if (patch.pomodoro) send(Ch.PomodoroConfig, settings.pomodoro);
     if (patch.theme) nativeTheme.themeSource = settings.theme; // fires 'updated' → caption buttons recolour
     toDashboard(Ch.SettingsChanged);
     return { ...settings };
@@ -680,6 +693,15 @@ async function boot(): Promise<void> {
     sync: syncController,
     connectors,
     files: fileSync,
+    pomodoro: {
+      get: () => pomodoro,
+      command: (action) => send(Ch.PomodoroCommand, { action }),
+      sessions: () => store.pomodoro.list(),
+      clear: () => {
+        store.pomodoro.clear();
+        toDashboard(Ch.PomodoroSessionsChanged);
+      },
+    },
   });
 
   app.on('before-quit', () => {

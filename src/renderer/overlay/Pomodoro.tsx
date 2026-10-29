@@ -1,4 +1,4 @@
-import { formatClock, PHASE_MS, type Phase, progress, remainingMs } from '../../shared/pomodoro';
+import { formatClock, type Phase, phaseLabel, phaseMs, progress, remainingMs } from '../../shared/pomodoro';
 import type { PomodoroControls } from './usePomodoro';
 
 /** Rose for focus, emerald for the break: used by the ring here and the idle bar's fill. */
@@ -6,8 +6,6 @@ export const PHASE_COLOR: Record<Phase, { stroke: string; bg: string; glow: stri
   focus: { stroke: '#fb7185', bg: 'bg-rose-400', glow: 'shadow-rose-400/60' },
   break: { stroke: '#34d399', bg: 'bg-emerald-400', glow: 'shadow-emerald-400/60' },
 };
-const LABEL: Record<Phase, string> = { focus: 'Focus', break: 'Break' };
-const ROUNDS = 4; // dots shown for completed focus phases, wrapping every four
 
 const RING_R = 7;
 const RING_C = 2 * Math.PI * RING_R;
@@ -61,7 +59,8 @@ function IconButton({ icon, label, onClick }: { icon: keyof typeof ICONS; label:
 
 /** Small chip above the idle bar: start a pomodoro, or see and control the running one. */
 export function PomodoroChip({ pomo }: { pomo: PomodoroControls }) {
-  const { timer, now, ended } = pomo;
+  const { timer, now, ended, config } = pomo;
+  const rounds = config.longBreakEvery; // dots for completed focus phases, wrapping at each long break
   const shell =
     'pomo-pop flex h-8 items-center gap-2 rounded-full border border-white/15 bg-neutral-900/95 pl-2.5 pr-1 text-xs text-white shadow-lg shadow-black/30 select-none';
 
@@ -70,7 +69,7 @@ export function PomodoroChip({ pomo }: { pomo: PomodoroControls }) {
       <div className={shell} data-testid="pomodoro">
         <Ring phase="focus" value={0} paused={false} />
         <span className="text-white/70">Focus</span>
-        <span className="font-mono tabular-nums text-white/90">{formatClock(PHASE_MS.focus)}</span>
+        <span className="font-mono tabular-nums text-white/90">{formatClock(phaseMs(config, 'focus', false))}</span>
         <IconButton icon="play" label="Start pomodoro" onClick={pomo.start} />
       </div>
     );
@@ -78,7 +77,10 @@ export function PomodoroChip({ pomo }: { pomo: PomodoroControls }) {
 
   const paused = timer.status === 'paused';
   // Right after a phase ends, the chip announces the new one with a glow.
-  const message = ended === 'focus' ? 'Break time' : ended === 'break' ? 'Back to focus' : LABEL[timer.phase];
+  const message =
+    ended === 'focus' ? (timer.long ? 'Long break!' : 'Break time') : ended === 'break' ? 'Back to work!' : phaseLabel(timer);
+  // A phase that doesn't auto-start waits here at full length.
+  const waiting = paused && timer.remainingMs === timer.durationMs;
   return (
     <div
       className={`${shell} ${ended ? `pomo-celebrate shadow-[0_0_18px] ${PHASE_COLOR[timer.phase].glow}` : ''}`}
@@ -92,14 +94,14 @@ export function PomodoroChip({ pomo }: { pomo: PomodoroControls }) {
       </span>
       {timer.done > 0 && (
         <span className="flex gap-0.5" title={`${timer.done} pomodoro${timer.done === 1 ? '' : 's'} done`}>
-          {Array.from({ length: ROUNDS }, (_, i) => (
-            <span key={i} className={`h-1 w-1 rounded-full ${i < ((timer.done - 1) % ROUNDS) + 1 ? 'bg-rose-400' : 'bg-white/20'}`} />
+          {Array.from({ length: rounds }, (_, i) => (
+            <span key={i} className={`h-1 w-1 rounded-full ${i < ((timer.done - 1) % rounds) + 1 ? 'bg-rose-400' : 'bg-white/20'}`} />
           ))}
         </span>
       )}
       <span className="flex">
         {paused ? (
-          <IconButton icon="play" label="Resume" onClick={pomo.resume} />
+          <IconButton icon="play" label={waiting ? `Start ${phaseLabel(timer).toLowerCase()}` : 'Resume'} onClick={pomo.resume} />
         ) : (
           <IconButton icon="pause" label="Pause" onClick={pomo.pause} />
         )}

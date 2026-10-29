@@ -16,12 +16,15 @@ import {
   MAX_BATCH,
   type Note,
   type Page,
+  type PomodoroAction,
+  type PomodoroSession,
   type FetchAudioResult,
   type Settings,
   type StatusMap,
   type TestResult,
 } from '../shared/channels';
 import { chunk } from '../shared/format';
+import type { Pomodoro } from '../shared/pomodoro';
 import type { ImageExt } from '../shared/page-images';
 import type { ModelId, TranscribeLanguage } from '../shared/transcription';
 
@@ -140,6 +143,12 @@ const dashboardApi = {
   createEvent: (e: NewEvent): Promise<AddResult> => ipcRenderer.invoke(Ch.CalendarCreate, e),
   quickAddEvent: (text: string): Promise<AddResult> => ipcRenderer.invoke(Ch.CalendarQuickAdd, { text }),
   onConnectorsChanged: (cb: (info: ConnectorsInfo) => void) => subscribeWith(Ch.ConnectorsChanged, cb),
+  getPomodoro: (): Promise<Pomodoro> => ipcRenderer.invoke(Ch.PomodoroGet),
+  pomodoroCommand: (action: PomodoroAction): Promise<void> => ipcRenderer.invoke(Ch.PomodoroCommand, { action }),
+  pomodoroSessions: (): Promise<PomodoroSession[]> => ipcRenderer.invoke(Ch.PomodoroSessions),
+  clearPomodoroSessions: (): Promise<void> => ipcRenderer.invoke(Ch.PomodoroClearSessions),
+  onPomodoroChanged: (cb: (timer: Pomodoro) => void) => subscribeWith(Ch.PomodoroChanged, cb),
+  onPomodoroSessionsChanged: (cb: () => void) => subscribe(Ch.PomodoroSessionsChanged, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),
   onFoldersChanged: (cb: () => void) => subscribe(Ch.FoldersChanged, cb),

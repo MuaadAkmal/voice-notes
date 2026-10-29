@@ -54,6 +54,12 @@ export const dictations = sqliteTable('dictations', {
   createdAt: integer('created_at').notNull(),
 });
 
+export const pomodoroSessions = sqliteTable('pomodoro_sessions', {
+  id: text('id').primaryKey(),
+  completedAt: integer('completed_at').notNull(),
+  focusMs: integer('focus_ms').notNull(),
+});
+
 export const outbox = sqliteTable('outbox', {
   seq: integer('seq').primaryKey({ autoIncrement: true }),
   mutationId: text('mutation_id').notNull().unique(),

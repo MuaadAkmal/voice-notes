@@ -11,6 +11,7 @@ import { FolderStore } from './folder-store';
 import { migrate } from './migrations';
 import { PageStore } from './page-store';
 import { DictationStore } from './dictation-store';
+import { PomodoroStore } from './pomodoro-store';
 import { FileOutbox } from '../sync/file-outbox';
 import { Outbox } from '../sync/outbox';
 import { SyncState } from '../sync/state';
@@ -42,6 +43,7 @@ export class NoteStore {
   readonly folders: FolderStore;
   readonly pages: PageStore;
   readonly dictations: DictationStore;
+  readonly pomodoro: PomodoroStore;
   /** Every change is also queued here (while sync is on) for the other PCs. */
   readonly sync: { state: SyncState; outbox: Outbox; files: FileOutbox };
 
@@ -59,6 +61,7 @@ export class NoteStore {
     this.folders = new FolderStore(db, sqlite, now, this.sync.outbox);
     this.pages = new PageStore(db, sqlite, now, this.folders, this.imagesDir, this.sync.outbox, this.sync.files);
     this.dictations = new DictationStore(db, now);
+    this.pomodoro = new PomodoroStore(db, now);
   }
 
   static open(rootDir: string, now: () => number = Date.now, hostname: () => string = os.hostname): NoteStore {

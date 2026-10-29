@@ -41,11 +41,17 @@ import {
   TranscriptionTestSchema,
   WavReplySchema,
   NewEventSchema,
+  type PomodoroAction,
+  PomodoroCommandSchema,
+  PomodoroDoneSchema,
+  PomodoroSchema,
+  type PomodoroSession,
   QuickAddSchema,
   RangeSchema,
 } from '../shared/ipc';
 import { normaliseBaseUrl } from '../shared/transcription';
 import { pruneWidgets } from '../shared/home-widgets';
+import type { Pomodoro } from '../shared/pomodoro';
 import type { HotkeyService } from './hotkey/service';
 import type { DictationController } from './dictation/controller';
 import type { NoteStore } from './store/note-store';
@@ -74,6 +80,8 @@ type OverlayDeps = {
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
+  onPomodoro: (timer: Pomodoro) => void;
+  onPomodoroDone: (focusMs: number) => void;
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
@@ -100,6 +108,8 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     }),
   );
   ipcMain.on(Ch.FilmSaveError, from(overlay, ErrorSchema, ({ message }) => controller.onRewindError(message)));
+  ipcMain.on(Ch.PomodoroState, from(overlay, PomodoroSchema, deps.onPomodoro));
+  ipcMain.on(Ch.PomodoroDone, from(overlay, PomodoroDoneSchema, ({ focusMs }) => deps.onPomodoroDone(focusMs)));
   ipcMain.on(Ch.MediaProbeResult, from(overlay, ProbeResultSchema, ({ id, playing }) => deps.onProbeResult(id, playing)));
   ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
@@ -123,7 +133,9 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     Ch.RecorderAudio,
     from(overlay, AudioPayloadSchema, (a) => {
       const bytes = Buffer.from(a.bytes.buffer, a.bytes.byteOffset, a.bytes.byteLength);
-      controller.onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }).catch((e) => log.error(e));
+      controller
+        .onAudio({ bytes, durationMs: a.durationMs, mimeType: a.mimeType, source: a.source }, { silent: a.silent })
+        .catch((e) => log.error(e));
     }),
   );
   ipcMain.on(
@@ -185,6 +197,8 @@ type DashboardDeps = {
   sync: SyncController;
   connectors: ConnectorsService;
   files: Pick<FileSync, 'fetchAudio'>;
+  /** The timer lives in the overlay; main keeps its last state and passes commands on. */
+  pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -230,6 +244,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     }
     return d.updateSettings(patch);
   });
+  handle(Ch.PomodoroGet, none, () => d.pomodoro.get());
+  handle(Ch.PomodoroCommand, PomodoroCommandSchema, ({ action }) => d.pomodoro.command(action));
+  handle(Ch.PomodoroSessions, none, () => d.pomodoro.sessions());
+  handle(Ch.PomodoroClearSessions, none, () => d.pomodoro.clear());
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
   handle(Ch.DevicesList, none, () => d.getDevices());
   handle(Ch.OpenRecordingsFolder, none, async () => {

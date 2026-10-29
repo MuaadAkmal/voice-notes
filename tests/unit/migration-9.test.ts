@@ -33,7 +33,7 @@ it('migration 9 keeps every note column and index and allows remote', () => {
 
   const after = new Database(file);
   try {
-    expect(after.pragma('user_version', { simple: true })).toBe(9);
+    expect(after.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
     expect(after.prepare('SELECT * FROM notes').get()).toEqual(NOTE);
     after.prepare("UPDATE notes SET status = 'remote'").run();
     expect(() => after.prepare("UPDATE notes SET status = 'bogus'").run()).toThrow();

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines, CalendarDays, House, Mic, Plug } from 'lucide-react';
+import { AudioLines, CalendarDays, House, Mic, Plug, Timer } from 'lucide-react';
 import type { Folder } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { cleanIpcError } from '../../shared/format';
@@ -298,6 +298,12 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
           active={view.kind === 'dictation'}
           onClick={() => onSelect({ kind: 'dictation' })}
           icon={<Mic className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
+        <NavItem
+          label="Pomodoro"
+          active={view.kind === 'pomodoro'}
+          onClick={() => onSelect({ kind: 'pomodoro' })}
+          icon={<Timer className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
         />
         <NavItem
           label="Inbox"

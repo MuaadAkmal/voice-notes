@@ -79,6 +79,7 @@ export type Settings = {
   dictationHotkeyLabel: string;
   dictationSound: boolean; // a ping when dictation starts listening
   voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
+  pomodoro: PomodoroSettings;
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -104,20 +105,35 @@ export type DropPayload = { text: string; uriList: string; html: string };
 export type LaterItem = { kind: 'link'; url: string; title: string | null } | { kind: 'text'; text: string };
 
 /** A dictation's text, kept for 24 h. app: show label of the window it was dictated into. */
+/** Lengths in minutes; a long break replaces every `longBreakEvery`th break. Per PC, never synced. */
+export type PomodoroSettings = {
+  focusMin: number;
+  shortBreakMin: number;
+  longBreakMin: number;
+  longBreakEvery: number;
+  autoStartBreaks: boolean; // off: a finished focus waits for Start on the break
+  autoStartFocus: boolean;
+  sound: boolean; // the chime when a phase ends
+  dailyGoal: number; // sessions a day, for the Pomodoro page
+};
+/** A finished focus phase (skipped ones don't count). */
+export type PomodoroSession = { completedAt: number; focusMs: number };
+export type PomodoroAction = 'start' | 'pause' | 'resume' | 'skip' | 'stop';
+
 export type Dictation = { id: string; text: string; app: string | null; createdAt: number };
 /** A dictation clip from the overlay, already 16 kHz mono WAV. */
 export type DictationAudio = { bytes: Uint8Array; durationMs: number };
 
 export type AudioDevice = { deviceId: string; label: string };
 
-export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string; source: RecordingSource };
+export type AudioPayload = { bytes: Uint8Array; durationMs: number; mimeType: string; source: RecordingSource; silent?: boolean };
 
 /** Most note ids one bulk IPC call carries (the dashboard preload batches larger selections). */
 export const MAX_BATCH = 500;
 
 export const Ch = {
   // main → overlay
-  RecorderStart: 'recorder:start', // { deviceId: string | null; source: RecordingSource }
+  RecorderStart: 'recorder:start', // { deviceId: string | null; source: RecordingSource; ping?: boolean; dictation?: { ping: boolean } }
   RecorderStop: 'recorder:stop',
   RecorderCancel: 'recorder:cancel',
   OverlayState: 'overlay:state', // OverlayState
@@ -144,6 +160,10 @@ export const Ch = {
   MediaProbeResult: 'media:probe-result', // { id, playing }
   LaterDrop: 'later:drop', // DropPayload → 'saved' | 'ignored' (invoke)
   DictationAudio: 'dictation:audio', // DictationAudio
+  PomodoroState: 'pomodoro:state', // Pomodoro: the overlay's timer, whenever it changes
+  PomodoroDone: 'pomodoro:done', // { focusMs } a focus phase ran to the end
+  PomodoroConfig: 'pomodoro:config', // main → overlay: PomodoroSettings
+  PomodoroCommand: 'pomodoro:command', // dashboard → main (invoke) → overlay: { action }
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
   NotesRename: 'notes:rename',
@@ -208,6 +228,9 @@ export const Ch = {
   CalendarRange: 'calendar:range',
   CalendarCreate: 'calendar:create',
   CalendarQuickAdd: 'calendar:quick-add',
+  PomodoroGet: 'pomodoro:get', // → Pomodoro
+  PomodoroSessions: 'pomodoro:sessions', // → PomodoroSession[]
+  PomodoroClearSessions: 'pomodoro:clear-sessions',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
@@ -218,6 +241,8 @@ export const Ch = {
   AccountChanged: 'account:changed', // AccountInfo
   SyncChanged: 'sync:changed', // SyncView
   ConnectorsChanged: 'connectors:changed', // ConnectorsInfo
+  PomodoroChanged: 'pomodoro:changed', // Pomodoro
+  PomodoroSessionsChanged: 'pomodoro:sessions-changed',
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;

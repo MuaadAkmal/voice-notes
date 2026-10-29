@@ -6,15 +6,18 @@ import {
   type DictationAudio,
   type DropPayload,
   type OverlayState,
+  type PomodoroAction,
+  type PomodoroSettings,
   type RecordingSource,
 } from '../shared/channels';
+import type { Pomodoro } from '../shared/pomodoro';
 
 const on = <T>(channel: string, cb: (payload: T) => void) => {
   ipcRenderer.on(channel, (_e, payload: T) => cb(payload));
 };
 
 const overlayApi = {
-  onStart: (cb: (p: { deviceId: string | null; source: RecordingSource; dictation?: { ping: boolean } }) => void) =>
+  onStart: (cb: (p: { deviceId: string | null; source: RecordingSource; ping?: boolean; dictation?: { ping: boolean } }) => void) =>
     on(Ch.RecorderStart, cb),
   onStop: (cb: () => void) => on(Ch.RecorderStop, cb),
   onCancel: (cb: () => void) => on(Ch.RecorderCancel, cb),
@@ -39,6 +42,10 @@ const overlayApi = {
   sendRewindError: (message: string) => ipcRenderer.send(Ch.FilmSaveError, { message }),
   onProbe: (cb: (p: { id: number }) => void) => on(Ch.MediaProbe, cb),
   sendProbeResult: (id: number, playing: boolean) => ipcRenderer.send(Ch.MediaProbeResult, { id, playing }),
+  onPomodoroConfig: (cb: (cfg: PomodoroSettings) => void) => on(Ch.PomodoroConfig, cb),
+  onPomodoroCommand: (cb: (p: { action: PomodoroAction }) => void) => on(Ch.PomodoroCommand, cb),
+  sendPomodoro: (timer: Pomodoro) => ipcRenderer.send(Ch.PomodoroState, timer),
+  pomodoroDone: (focusMs: number) => ipcRenderer.send(Ch.PomodoroDone, { focusMs }),
   dropLater: (p: DropPayload): Promise<'saved' | 'ignored'> => ipcRenderer.invoke(Ch.LaterDrop, p),
 };
 

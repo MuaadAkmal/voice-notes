@@ -122,6 +122,17 @@ it('audio of 1 s or less is dropped without save', async () => {
   expect(c.state).toBe('idle');
 });
 
+it('a clip that heard nothing is dropped and the pill says so', async () => {
+  c.handleGesture('start');
+  c.handleGesture('stop');
+  await c.onAudio(audio(5000), { silent: true });
+  expect(created).toEqual([]);
+  expect(lastState()).toEqual({ kind: 'error', message: 'Nothing heard · not saved', retry: false });
+  expect(c.state).toBe('idle');
+  vi.advanceTimersByTime(3000);
+  expect(lastState()).toEqual(IDLE);
+});
+
 it('ignores audio after cancel', async () => {
   c.handleGesture('start');
   c.handleGesture('cancel');

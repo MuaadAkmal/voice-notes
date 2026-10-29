@@ -58,6 +58,16 @@ export const SettingsFieldSchemas = {
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
   voiceToCalendar: z.boolean(),
+  pomodoro: z.object({
+    focusMin: z.number().int().min(1).max(120),
+    shortBreakMin: z.number().int().min(1).max(60),
+    longBreakMin: z.number().int().min(1).max(60),
+    longBreakEvery: z.number().int().min(2).max(10),
+    autoStartBreaks: z.boolean(),
+    autoStartFocus: z.boolean(),
+    sound: z.boolean(),
+    dailyGoal: z.number().int().min(1).max(24),
+  }),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();
@@ -67,6 +77,8 @@ export const AudioPayloadSchema = z.object({
   durationMs: z.number().nonnegative().finite(),
   mimeType: z.string().min(1).max(100),
   source: SourceSchema,
+  /** A voice note that never rose above silence (rewinds don't set it). */
+  silent: z.boolean().optional(),
 });
 
 export const IdSchema = z.uuid();
@@ -157,6 +169,20 @@ export const WavReplySchema = z.union([
   }),
 ]);
 export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });
+
+const PomodoroCurrent = {
+  phase: z.enum(['focus', 'break']),
+  long: z.boolean(),
+  durationMs: z.number().int().positive(),
+  done: z.number().int().nonnegative(),
+};
+export const PomodoroSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('off') }),
+  z.object({ status: z.literal('running'), endsAt: z.number().finite(), ...PomodoroCurrent }),
+  z.object({ status: z.literal('paused'), remainingMs: z.number().nonnegative().finite(), ...PomodoroCurrent }),
+]);
+export const PomodoroDoneSchema = z.object({ focusMs: z.number().int().min(60_000).max(120 * 60_000) });
+export const PomodoroCommandSchema = z.object({ action: z.enum(['start', 'pause', 'resume', 'skip', 'stop']) });
 
 const DAY_MS = 86_400_000;
 export const RangeSchema = z
