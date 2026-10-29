@@ -64,11 +64,17 @@ it('serves the page after the waiter has gone', async () => {
   r.abort.abort();
 });
 
-it('closes on abort and on timeout', async () => {
-  const r = await open();
-  r.abort.abort();
-  await new Promise((res) => setTimeout(res, 20));
-  await expect(r.get('/connectors/done?result=connected')).rejects.toThrow();
+it('keeps serving for a grace period after abort, then closes', async () => {
+  // The connect loop can learn the outcome by polling just before the browser follows the redirect.
+  const abort = new AbortController();
+  const r = await listenForReturn({ timeoutMs: 5_000, signal: abort.signal, graceMs: 60 });
+  abort.abort();
+  expect((await fetch(`http://127.0.0.1:${r.port}/connectors/done?result=connected`)).status).toBe(200);
+  await new Promise((res) => setTimeout(res, 120));
+  await expect(fetch(`http://127.0.0.1:${r.port}/connectors/done?result=connected`)).rejects.toThrow();
+});
+
+it('closes on timeout', async () => {
   const t = await open(30);
   await new Promise((res) => setTimeout(res, 80));
   await expect(t.get('/connectors/done?result=connected')).rejects.toThrow();

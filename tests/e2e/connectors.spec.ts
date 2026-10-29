@@ -148,6 +148,11 @@ test('the month grid shows events and New event adds one', async () => {
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByText(/^Added: Dentist · /)).toBeVisible();
   await expect(todayCell.getByText('Dentist')).toBeVisible();
+
+  // The fixture's account outlives the app: leave it disconnected for the next test.
+  await page.getByRole('button', { name: /^Connectors/ }).click();
+  await page.getByRole('button', { name: 'Disconnect' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Disconnect' }).click();
 });
 
 test('Quick Add on the Home card adds one event', async () => {

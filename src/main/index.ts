@@ -604,7 +604,7 @@ async function boot(): Promise<void> {
   let connectorsApi = makeConnectors(SUPABASE_URL);
   const connectors = new ConnectorsService({
     client: {
-      start: () => connectorsApi.client.start(),
+      start: (returnPort) => connectorsApi.client.start(returnPort),
       status: () => connectorsApi.client.status(),
       attempt: (state) => connectorsApi.client.attempt(state),
       disconnect: () => connectorsApi.client.disconnect(),

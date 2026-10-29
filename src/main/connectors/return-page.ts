@@ -47,9 +47,15 @@ p.line{margin:0;color:var(--muted)}
 /**
  * A listener on 127.0.0.1 (never another interface) for `GET /connectors/done?result=…`. `arrived`
  * resolves on the first such request and never rejects. The page keeps being served (a reload, a
- * second tab) until the timeout or the signal, then the server closes.
+ * second tab) until the timeout, or for `graceMs` after the signal: the connect loop can learn the
+ * outcome by polling a moment before the browser follows the redirect here, and must not leave it
+ * facing a refused connection.
  */
-export async function listenForReturn(opts: { timeoutMs: number; signal: AbortSignal }): Promise<{ port: number; arrived: Promise<void> }> {
+export async function listenForReturn(opts: {
+  timeoutMs: number;
+  signal: AbortSignal;
+  graceMs?: number;
+}): Promise<{ port: number; arrived: Promise<void> }> {
   let arrive!: () => void;
   const arrived = new Promise<void>((r) => (arrive = r));
   const server = http.createServer((req, res) => {
@@ -76,12 +82,16 @@ export async function listenForReturn(opts: { timeoutMs: number; signal: AbortSi
     if (closed) return;
     closed = true;
     clearTimeout(timer);
-    opts.signal.removeEventListener('abort', close);
+    opts.signal.removeEventListener('abort', linger);
     server.close();
     server.closeAllConnections();
   };
-  const timer = setTimeout(close, opts.timeoutMs);
-  opts.signal.addEventListener('abort', close, { once: true });
+  let timer = setTimeout(close, opts.timeoutMs);
+  const linger = () => {
+    clearTimeout(timer);
+    timer = setTimeout(close, opts.graceMs ?? 30_000);
+  };
+  opts.signal.addEventListener('abort', linger, { once: true });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -90,6 +100,6 @@ export async function listenForReturn(opts: { timeoutMs: number; signal: AbortSi
     close();
     throw err;
   });
-  if (opts.signal.aborted) close();
+  if (opts.signal.aborted) linger();
   return { port: (server.address() as AddressInfo).port, arrived };
 }
