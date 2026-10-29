@@ -28,6 +28,8 @@ type Props = {
   open: boolean;
   initialType: WidgetType;
   pages: Page[];
+  /** Home already has the Today's calendar card (there is only ever one). */
+  hasCalendar: boolean;
   onOpenChange: (open: boolean) => void;
   /** Saves the widget; the dialog stays open until it resolves. */
   onAdd: (w: HomeWidget) => Promise<void>;
@@ -40,6 +42,7 @@ export function AddWidgetDialog({
   open,
   initialType,
   pages,
+  hasCalendar,
   onOpenChange,
   onAdd,
 }: Props) {
@@ -65,15 +68,21 @@ export function AddWidgetDialog({
 
   const creating = pageId === NEW_PAGE;
   const valid =
-    (creating
+    type === 'calendar' ||
+    ((creating
       ? newName.trim().length > 0
       : pages.some((p) => p.id === pageId)) &&
-    (type === 'page' || label.trim().length > 0);
+    (type === 'page' || label.trim().length > 0));
 
   const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
     try {
+      if (type === 'calendar') {
+        await onAdd({ id: crypto.randomUUID(), type });
+        onOpenChange(false);
+        return;
+      }
       let target = pageId;
       if (creating) {
         created.current ??= (await api.createPage(null)).id;
@@ -109,12 +118,13 @@ export function AddWidgetDialog({
           <div
             role="group"
             aria-label="Widget type"
-            className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+            className={`grid gap-1 rounded-lg bg-muted p-1 ${hasCalendar ? 'grid-cols-2' : 'grid-cols-3'}`}
           >
             {(
               [
                 ['quick-add', 'Quick add'],
                 ['page', 'Show a page'],
+                ...(hasCalendar ? [] : ([['calendar', "Today's calendar"]] as const)),
               ] as const
             ).map(([value, text]) => (
               <button
@@ -129,6 +139,11 @@ export function AddWidgetDialog({
             ))}
           </div>
 
+          {type === 'calendar' ? (
+            <p className="text-sm text-muted-foreground">
+              Today's events from your Google Calendar. Connect it on the Connectors page.
+            </p>
+          ) : (
           <label className="flex flex-col gap-1.5 text-sm font-medium">
             Page
             <Select value={pageId} onValueChange={setPageId}>
@@ -146,8 +161,9 @@ export function AddWidgetDialog({
               </SelectContent>
             </Select>
           </label>
+          )}
 
-          {creating && (
+          {type !== 'calendar' && creating && (
             <input
               aria-label="New page name"
               value={newName}

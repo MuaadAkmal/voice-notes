@@ -5,6 +5,7 @@ import {
   addWidget,
   builtInPageId,
   canAdd,
+  hasCalendar,
   ensureLocked,
   isPinned,
   keepExisting,
@@ -187,5 +188,33 @@ describe('locked widgets', () => {
     expect(builtInPageId([page('a', p2), locked('l', p1)])).toBe(p1);
     expect(builtInPageId([page('a', p2)])).toBeNull();
     expect(builtInPageId(null)).toBeNull();
+  });
+});
+
+describe('the calendar widget', () => {
+  const cal = (id = 'c'): HomeWidget => ({ id, type: 'calendar' });
+
+  it('keepExisting keeps a calendar widget with no pages', () => {
+    expect(keepExisting([cal(), page('a', p1)], [])).toEqual([cal()]);
+  });
+
+  it('pruneWidgets keeps it', () => {
+    expect(pruneWidgets([cal(), page('a', p1)], [p1])).toEqual([cal()]);
+  });
+
+  it('a second calendar is refused', () => {
+    expect(hasCalendar([page('a', p1)])).toBe(false);
+    const one = addWidget([], cal('c1'));
+    expect(hasCalendar(one)).toBe(true);
+    expect(addWidget(one, cal('c2'))).toEqual(one);
+  });
+
+  it('defaults to 1×3', () => {
+    expect(widgetSize(cal())).toEqual({ w: 1, h: 3 });
+  });
+
+  it('is not a pin', () => {
+    expect(isPinned([cal()], p1)).toBe(false);
+    expect(unpinPage([cal()], p1)).toEqual([cal()]);
   });
 });

@@ -21,7 +21,7 @@ export function mergeLaterPage(local: Settings, remoteId: string, pages: PageSto
   const homeWidgets = local.homeWidgets
     // a plain card for the winning page would now duplicate the locked one
     .filter((w) => w.locked || !(w.type === 'page' && w.pageId === remoteId))
-    .map((w) => (w.locked ? { ...w, pageId: remoteId } : w));
+    .map((w) => (w.locked && w.type === 'page' ? { ...w, pageId: remoteId } : w));
   return { laterPageId: remoteId, homeWidgets };
 }
 

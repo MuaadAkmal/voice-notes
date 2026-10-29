@@ -6,8 +6,11 @@ export const MAX_HOME_WIDGETS = 24;
 export const canAdd = (ws: HomeWidget[]): boolean =>
   ws.filter((w) => !w.locked).length < MAX_HOME_WIDGETS;
 
+/** Home shows at most one Today's calendar card. */
+export const hasCalendar = (ws: HomeWidget[]): boolean => ws.some((w) => w.type === 'calendar');
+
 export const addWidget = (ws: HomeWidget[], w: HomeWidget): HomeWidget[] =>
-  canAdd(ws) ? [...ws, w] : ws;
+  canAdd(ws) && !(w.type === 'calendar' && hasCalendar(ws)) ? [...ws, w] : ws;
 
 export const removeWidget = (ws: HomeWidget[], id: string): HomeWidget[] =>
   ws.filter((w) => w.id !== id || w.locked);
@@ -51,22 +54,22 @@ export const unpinPage = (ws: HomeWidget[], pageId: string): HomeWidget[] =>
 export const builtInPageId = (ws: HomeWidget[] | null): string | null =>
   ws?.find((w) => w.locked)?.pageId ?? null;
 
-/** Drops every widget (any type) whose page was deleted. */
+/** Drops every widget (any type) whose page was deleted; page-less widgets stay. */
 export const pruneWidgets = (
   ws: HomeWidget[],
   deletedPageIds: string[],
 ): HomeWidget[] => {
   const gone = new Set(deletedPageIds);
-  return ws.filter((w) => !gone.has(w.pageId));
+  return ws.filter((w) => w.pageId === undefined || !gone.has(w.pageId));
 };
 
-/** Keeps only widgets whose page is in `pageIds`; the rest are orphans. */
+/** Keeps page-less widgets and those whose page is in `pageIds`; the rest are orphans. */
 export const keepExisting = (
   ws: HomeWidget[],
   pageIds: string[],
 ): HomeWidget[] => {
   const live = new Set(pageIds);
-  return ws.filter((w) => live.has(w.pageId));
+  return ws.filter((w) => w.pageId === undefined || live.has(w.pageId));
 };
 
 /** Moves widget `id` so it ends up at `toIndex` (clamped); unknown id is a no-op. */
@@ -94,7 +97,9 @@ export const widgetSize = (w: HomeWidget): { w: number; h: number } =>
     ? { w: w.w, h: w.h }
     : w.type === 'quick-add'
       ? { w: 1, h: 2 }
-      : { w: 2, h: 2 };
+      : w.type === 'calendar'
+        ? { w: 1, h: 3 }
+        : { w: 2, h: 2 };
 
 export const resizeWidget = (
   ws: HomeWidget[],

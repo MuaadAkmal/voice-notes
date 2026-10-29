@@ -5,6 +5,7 @@ import {
   addWidget,
   canAdd,
   GRID_COLUMNS,
+  hasCalendar,
   moveWidget,
   removeWidget,
   renameWidget,
@@ -115,8 +116,9 @@ export function HomePage({ pages, onOpenPage }: Props) {
     cols,
     cellW: (gridWidth - GAP_PX * (cols - 1)) / cols,
   };
-  // A widget whose page isn't known (not loaded yet, or just deleted) renders nothing.
-  const shown = widgets.flatMap((w) => {
+  // A widget whose page isn't known (not loaded yet, or just deleted) renders nothing; the calendar has none.
+  const shown = widgets.flatMap((w): { widget: HomeWidget; page: Page | null }[] => {
+    if (w.type === 'calendar') return [{ widget: w, page: null }];
     const page = pages?.find((p) => p.id === w.pageId);
     return page ? [{ widget: w, page }] : [];
   });
@@ -183,11 +185,15 @@ export function HomePage({ pages, onOpenPage }: Props) {
               }
               dropping={dropId === widget.id}
               dropProps={dropProps(widget.id)}
-              title={widget.type === 'quick-add' ? widget.label : page.title}
-              onTitleClick={
-                widget.type === 'page' ? () => onOpenPage(page.id) : undefined
+              title={
+                widget.type === 'quick-add'
+                  ? widget.label
+                  : (page?.title ?? "Today's calendar")
               }
-              onOpenPage={() => onOpenPage(page.id)}
+              onTitleClick={
+                widget.type === 'page' && page ? () => onOpenPage(page.id) : undefined
+              }
+              onOpenPage={page ? () => onOpenPage(page.id) : undefined}
               onRename={
                 widget.type === 'quick-add'
                   ? (label) => run((cur) => renameWidget(cur, widget.id, label))
@@ -195,14 +201,14 @@ export function HomePage({ pages, onOpenPage }: Props) {
               }
               onRemove={widget.locked ? undefined : () => run((cur) => removeWidget(cur, widget.id))}
             >
-              {widget.type === 'quick-add' && (
+              {widget.type === 'quick-add' && page && (
                 <QuickAddWidget
                   widget={widget}
                   page={page}
                   onOpenPage={onOpenPage}
                 />
               )}
-              {widget.type === 'page' && <PageWidget page={page} />}
+              {widget.type === 'page' && page && <PageWidget page={page} />}
             </WidgetCard>
           ))}
         </div>
@@ -212,6 +218,7 @@ export function HomePage({ pages, onOpenPage }: Props) {
         open={dialog.open}
         initialType={dialog.type}
         pages={pages ?? []}
+        hasCalendar={hasCalendar(widgets)}
         onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
         onAdd={(w) => save((cur) => addWidget(cur, w))}
       />
@@ -230,7 +237,8 @@ type CardProps = {
   title: string;
   /** Page widgets: the title opens the page. */
   onTitleClick?: () => void;
-  onOpenPage: () => void;
+  /** Absent for the calendar card, which has no page. */
+  onOpenPage?: () => void;
   /** Quick-add widgets: rename the label inline. */
   onRename?: (label: string) => void;
   /** Absent for the locked Review later card. */
@@ -383,7 +391,7 @@ function WidgetCard({
               }
             }}
           >
-            <DropdownMenuItem onSelect={onOpenPage}>Open page</DropdownMenuItem>
+            {onOpenPage && <DropdownMenuItem onSelect={onOpenPage}>Open page</DropdownMenuItem>}
             {onRename && (
               <DropdownMenuItem
                 onSelect={() => {

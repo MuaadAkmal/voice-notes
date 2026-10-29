@@ -135,3 +135,15 @@ describe('later:drop schema', () => {
     expect(parsed.html).toHaveLength(20_000);
   });
 });
+
+describe('calendar widget schema', () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  it('accepts a calendar widget with an optional size', () => {
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar' }] }).success).toBe(true);
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar', w: 2, h: 3 }] }).success).toBe(true);
+  });
+  it('rejects a bad id or size', () => {
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id: 'x', type: 'calendar' }] }).success).toBe(false);
+    expect(SettingsPatchSchema.safeParse({ homeWidgets: [{ id, type: 'calendar', w: 9 }] }).success).toBe(false);
+  });
+});

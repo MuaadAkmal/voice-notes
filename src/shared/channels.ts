@@ -55,6 +55,7 @@ export type Page = {
 export type HomeWidget = (
   | { id: string; type: 'quick-add'; pageId: string; label: string }
   | { id: string; type: 'page'; pageId: string }
+  | { id: string; type: 'calendar'; pageId?: never } // Today's calendar: no page, at most one
 ) & { w?: number; h?: number; locked?: true }; // locked: the built-in Review later card, never removed
 
 export type Settings = {
