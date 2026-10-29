@@ -64,3 +64,14 @@ it('attempt asks about one consent by its state', async () => {
   expect(await c.attempt('st 1')).toEqual({ result: 'denied' });
   expect(seen[0].url).toBe('https://p.supabase.co/functions/v1/connectors/google/attempt?state=st%201');
 });
+
+it('start sends the return port', async () => {
+  let body: unknown;
+  const fetch = (async (_url: string, init?: RequestInit) => {
+    body = init?.body;
+    return json(200, { url: 'u' });
+  }) as typeof globalThis.fetch;
+  const c = new ConnectorsClient({ baseUrl: 'https://p.supabase.co', apiKey: 'pk', getToken: async () => 'tok', fetch });
+  await c.start(51234);
+  expect(JSON.parse(String(body))).toEqual({ returnPort: 51234 });
+});

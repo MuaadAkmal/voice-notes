@@ -3,6 +3,7 @@ import type { CallbackResult } from '../../shared/connectors/protocol';
 import { NotSignedIn, Offline } from '../sync/http-server';
 import { type ConnectorsClient, NotConnected, Revoked } from './client';
 import type { GoogleCalendar } from './google-calendar';
+import { listenForReturn } from './return-page';
 
 // The Google Calendar connection, run in main. Connecting opens Google's consent in the browser; Google
 // sends the browser to the `connectors` function, so this only asks the function how that consent ended.
@@ -18,6 +19,8 @@ type Deps = {
   pollMs?: number;
   timeoutMs?: number; // how long to wait for the browser
   now?(): number; // for the focus throttle
+  /** The loopback page Google's consent lands on; tests inject one. */
+  listen?: typeof listenForReturn;
 };
 
 const FOCUS_REFRESH_MS = 60_000;
@@ -137,13 +140,20 @@ export class ConnectorsService {
     this.abort = abort;
     this.set({ state: 'connecting' });
     try {
-      const { url } = await this.d.client.start();
+      const timeoutMs = this.d.timeoutMs ?? 300_000;
+      // Without a listener (port taken, firewall…) the function answers plain text and polling still works.
+      const back = await (this.d.listen ?? listenForReturn)({ timeoutMs, signal: abort.signal }).catch(() => null);
+      const { url } = await this.d.client.start(back?.port);
       const state = new URL(url).searchParams.get('state') ?? '';
       if (abort.signal.aborted) return;
       await this.d.openExternal(url);
-      const deadline = Date.now() + (this.d.timeoutMs ?? 300_000);
+      const deadline = Date.now() + timeoutMs;
+      let landed = back ? back.arrived.then(() => true) : null;
       while (Date.now() < deadline) {
-        await sleep(this.d.pollMs ?? 2000, abort.signal);
+        // The browser landing on the page means Google is done: ask at once instead of at the next poll.
+        const waits = [sleep(this.d.pollMs ?? 2000, abort.signal).then(() => false)];
+        const early = await Promise.race(landed ? [...waits, landed] : waits);
+        if (early) landed = null; // once is enough; after that, poll as usual
         if (abort.signal.aborted) return;
         const { result } = await this.d.client.attempt(state);
         if (abort.signal.aborted) return;

@@ -28,8 +28,9 @@ type Deps = {
 export class ConnectorsClient {
   constructor(private readonly d: Deps) {}
 
-  start(): Promise<{ url: string }> {
-    return this.call('POST', 'google/start');
+  /** `returnPort`: this PC's loopback port for the page after consent, if it could listen. */
+  start(returnPort?: number): Promise<{ url: string }> {
+    return this.call('POST', 'google/start', returnPort === undefined ? undefined : { returnPort });
   }
 
   status(): Promise<ConnectorsStatus> {
@@ -49,14 +50,19 @@ export class ConnectorsClient {
     await this.call('POST', 'google/disconnect');
   }
 
-  private async call<T>(method: 'GET' | 'POST', route: string): Promise<T> {
+  private async call<T>(method: 'GET' | 'POST', route: string, body?: unknown): Promise<T> {
     const token = await this.d.getToken();
     if (!token) throw new NotSignedIn();
     let res: Response;
     try {
       res = await this.d.fetch(`${this.d.baseUrl}/functions/v1/connectors/${route}`, {
         method,
-        headers: { authorization: `Bearer ${token}`, apikey: this.d.apiKey },
+        headers: {
+          authorization: `Bearer ${token}`,
+          apikey: this.d.apiKey,
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(this.d.timeoutMs ?? 30_000),
       });
     } catch {

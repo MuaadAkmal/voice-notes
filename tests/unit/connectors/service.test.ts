@@ -19,18 +19,20 @@ type Opts = {
   events?: () => Promise<CalendarEvent[]>;
   timeoutMs?: number;
   status?: () => Promise<ConnectorsStatus>;
+  listen?: ConstructorParameters<typeof ConnectorsService>[0]['listen'];
+  pollMs?: number;
 };
 
 function setup(o: Opts = {}) {
   const seen: ConnectorsInfo[] = [];
-  const calls = { start: 0, status: 0, attempt: [] as string[], disconnect: 0, opened: [] as string[], focused: 0, cleared: 0 };
+  const calls = { ports: [] as (number | undefined)[], start: 0, status: 0, attempt: [] as string[], disconnect: 0, opened: [] as string[], focused: 0, cleared: 0 };
   const statuses = [...(o.statuses ?? [NONE])];
   const attempts = [...(o.attempts ?? [null])];
   const auth = { user: o.user === undefined ? A : o.user };
   const clock = { t: 0 };
   const svc = new ConnectorsService({
     client: {
-      start: async () => (calls.start++, { url: 'https://accounts.google.com/o/oauth2/v2/auth?state=st1&x=1' }),
+      start: async (port) => (calls.start++, calls.ports.push(port), { url: 'https://accounts.google.com/o/oauth2/v2/auth?state=st1&x=1' }),
       status:
         o.status ??
         (async () => {
@@ -51,7 +53,8 @@ function setup(o: Opts = {}) {
     openExternal: async (u) => void calls.opened.push(u),
     focusApp: () => void calls.focused++,
     onChange: (i) => void seen.push(i),
-    pollMs: 1,
+    pollMs: o.pollMs ?? 1,
+    listen: o.listen ?? (async () => ({ port: 5555, arrived: new Promise<void>(() => undefined) })),
     timeoutMs: o.timeoutMs ?? 5_000,
     now: () => clock.t,
   });
@@ -240,4 +243,31 @@ it('onFocus refreshes at most once a minute', async () => {
   svc.onFocus();
   await tick(1);
   expect(calls.status).toBe(2);
+});
+
+it('the page arriving asks for the result at once', async () => {
+  let arrive!: () => void;
+  const arrived = new Promise<void>((r) => (arrive = r));
+  const { svc, calls } = setup({ attempts: ['connected'], pollMs: 60_000, timeoutMs: 120_000, listen: async () => ({ port: 51234, arrived }) });
+  const p = svc.connect();
+  await tick();
+  expect(calls.ports).toEqual([51234]);
+  expect(calls.attempt).toHaveLength(0);
+  arrive();
+  await p;
+  expect(svc.current()).toEqual({ state: 'connected', email: 'cal@gmail.com' });
+});
+
+it('connect still works when the listener fails', async () => {
+  const { svc, calls } = setup({ attempts: [null, 'connected'], listen: async () => Promise.reject(new Error('EACCES')) });
+  await svc.connect();
+  expect(calls.ports).toEqual([undefined]);
+  expect(svc.current()).toEqual({ state: 'connected', email: 'cal@gmail.com' });
+});
+
+it('the listener is aborted when connect ends', async () => {
+  let signal!: AbortSignal;
+  const { svc } = setup({ attempts: ['connected'], listen: async (o) => ((signal = o.signal), { port: 1, arrived: new Promise<void>(() => undefined) }) });
+  await svc.connect();
+  expect(signal.aborted).toBe(true);
 });
