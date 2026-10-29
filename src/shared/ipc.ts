@@ -156,3 +156,12 @@ export const WavReplySchema = z.union([
   }),
 ]);
 export const ProbeResultSchema = z.object({ id: z.number().int().nonnegative(), playing: z.boolean() });
+
+const DAY_MS = 86_400_000;
+export const RangeSchema = z
+  .object({ from: z.number().int(), to: z.number().int() })
+  .refine((r) => r.to > r.from && r.to - r.from <= 62 * DAY_MS);
+export const NewEventSchema = z
+  .object({ title: z.string().trim().min(1).max(1000), allDay: z.boolean(), start: z.number().int(), end: z.number().int() })
+  .refine((e) => e.end > e.start && e.end - e.start <= 366 * DAY_MS);
+export const QuickAddSchema = z.object({ text: z.string().trim().min(1).max(1000) });

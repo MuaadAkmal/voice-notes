@@ -1,12 +1,16 @@
-import type { CalendarEvent } from '../../shared/channels';
+import type { CalendarEvent, NewEvent } from '../../shared/channels';
 import type { TokenResponse } from '../../shared/connectors/protocol';
 import { AuthExpired, Offline } from '../sync/http-server';
+import { Revoked } from './client';
 
-// Today's events from the user's primary Google Calendar, called from main with a short-lived access
+// The user's primary Google Calendar (read a range, add events), called from main with a short-lived access
 // token from the `connectors` function (kept in memory only).
 
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 const EARLY_MS = 60_000; // a token this close to expiring is fetched again
+const PAGE_SIZE = 250;
+const MAX_PAGES = 4; // 1000 events: far more than a month grid shows
+const MAX_DESCRIPTION = 2000;
 
 type Deps = {
   token(): Promise<TokenResponse>;
@@ -21,19 +25,67 @@ export class GoogleCalendar {
 
   constructor(private readonly d: Deps) {}
 
-  async todayEvents(now: Date): Promise<CalendarEvent[]> {
+  todayEvents(now: Date): Promise<CalendarEvent[]> {
     const { timeMin, timeMax } = dayBounds(now);
-    const params = new URLSearchParams({ timeMin, timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: '50' });
-    const url = `${this.d.baseUrl ?? CALENDAR_API}/calendars/primary/events?${params}`;
-    let res = await this.get(url);
+    return this.list(timeMin, timeMax);
+  }
+
+  /** Events overlapping [from, to), recurring ones expanded, in start order. */
+  events(from: Date, to: Date): Promise<CalendarEvent[]> {
+    return this.list(rfc3339(from), rfc3339(to));
+  }
+
+  async create(e: NewEvent): Promise<CalendarEvent> {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const at = (ms: number) => (e.allDay ? { date: ymd(new Date(ms)) } : { dateTime: rfc3339(new Date(ms)), timeZone });
+    const body = { summary: e.title, start: at(e.start), end: at(e.end) }; // Google's all-day end date is exclusive too
+    return this.added(await this.send('POST', `${this.base()}/calendars/primary/events`, body));
+  }
+
+  /** Google's own parsing of "Lunch tomorrow 1pm". */
+  async quickAdd(text: string): Promise<CalendarEvent> {
+    const url = `${this.base()}/calendars/primary/events/quickAdd?${new URLSearchParams({ text })}`;
+    return this.added(await this.send('POST', url));
+  }
+
+  private async list(timeMin: string, timeMax: string): Promise<CalendarEvent[]> {
+    const out: CalendarEvent[] = [];
+    let pageToken: string | undefined;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const params = new URLSearchParams({ timeMin, timeMax, singleEvents: 'true', orderBy: 'startTime', maxResults: String(PAGE_SIZE) });
+      if (pageToken) params.set('pageToken', pageToken);
+      const body = (await this.send('GET', `${this.base()}/calendars/primary/events?${params}`)) as { items?: unknown[]; nextPageToken?: string };
+      for (const item of body.items ?? []) {
+        const e = toCalendarEvent(item);
+        if (e) out.push(e);
+      }
+      pageToken = body.nextPageToken;
+      if (!pageToken) break;
+    }
+    return out;
+  }
+
+  private added(item: unknown): CalendarEvent {
+    const e = toCalendarEvent(item);
+    if (!e) throw new Error('Google Calendar answered without the event');
+    return e;
+  }
+
+  private base(): string {
+    return this.d.baseUrl ?? CALENDAR_API;
+  }
+
+  /** One call with the cached token; a 401 gets one more try with a fresh one. Answers the parsed JSON. */
+  private async send(method: 'GET' | 'POST', url: string, body?: unknown): Promise<unknown> {
+    let res = await this.fetchWithToken(method, url, body);
     if (res.status === 401) {
       this.cached = null; // revoked or rotated early: one more try with a fresh token
-      res = await this.get(url);
+      res = await this.fetchWithToken(method, url, body);
       if (res.status === 401) throw new AuthExpired();
     }
+    if (res.status === 403) throw new Revoked(); // the calendar permission is gone
     if (!res.ok) throw new Error(`Google Calendar answered ${res.status}`);
-    const body = (await res.json()) as { items?: unknown[] };
-    return (body.items ?? []).map(toCalendarEvent).filter((e): e is CalendarEvent => e !== null);
+    return res.json();
   }
 
   clear(): void {
@@ -41,10 +93,17 @@ export class GoogleCalendar {
     this.generation++;
   }
 
-  private async get(url: string): Promise<Response> {
+  private async fetchWithToken(method: 'GET' | 'POST', url: string, body?: unknown): Promise<Response> {
     const token = await this.accessToken();
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (body !== undefined) headers['content-type'] = 'application/json';
     try {
-      return await this.d.fetch(url, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30_000) });
+      return await this.d.fetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
     } catch {
       throw new Offline();
     }
@@ -67,21 +126,32 @@ export function dayBounds(now: Date): { timeMin: string; timeMax: string } {
   return { timeMin: rfc3339(start), timeMax: rfc3339(end) };
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
 function rfc3339(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
   const off = -d.getTimezoneOffset();
   const sign = off >= 0 ? '+' : '-';
   const abs = Math.abs(off);
   return (
-    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
+    `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}` +
     `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
   );
 }
 
 type GoogleTime = { date?: string; dateTime?: string };
-type GoogleEvent = { id?: string; status?: string; summary?: string; htmlLink?: string; start?: GoogleTime; end?: GoogleTime };
+type GoogleEvent = {
+  id?: string;
+  status?: string;
+  summary?: string;
+  htmlLink?: string;
+  location?: string;
+  description?: string;
+  start?: GoogleTime;
+  end?: GoogleTime;
+};
 
-/** A Calendar API event as the card shows it; null for a cancelled one or one with no start. */
+/** A Calendar API event as the app shows it; null for a cancelled one or one with no start. */
 export function toCalendarEvent(item: unknown): CalendarEvent | null {
   if (!item || typeof item !== 'object') return null;
   const e = item as GoogleEvent;
@@ -96,6 +166,8 @@ export function toCalendarEvent(item: unknown): CalendarEvent | null {
     end: toMs(e.end) ?? start,
     allDay,
     link: e.htmlLink ?? '',
+    ...(e.location?.trim() ? { location: e.location.trim() } : {}),
+    ...(e.description?.trim() ? { description: e.description.trim().slice(0, MAX_DESCRIPTION) } : {}),
   };
 }
 

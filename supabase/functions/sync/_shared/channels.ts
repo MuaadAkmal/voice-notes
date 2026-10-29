@@ -244,8 +244,24 @@ export type AccountInfo =
   | { state: 'signing-in' }
   | { state: 'signed-in'; userId: string; email: string; name: string; avatar: string | null };
 
-/** One event of today's Google Calendar. Times are ms; an all-day event runs local midnight to midnight (end exclusive). */
-export type CalendarEvent = { id: string; title: string; start: number; end: number; allDay: boolean; link: string };
+/** One Google Calendar event. Times are ms; an all-day event runs local midnight to midnight (end exclusive). */
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start: number;
+  end: number;
+  allDay: boolean;
+  link: string;
+  location?: string;
+  description?: string; // plain text as Google has it, at most 2000 characters
+};
+
+/** An event to add. For an all-day one, start and end are the local midnights of the first day and the day after the last. */
+export type NewEvent = { title: string; allDay: boolean; start: number; end: number };
+
+export type CalendarError = 'signed-out' | 'not-connected' | 'needs-reconnect' | 'offline' | 'failed';
+export type RangeResult = { events: CalendarEvent[] } | { error: CalendarError };
+export type AddResult = { event: CalendarEvent } | { error: CalendarError };
 
 /** The Google Calendar connection as the window sees it: never tokens. */
 export type ConnectorsInfo =
@@ -256,9 +272,7 @@ export type ConnectorsInfo =
   | { state: 'needs-reconnect' };
 
 /** What the Today's calendar card gets. */
-export type TodayResult =
-  | { events: CalendarEvent[] }
-  | { error: 'signed-out' | 'not-connected' | 'needs-reconnect' | 'offline' | 'failed' };
+export type TodayResult = RangeResult;
 
 /** The built-in provider as the Transcription page shows it. */
 export type LocalStatus = {
