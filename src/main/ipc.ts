@@ -50,6 +50,7 @@ import type { HotkeyGesture } from './hotkey/gesture';
 import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
 import type { AccountService } from './account/account';
+import type { ConnectorsService } from './connectors/service';
 import type { SyncController } from './sync/controller';
 import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
@@ -179,6 +180,7 @@ type DashboardDeps = {
   localWhisper: LocalWhisper;
   account: AccountService;
   sync: SyncController;
+  connectors: ConnectorsService;
   files: Pick<FileSync, 'fetchAudio'>;
 };
 
@@ -365,6 +367,11 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.SyncTurnOff, none, () => d.sync.turnOff());
   handle(Ch.SyncNow, none, () => d.sync.syncNow());
   handle(Ch.SyncDismissPrompt, none, () => d.sync.dismissPrompt());
+  handle(Ch.ConnectorsGet, none, () => d.connectors.current());
+  handle(Ch.ConnectorsConnect, none, () => d.connectors.connect());
+  handle(Ch.ConnectorsCancel, none, () => d.connectors.cancel());
+  handle(Ch.ConnectorsDisconnect, none, () => d.connectors.disconnect());
+  handle(Ch.CalendarToday, none, () => d.connectors.today(new Date()));
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

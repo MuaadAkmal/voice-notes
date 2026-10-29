@@ -197,6 +197,11 @@ export const Ch = {
   SyncTurnOff: 'sync:turn-off',
   SyncNow: 'sync:now',
   SyncDismissPrompt: 'sync:dismiss-prompt',
+  ConnectorsGet: 'connectors:get',
+  ConnectorsConnect: 'connectors:connect',
+  ConnectorsCancel: 'connectors:cancel',
+  ConnectorsDisconnect: 'connectors:disconnect',
+  CalendarToday: 'calendar:today',
   // main → dashboard
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
@@ -206,6 +211,7 @@ export const Ch = {
   LocalChanged: 'local:changed', // LocalStatus (also download progress)
   AccountChanged: 'account:changed', // AccountInfo
   SyncChanged: 'sync:changed', // SyncView
+  ConnectorsChanged: 'connectors:changed', // ConnectorsInfo
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
@@ -239,6 +245,19 @@ export type AccountInfo =
 
 /** One event of today's Google Calendar. Times are ms; an all-day event runs local midnight to midnight (end exclusive). */
 export type CalendarEvent = { id: string; title: string; start: number; end: number; allDay: boolean; link: string };
+
+/** The Google Calendar connection as the window sees it: never tokens. */
+export type ConnectorsInfo =
+  | { state: 'signed-out' }
+  | { state: 'disconnected'; error?: string }
+  | { state: 'connecting' }
+  | { state: 'connected'; email: string }
+  | { state: 'needs-reconnect' };
+
+/** What the Today's calendar card gets. */
+export type TodayResult =
+  | { events: CalendarEvent[] }
+  | { error: 'signed-out' | 'not-connected' | 'needs-reconnect' | 'offline' | 'failed' };
 
 /** The built-in provider as the Transcription page shows it. */
 export type LocalStatus = {

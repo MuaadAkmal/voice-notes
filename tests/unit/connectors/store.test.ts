@@ -44,8 +44,8 @@ const row = (over: Partial<ConnectorRow> = {}): ConnectorRow => ({
   ...over,
 });
 
-function runStoreContract(name: string, make: () => Promise<ConnectorStore>) {
-  describe(name, () => {
+function runStoreContract(name: string, make: () => Promise<ConnectorStore>, timeout = 5_000) {
+  describe(name, { timeout }, () => {
     it('a state is taken once', async () => {
       const s = await make();
       await s.putState({ state: 'st', userId: A, provider: 'google-calendar', expiresAt: 2_000_000_000_000 });
@@ -88,7 +88,8 @@ function runStoreContract(name: string, make: () => Promise<ConnectorStore>) {
 }
 
 runStoreContract('memory connector store', async () => new MemoryConnectorStore());
-runStoreContract('Postgres connector store', pgStore);
+// The first test boots PGlite, slow while the whole suite runs alongside it.
+runStoreContract('Postgres connector store', pgStore, 60_000);
 
 it('the migration keeps the tables away from client roles', () => {
   expect(MIGRATION).toMatch(/alter table public\.connectors enable row level security/);

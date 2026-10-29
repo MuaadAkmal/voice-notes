@@ -31,6 +31,9 @@ import { SyncPings, supabasePings } from './sync/pings';
 import { SyncEngine } from './sync/engine';
 import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
+import { ConnectorsClient } from './connectors/client';
+import { GoogleCalendar } from './connectors/google-calendar';
+import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
@@ -58,10 +61,12 @@ const PROBE_TIMEOUT_MS = 2000;
 const DICTATION_PRUNE_MS = 60 * 60_000;
 let isQuitting = false;
 let dashboard: BrowserWindow | null = null;
+let onDashboardFocus: () => void = () => undefined; // set in boot
 
 function showDashboard(): void {
   if (!dashboard || dashboard.isDestroyed()) {
     dashboard = createDashboardWindow();
+    dashboard.on('focus', () => onDashboardFocus());
     dashboard.on('close', (e) => {
       if (isQuitting) return;
       e.preventDefault();
@@ -462,6 +467,7 @@ async function boot(): Promise<void> {
   const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
 
   const syncHolder: { controller?: SyncController } = {}; // set below; the account callback needs it
+  const connectorsHolder: { service?: ConnectorsService } = {};
   // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
   const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
   const testing = process.env.VOICE_NOTES_TEST === '1';
@@ -489,6 +495,7 @@ async function boot(): Promise<void> {
     onChange: (info) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
       syncHolder.controller?.onAccountChanged();
+      connectorsHolder.service?.onAccountChanged();
     },
   });
   if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
@@ -577,6 +584,44 @@ async function boot(): Promise<void> {
   store.sync.files.onRecord = () => syncController.onLocalChange();
   powerMonitor.on('resume', () => syncController.onResume());
   syncController.start();
+
+  // Google Calendar through the `connectors` Edge Function: it keeps the refresh token, main gets
+  // short-lived access tokens and calls Google itself.
+  let testConnectorsToken: (() => Promise<string | null>) | null = null;
+  const connectorsFetch: typeof fetch = (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init);
+  const makeConnectors = (baseUrl: string, calendarUrl?: string) => {
+    const client = new ConnectorsClient({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      getToken: async () => {
+        if (testConnectorsToken) return testConnectorsToken();
+        return (await supabase.auth.getSession()).data.session?.access_token ?? null;
+      },
+      fetch: connectorsFetch,
+    });
+    return { client, calendar: new GoogleCalendar({ token: () => client.token(), fetch: connectorsFetch, baseUrl: calendarUrl }) };
+  };
+  let connectorsApi = makeConnectors(SUPABASE_URL);
+  const connectors = new ConnectorsService({
+    client: {
+      start: () => connectorsApi.client.start(),
+      status: () => connectorsApi.client.status(),
+      disconnect: () => connectorsApi.client.disconnect(),
+    },
+    calendar: { todayEvents: (now) => connectorsApi.calendar.todayEvents(now), clear: () => connectorsApi.calendar.clear() },
+    signedIn: () => account.current().state === 'signed-in',
+    openExternal: async (url) => {
+      if (testing) openedExternal.push(url);
+      else await shell.openExternal(url);
+    },
+    focusApp: showDashboard,
+    onChange: (info) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.ConnectorsChanged, info);
+    },
+  });
+  connectorsHolder.service = connectors;
+  onDashboardFocus = () => connectors.onFocus();
+  void connectors.refresh();
   const wavBridge = new WavBridge();
   const transcription = new TranscriptionService({
     store,
@@ -614,6 +659,7 @@ async function boot(): Promise<void> {
     localWhisper,
     account,
     sync: syncController,
+    connectors,
     files: fileSync,
   });
 
@@ -649,6 +695,12 @@ async function boot(): Promise<void> {
         useToken: (fn: () => Promise<string | null>) => void (testToken = fn),
         now: () => syncController.syncNow(),
         ping: (from: string) => testPing?.(from), // as if another PC pushed
+      },
+      connectors: {
+        // A local stand-in for the function, which also serves the Calendar API under /calendar/v3.
+        useServer: (url: string) => void (connectorsApi = makeConnectors(url, `${url}/calendar/v3`)),
+        useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
+        service: connectors,
       },
     };
   }
