@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines, House, Mic } from 'lucide-react';
+import { AudioLines, House, Mic, Plug } from 'lucide-react';
 import type { Folder } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { cleanIpcError } from '../../shared/format';
@@ -338,6 +338,12 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
       </div>
       <div className="flex flex-col gap-0.5 border-t border-sidebar-border px-3 py-3">
         <AccountChip active={view.kind === 'account'} onOpen={() => onSelect({ kind: 'account' })} />
+        <NavItem
+          label="Connectors"
+          active={view.kind === 'connectors'}
+          onClick={() => onSelect({ kind: 'connectors' })}
+          icon={<Plug className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
         <NavItem
           label="Transcription"
           active={view.kind === 'transcription'}

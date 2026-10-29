@@ -7,6 +7,7 @@ import { HomePage } from './HomePage';
 import { Logo } from './Logo';
 import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
+import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
 import { TranscriptionPage } from './TranscriptionPage';
@@ -24,7 +25,8 @@ export type View =
   | { kind: 'page'; id: string }
   | { kind: 'settings' }
   | { kind: 'transcription' }
-  | { kind: 'account' };
+  | { kind: 'account' }
+  | { kind: 'connectors' };
 
 const api = window.dashboardApi;
 
@@ -43,7 +45,7 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'account' } | { kind: 'connectors' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -72,7 +74,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'account' && view.kind !== 'connectors')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -119,6 +121,8 @@ export function App() {
               <SettingsPage />
             ) : view.kind === 'transcription' ? (
               <TranscriptionPage />
+            ) : view.kind === 'connectors' ? (
+              <ConnectorsPage />
             ) : view.kind === 'account' ? (
               <AccountPage onSignedOut={goHome} />
             ) : view.kind === 'page' ? (
