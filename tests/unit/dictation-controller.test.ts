@@ -16,6 +16,7 @@ let calendarAdd: (text: string) => Promise<{ ok: boolean; message: string }>;
 let listOn: boolean;
 let listAdd: (text: string, capture: Capture | null) => Promise<{ ok: boolean; message: string }>;
 let capture: Capture | null;
+let reminderOn: boolean;
 let ctl: DictationController;
 
 const audio = (durationMs: number) => ({ bytes: new Uint8Array([1, 2, 3]), durationMs });
@@ -38,6 +39,7 @@ beforeEach(() => {
     return { ok: true, message: 'Added · Lunch · Fri 30 Oct, 13:00' };
   };
   listOn = false;
+  reminderOn = false;
   capture = null;
   listAdd = async (text) => {
     log.push(`list:${text}`);
@@ -62,6 +64,13 @@ beforeEach(() => {
     idleState: () => IDLE,
     calendar: { enabled: () => calendarOn, add: (text) => calendarAdd(text) },
     list: { enabled: () => listOn, wakeWords: () => ['Pixie'], add: (text, c) => listAdd(text, c) },
+    reminder: {
+      enabled: () => reminderOn,
+      add: async (text) => {
+        log.push(`remind:${text}`);
+        return { ok: true, message: 'Reminder · call mom · 5:40 PM' };
+      },
+    },
     onIdle: () => log.push('idle'),
     onCaptureStart: () => log.push('capture-start'),
     onCaptureEnd: () => log.push('capture-end'),
@@ -348,4 +357,28 @@ it('voice to lists: passes the window that was in front at key-down', async () =
   ctl.handleGesture('stop');
   await ctl.onAudio(audio(800));
   expect(got).toEqual(CAP);
+});
+
+it('voice reminders: with or without the wake word or the calendar trigger, before lists and calendar', async () => {
+  reminderOn = listOn = calendarOn = true;
+  for (const said of ['Pixie, remind me to buy milk in 5 min.', 'Remind me to buy milk in 5 min', 'Calendar, remind me to buy milk in 5 min']) {
+    log = [];
+    transcribe = async () => said;
+    ctl.handleGesture('start');
+    ctl.handleGesture('stop');
+    await ctl.onAudio(audio(800));
+    expect(log).toContain(`save:⏰ ${said}:Slack`);
+    expect(log.filter((l) => /^(remind|list|add|paste):/.test(l))).toEqual([`remind:${said.replace(/^(Pixie|Calendar), /, '').replace(/\.$/, '')}`]);
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Reminder · call mom · 5:40 PM' });
+    await vi.advanceTimersByTimeAsync(3000);
+  }
+});
+
+it('voice reminders: off, the wake word goes to lists as before', async () => {
+  listOn = true;
+  transcribe = async () => 'Pixie, remind me to buy milk';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log).toContain('list:remind me to buy milk');
 });

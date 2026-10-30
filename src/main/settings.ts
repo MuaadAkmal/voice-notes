@@ -37,6 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,
   voiceToCalendar: true,
+  voiceReminders: true,
   voiceToLists: true,
   noteWakeWords: DEFAULT_WAKE_WORDS,
   pomodoro: DEFAULT_POMODORO,

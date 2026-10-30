@@ -48,6 +48,9 @@ import {
   PomodoroSchema,
   type PomodoroSession,
   QuickAddSchema,
+  ReminderIdSchema,
+  ReminderTextSchema,
+  ReminderUpdateSchema,
   RangeSchema,
 } from '../shared/ipc';
 import { normaliseBaseUrl } from '../shared/transcription';
@@ -67,6 +70,8 @@ import type { LocalWhisper } from './local-whisper';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
 import type { WavBridge } from './transcription/wav-bridge';
+import type { RemindersService } from './reminders/service';
+import { isReminder } from '../shared/reminder-command';
 
 type OverlayDeps = {
   overlay: BrowserWindow;
@@ -205,6 +210,7 @@ type DashboardDeps = {
   account: AccountService;
   sync: SyncController;
   connectors: ConnectorsService;
+  reminders: RemindersService;
   files: Pick<FileSync, 'fetchAudio'>;
   /** The timer lives in the overlay; main keeps its last state and passes commands on. */
   pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
@@ -406,6 +412,16 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.CalendarRange, RangeSchema, ({ from, to }) => d.connectors.range(new Date(from), new Date(to)));
   handle(Ch.CalendarCreate, NewEventSchema, (e) => d.connectors.create(e));
   handle(Ch.CalendarQuickAdd, QuickAddSchema, ({ text }) => d.connectors.quickAdd(text));
+  handle(Ch.RemindersList, none, () => d.reminders.list());
+  // Typed, "remind me" is optional: "call mom in 10 min" is a reminder too.
+  handle(Ch.RemindersAdd, ReminderTextSchema, async ({ text }) => {
+    const r = await d.reminders.add(isReminder(text) ? text : `remind me to ${text}`);
+    return r ? { ok: r.reminder !== undefined, message: r.message } : { ok: false, message: 'Not a reminder' };
+  });
+  handle(Ch.RemindersUpdate, ReminderUpdateSchema, ({ id, ...patch }) => d.reminders.update(id, patch));
+  handle(Ch.RemindersSnooze, ReminderIdSchema, ({ id }) => d.reminders.snooze(id));
+  handle(Ch.RemindersDone, ReminderIdSchema, ({ id }) => d.reminders.done(id));
+  handle(Ch.RemindersCancel, ReminderIdSchema, ({ id }) => d.reminders.cancel(id));
   const dictations = d.store.dictations;
   handle(Ch.DictationsList, none, () => dictations.list());
   // Main writes the clipboard: the dashboard has no clipboard permission.

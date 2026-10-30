@@ -59,6 +59,7 @@ export const SettingsFieldSchemas = {
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
   voiceToCalendar: z.boolean(),
+  voiceReminders: z.boolean(),
   voiceToLists: z.boolean(),
   noteWakeWords: z.array(z.string().trim().min(1).max(40)).max(10),
   pomodoro: z.object({
@@ -194,4 +195,9 @@ export const RangeSchema = z
 export const NewEventSchema = z
   .object({ title: z.string().trim().min(1).max(1000), allDay: z.boolean(), start: z.number().int(), end: z.number().int() })
   .refine((e) => e.end > e.start && e.end - e.start <= 366 * DAY_MS);
+export const ReminderTextSchema = z.object({ text: z.string().trim().min(1).max(500) });
+export const ReminderIdSchema = z.object({ id: IdSchema });
+export const ReminderUpdateSchema = z
+  .object({ id: IdSchema, text: z.string().trim().min(1).max(200).optional(), dueAt: z.number().int().positive().optional() })
+  .strict();
 export const QuickAddSchema = z.object({ text: z.string().trim().min(1).max(1000) });

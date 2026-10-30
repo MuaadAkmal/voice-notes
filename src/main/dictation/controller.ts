@@ -1,8 +1,9 @@
 import type { GestureEvent } from '../hotkey/gesture';
 import type { OverlayState } from '../../shared/ipc';
 import { MIN_DICTATION_MS } from '../../shared/dictation';
-import { parseCalendarCommand } from '../../shared/calendar-command';
+import { afterCalendarTrigger, parseCalendarCommand } from '../../shared/calendar-command';
 import { parseNoteCommand } from '../../shared/note-command';
+import { isReminder } from '../../shared/reminder-command';
 import type { Capture } from '../commands/capture';
 
 export type DictationPorts = {
@@ -35,6 +36,12 @@ export type DictationPorts = {
     wakeWords(): string[];
     /** The message is fit for the pill ("Added · blueberry → Groceries" or why not). */
     add(text: string, capture: Capture | null): Promise<{ ok: boolean; message: string }>;
+  };
+  /** Voice reminders: "remind me to … in 10 min", alone or after the wake word or calendar trigger. */
+  reminder?: {
+    enabled(): boolean;
+    /** Gets the text from "remind me" on; the message is fit for the pill ("Reminder · call mom · 5:40 PM"). */
+    add(text: string): Promise<{ ok: boolean; message: string }>;
   };
   /** Back to idle (keep the gesture in step). */
   onIdle?(): void;
@@ -188,9 +195,15 @@ export class DictationController {
     this.toIdle();
   }
 
-  /** What the transcript asks for instead of a paste, if anything. The calendar trigger comes first. */
+  /** What the transcript asks for instead of a paste, if anything. A reminder, then the calendar trigger, then lists. */
   private command(text: string): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string }> } | null {
-    const { calendar, list } = this.p;
+    const { calendar, list, reminder } = this.p;
+    if (reminder?.enabled()) {
+      const asked = [text, parseNoteCommand(text, list?.wakeWords() ?? [])?.text, afterCalendarTrigger(text)]
+        .map((t) => t?.trim().replace(/[\s.!?]+$/, ''))
+        .find((t) => t && isReminder(t));
+      if (asked) return { mark: '⏰', busy: 'Setting reminder…', failed: "Couldn't set the reminder", add: () => reminder.add(asked) };
+    }
     const event = calendar?.enabled() ? parseCalendarCommand(text) : null;
     if (event && calendar) return { mark: '📅', busy: 'Adding to calendar…', failed: "Couldn't add the event.", add: () => calendar.add(event.text) };
     const items = list?.enabled() ? parseNoteCommand(text, list.wakeWords()) : null;

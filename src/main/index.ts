@@ -56,6 +56,9 @@ import { AccountService } from './account/account';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
+import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
+import { ReminderScheduler } from './reminders/scheduler';
+import { fired as firedReminders, showReminder } from './reminders/notify';
 import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -74,6 +77,12 @@ let dashboard: BrowserWindow | null = null;
 let onDashboardFocus: () => void = () => undefined; // set in boot
 
 function showDashboard(): void {
+  showDashboardThen();
+}
+
+/** Shows the dashboard; `then` runs once it can take messages (at once, or after a new window loads). */
+function showDashboardThen(then?: () => void): void {
+  const fresh = !dashboard || dashboard.isDestroyed();
   if (!dashboard || dashboard.isDestroyed()) {
     dashboard = createDashboardWindow();
     dashboard.on('focus', () => onDashboardFocus());
@@ -86,6 +95,9 @@ function showDashboard(): void {
   if (dashboard.isMinimized()) dashboard.restore();
   dashboard.show();
   dashboard.focus();
+  if (!then) return;
+  if (fresh) dashboard.webContents.once('did-finish-load', then);
+  else then();
 }
 
 async function boot(): Promise<void> {
@@ -344,6 +356,10 @@ async function boot(): Promise<void> {
         const r = await connectors.quickAdd(text);
         return 'event' in r ? { ok: true, message: `Added · ${formatAdded(r.event)}` } : { ok: false, message: addErrorText(r.error) };
       },
+    },
+    reminder: {
+      enabled: () => settings.voiceReminders,
+      add: async (text) => (await reminders.add(text)) ?? { ok: false, message: "Couldn't set the reminder" },
     },
     list: {
       enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
@@ -728,6 +744,43 @@ async function boot(): Promise<void> {
     },
     pagesChanged: () => toDashboard(Ch.PagesChanged),
   });
+  const reminders = new RemindersService({
+    store: store.reminders,
+    now: () => Date.now(),
+    remind: (req) => commandsClient.remind(req),
+    toQuickNotes: (text) => {
+      const patch = ensureNotesPage(settings, store.pages);
+      if (patch) updateSettings(patch);
+      store.pages.appendLine(settings.notesPageId!, text);
+      toDashboard(Ch.PagesChanged);
+    },
+    google: {
+      connected: () => connectors.current().state === 'connected',
+      create: async (text, dueAt) =>
+        (await connectorsApi.calendar.create({ title: text, allDay: false, start: dueAt, end: dueAt + REMINDER_EVENT_MS }, { popupAtStart: true })).id,
+      remove: (eventId) => connectorsApi.calendar.remove(eventId),
+      move: (eventId, start, end) => connectorsApi.calendar.move(eventId, start, end),
+    },
+    changed: () => toDashboard(Ch.RemindersChanged),
+    warn: (msg, err) => log.warn(msg, err),
+  });
+  const openReminders = () => showDashboardThen(() => toDashboard(Ch.OpenReminders));
+  const reminderScheduler = new ReminderScheduler({
+    store: store.reminders,
+    now: () => Date.now(),
+    setInterval: (fn, ms) => setInterval(fn, ms),
+    clearInterval: (h) => clearInterval(h as NodeJS.Timeout),
+    fire: (r, missed) => {
+      showReminder(r, missed, {
+        snooze: () => void reminders.snooze(r.id),
+        done: () => void reminders.done(r.id),
+        open: openReminders,
+      });
+      toDashboard(Ch.RemindersChanged); // "Due" now
+    },
+  });
+  reminderScheduler.start();
+  powerMonitor.on('resume', () => reminderScheduler.check());
   onDashboardFocus = () => connectors.onFocus();
   void connectors.refresh();
   const wavBridge = new WavBridge();
@@ -768,6 +821,7 @@ async function boot(): Promise<void> {
     account,
     sync: syncController,
     connectors,
+    reminders,
     files: fileSync,
     pomodoro: {
       get: () => pomodoro,
@@ -819,6 +873,7 @@ async function boot(): Promise<void> {
         useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
         service: connectors,
       },
+      reminders: { fired: firedReminders, check: () => reminderScheduler.check(), service: reminders },
       commands: {
         // A local stand-in for the function: its handler over memory, with a fake Groq.
         useServer: (url: string) => void (commandsClient = makeCommandsClient(url)),

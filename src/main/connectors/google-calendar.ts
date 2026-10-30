@@ -12,6 +12,8 @@ const PAGE_SIZE = 250;
 const MAX_PAGES = 4; // 1000 events: far more than a month grid shows
 const MAX_DESCRIPTION = 2000;
 
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+
 type Deps = {
   token(): Promise<TokenResponse>;
   fetch: typeof fetch;
@@ -35,11 +37,27 @@ export class GoogleCalendar {
     return this.list(rfc3339(from), rfc3339(to));
   }
 
-  async create(e: NewEvent): Promise<CalendarEvent> {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const at = (ms: number) => (e.allDay ? { date: ymd(new Date(ms)) } : { dateTime: rfc3339(new Date(ms)), timeZone });
-    const body = { summary: e.title, start: at(e.start), end: at(e.end) }; // Google's all-day end date is exclusive too
+  /** `popupAtStart`: a voice reminder, so Google alerts at the time itself, not the calendar's default. */
+  async create(e: NewEvent, opts: { popupAtStart?: boolean } = {}): Promise<CalendarEvent> {
+    const body = {
+      summary: e.title,
+      ...times(e.allDay, e.start, e.end), // Google's all-day end date is exclusive too
+      ...(opts.popupAtStart ? { reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] } } : {}),
+    };
     return this.added(await this.send('POST', `${this.base()}/calendars/primary/events`, body));
+  }
+
+  /** Deletes an event; one already gone (404/410) counts as deleted. */
+  async remove(eventId: string): Promise<void> {
+    await this.send('DELETE', this.eventUrl(eventId), undefined, [404, 410]);
+  }
+
+  async move(eventId: string, start: number, end: number): Promise<void> {
+    await this.send('PATCH', this.eventUrl(eventId), times(false, start, end));
+  }
+
+  private eventUrl(eventId: string): string {
+    return `${this.base()}/calendars/primary/events/${encodeURIComponent(eventId)}`;
   }
 
   /** Google's own parsing of "Lunch tomorrow 1pm". */
@@ -76,7 +94,7 @@ export class GoogleCalendar {
   }
 
   /** One call with the cached token; a 401 gets one more try with a fresh one. Answers the parsed JSON. */
-  private async send(method: 'GET' | 'POST', url: string, body?: unknown): Promise<unknown> {
+  private async send(method: Method, url: string, body?: unknown, okStatuses: number[] = []): Promise<unknown> {
     let res = await this.fetchWithToken(method, url, body);
     if (res.status === 401) {
       this.cached = null; // revoked or rotated early: one more try with a fresh token
@@ -84,6 +102,7 @@ export class GoogleCalendar {
       if (res.status === 401) throw new AuthExpired();
     }
     if (res.status === 403) throw new Revoked(); // the calendar permission is gone
+    if (okStatuses.includes(res.status) || res.status === 204) return null;
     if (!res.ok) throw new Error(`Google Calendar answered ${res.status}`);
     return res.json();
   }
@@ -93,7 +112,7 @@ export class GoogleCalendar {
     this.generation++;
   }
 
-  private async fetchWithToken(method: 'GET' | 'POST', url: string, body?: unknown): Promise<Response> {
+  private async fetchWithToken(method: Method, url: string, body?: unknown): Promise<Response> {
     const token = await this.accessToken();
     const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     if (body !== undefined) headers['content-type'] = 'application/json';
@@ -117,6 +136,13 @@ export class GoogleCalendar {
     if (generation === this.generation) this.cached = { accessToken: t.accessToken, expiresAt: now + t.expiresIn * 1000 };
     return t.accessToken;
   }
+}
+
+/** An event's start and end as Google wants them: dates for all-day, else local times with the zone. */
+function times(allDay: boolean, start: number, end: number) {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const at = (ms: number) => (allDay ? { date: ymd(new Date(ms)) } : { dateTime: rfc3339(new Date(ms)), timeZone });
+  return { start: at(start), end: at(end) };
 }
 
 /** Local midnight to the next local midnight, as RFC 3339 with the local offset. */

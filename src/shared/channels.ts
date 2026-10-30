@@ -80,6 +80,7 @@ export type Settings = {
   dictationHotkeyLabel: string;
   dictationSound: boolean; // a ping when dictation starts listening
   voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
+  voiceReminders: boolean; // "Remind me to … in 10 min" dictations become reminders on this PC (+ Google Calendar while connected)
   voiceToLists: boolean; // "List, …" dictations add to a page (via the `commands` function) while signed in
   noteWakeWords: string[]; // the names that start a voice-to-lists command ("Pixie, …"); empty = Pixie
   pomodoro: PomodoroSettings;
@@ -136,6 +137,9 @@ export type Reminder = {
   firedAt: number | null;
   googleEventId: string | null;
 };
+
+/** A typed reminder: ok with the message the toast shows; a text that isn't a reminder is refused. */
+export type AddReminderReply = { ok: boolean; message: string };
 
 export type Dictation = { id: string; text: string; app: string | null; createdAt: number };
 /** A dictation clip from the overlay, already 16 kHz mono WAV. */
@@ -246,6 +250,12 @@ export const Ch = {
   CalendarRange: 'calendar:range',
   CalendarCreate: 'calendar:create',
   CalendarQuickAdd: 'calendar:quick-add',
+  RemindersList: 'reminders:list', // → Reminder[]
+  RemindersAdd: 'reminders:add', // { text } → AddReminderReply
+  RemindersUpdate: 'reminders:update', // { id, text?, dueAt? }
+  RemindersSnooze: 'reminders:snooze', // { id }
+  RemindersDone: 'reminders:done', // { id }
+  RemindersCancel: 'reminders:cancel', // { id }
   PomodoroGet: 'pomodoro:get', // → Pomodoro
   PomodoroSessions: 'pomodoro:sessions', // → PomodoroSession[]
   PomodoroClearSessions: 'pomodoro:clear-sessions',
@@ -260,6 +270,8 @@ export const Ch = {
   SyncChanged: 'sync:changed', // SyncView
   ConnectorsChanged: 'connectors:changed', // ConnectorsInfo
   PomodoroChanged: 'pomodoro:changed', // Pomodoro
+  RemindersChanged: 'reminders:changed',
+  OpenReminders: 'reminders:open', // a notification was clicked: show the Reminders tab
   PomodoroSessionsChanged: 'pomodoro:sessions-changed',
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav

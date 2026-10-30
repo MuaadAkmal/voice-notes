@@ -194,3 +194,25 @@ it('toCalendarEvent keeps location and caps description at 2000', () => {
   expect(e?.description).toHaveLength(2000);
   expect(toCalendarEvent(LUNCH)).not.toHaveProperty('location');
 });
+
+it('create can ask for a popup at the start instead of the default reminders', async () => {
+  const { cal, inits } = calendar([one(LUNCH)]);
+  await cal.create({ title: 'Call mom', allDay: false, start: 1_000, end: 901_000 }, { popupAtStart: true });
+  expect(JSON.parse(String(inits[0].body)).reminders).toEqual({ useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] });
+});
+
+it('remove deletes the event; a gone event is fine', async () => {
+  const { cal, urls, inits } = calendar([() => new Response(null, { status: 204 }), () => new Response('{}', { status: 410 })]);
+  await cal.remove('e 1');
+  expect(urls[0]).toBe('https://cal.test/v3/calendars/primary/events/e%201');
+  expect(inits[0].method).toBe('DELETE');
+  await cal.remove('e2');
+});
+
+it('move patches the start and end', async () => {
+  const { cal, urls, inits } = calendar([one(LUNCH)]);
+  await cal.move('e1', new Date(2026, 9, 30, 13).getTime(), new Date(2026, 9, 30, 13, 15).getTime());
+  expect(urls[0]).toBe('https://cal.test/v3/calendars/primary/events/e1');
+  expect(inits[0].method).toBe('PATCH');
+  expect(JSON.parse(String(inits[0].body)).start.dateTime).toBe('2026-10-30T13:00:00+05:30');
+});

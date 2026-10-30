@@ -18,3 +18,10 @@ export function parseCalendarCommand(text: string): { text: string } | null {
     .trim();
   return rest ? { text: rest } : null;
 }
+
+/** What follows the calendar trigger, unchanged (no lead-ins stripped), or null without one. */
+export function afterCalendarTrigger(text: string): string | null {
+  const start = text.trim().replace(/^[\s,.:;!?"'-]+/, '');
+  const m = TRIGGER.exec(start);
+  return m ? start.slice(m[0].length) : null;
+}
