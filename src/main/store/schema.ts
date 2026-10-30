@@ -60,6 +60,16 @@ export const pomodoroSessions = sqliteTable('pomodoro_sessions', {
   focusMs: integer('focus_ms').notNull(),
 });
 
+export const reminders = sqliteTable('reminders', {
+  id: text('id').primaryKey(),
+  text: text('text').notNull(),
+  dueAt: integer('due_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+  status: text('status', { enum: ['pending', 'done', 'cancelled'] }).notNull(),
+  firedAt: integer('fired_at'),
+  googleEventId: text('google_event_id'),
+});
+
 export const outbox = sqliteTable('outbox', {
   seq: integer('seq').primaryKey({ autoIncrement: true }),
   mutationId: text('mutation_id').notNull().unique(),

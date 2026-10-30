@@ -122,6 +122,17 @@ export const MIGRATIONS: string[] = [
      focus_ms     INTEGER NOT NULL
    );
    CREATE INDEX pomodoro_sessions_completed_at ON pomodoro_sessions (completed_at);`,
+  // Voice reminders (this PC only, never synced). fired_at: the notification was shown for this due_at.
+  `CREATE TABLE reminders (
+     id              TEXT PRIMARY KEY,
+     text            TEXT NOT NULL,
+     due_at          INTEGER NOT NULL,
+     created_at      INTEGER NOT NULL,
+     status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'cancelled')),
+     fired_at        INTEGER,
+     google_event_id TEXT
+   );
+   CREATE INDEX reminders_due ON reminders (status, due_at);`,
 ];
 
 export function migrate(db: Database.Database): void {

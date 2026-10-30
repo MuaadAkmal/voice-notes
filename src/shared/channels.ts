@@ -125,6 +125,18 @@ export type PomodoroSettings = {
 export type PomodoroSession = { completedAt: number; focusMs: number };
 export type PomodoroAction = 'start' | 'pause' | 'resume' | 'skip' | 'stop';
 
+export type ReminderStatus = 'pending' | 'done' | 'cancelled';
+export type Reminder = {
+  id: string;
+  text: string;
+  dueAt: number;
+  createdAt: number;
+  status: ReminderStatus;
+  /** When the notification was shown for this dueAt (null: not yet). */
+  firedAt: number | null;
+  googleEventId: string | null;
+};
+
 export type Dictation = { id: string; text: string; app: string | null; createdAt: number };
 /** A dictation clip from the overlay, already 16 kHz mono WAV. */
 export type DictationAudio = { bytes: Uint8Array; durationMs: number };

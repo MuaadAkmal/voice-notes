@@ -117,6 +117,7 @@ async function boot(): Promise<void> {
     recordPrefs(notesPatch, store.sync.outbox); // nothing is recorded while sync is off
   }
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
+  store.reminders.prune(Date.now());
   // Audio and images from the account come through FileSync, made with the sync wiring below.
   const filesHolder: { files?: FileSync } = {};
   const fetcher = {
