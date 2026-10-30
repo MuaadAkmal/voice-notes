@@ -54,10 +54,13 @@ export const SettingsFieldSchemas = {
   transcription: TranscriptionSchema,
   transcribeLanguage: z.enum(LANGUAGE_CODES),
   laterPageId: z.uuid().nullable(),
+  notesPageId: z.uuid().nullable(),
   dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
   voiceToCalendar: z.boolean(),
+  voiceToLists: z.boolean(),
+  noteWakeWords: z.array(z.string().trim().min(1).max(40)).max(10),
   pomodoro: z.object({
     focusMin: z.number().int().min(1).max(120),
     shortBreakMin: z.number().int().min(1).max(60),

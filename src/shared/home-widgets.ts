@@ -25,14 +25,6 @@ export const ensureLocked = (
     ? ws
     : [{ id: newId, type: 'page', pageId, locked: true }, ...ws];
 
-/** Sets a quick-add widget's label; page widgets have none. */
-export const renameWidget = (
-  ws: HomeWidget[],
-  id: string,
-  label: string,
-): HomeWidget[] =>
-  ws.map((w) => (w.id === id && w.type === 'quick-add' ? { ...w, label } : w));
-
 /** Only `page` widgets count: a quick-add box for a page is not a pin. */
 export const isPinned = (ws: HomeWidget[], pageId: string): boolean =>
   ws.some((w) => w.type === 'page' && w.pageId === pageId);

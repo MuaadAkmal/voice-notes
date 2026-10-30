@@ -2,6 +2,7 @@ import { BrowserWindow, clipboard, ipcMain, type IpcMainEvent, type IpcMainInvok
 import log from 'electron-log/main';
 import { z } from 'zod';
 import {
+  type CaptureResult,
   AppendEntrySchema,
   type AudioDevice,
   AudioPayloadSchema,
@@ -80,14 +81,18 @@ type OverlayDeps = {
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
+  onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;
 };
 
 /** Listener that only accepts messages from `win` whose payload matches `schema`. */
+/** Whether a message came from `win`; a destroyed window's webContents can't even be read. */
+const isFrom = (win: BrowserWindow, sender: Electron.WebContents) => !win.isDestroyed() && sender === win.webContents;
+
 function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payload: z.infer<S>) => void) {
   return (event: IpcMainEvent, payload: unknown) => {
-    if (event.sender !== win.webContents) return;
+    if (!isFrom(win, event.sender)) return;
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
       log.warn('[ipc] rejected payload', parsed.error.message);
@@ -111,12 +116,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(Ch.PomodoroState, from(overlay, PomodoroSchema, deps.onPomodoro));
   ipcMain.on(Ch.PomodoroDone, from(overlay, PomodoroDoneSchema, ({ focusMs }) => deps.onPomodoroDone(focusMs)));
   ipcMain.on(Ch.MediaProbeResult, from(overlay, ProbeResultSchema, ({ id, playing }) => deps.onProbeResult(id, playing)));
-  ipcMain.on(Ch.OverlayTitleStart, (e) => e.sender === overlay.webContents && titles.start());
+  ipcMain.on(Ch.OverlayTitleStart, (e) => isFrom(overlay, e.sender) && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
-  ipcMain.on(Ch.OverlayTitleCancel, (e) => e.sender === overlay.webContents && titles.cancel());
+  ipcMain.on(Ch.OverlayTitleCancel, (e) => isFrom(overlay, e.sender) && titles.cancel());
   // The hands-free × discards whichever is recording (only one can be).
   ipcMain.on(Ch.OverlayDiscard, (e) => {
-    if (e.sender !== overlay.webContents) return;
+    if (!isFrom(overlay, e.sender)) return;
     gesture.escape();
     dictationGesture.escape();
   });
@@ -127,7 +132,7 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
       overlay.setPosition(x + dx, y + dy);
     }),
   );
-  ipcMain.on(Ch.OverlayDragEnd, (e) => e.sender === overlay.webContents && onDragEnd());
+  ipcMain.on(Ch.OverlayDragEnd, (e) => isFrom(overlay, e.sender) && onDragEnd());
   ipcMain.on(Ch.OverlayDevices, from(overlay, DevicesSchema, onDevices));
   ipcMain.on(
     Ch.RecorderAudio,
@@ -156,8 +161,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     }),
   );
   ipcMain.handle(Ch.LaterDrop, (event: IpcMainInvokeEvent, payload: unknown) => {
-    if (event.sender !== overlay.webContents) throw new Error('Forbidden');
+    if (!isFrom(overlay, event.sender)) throw new Error('Forbidden');
     return deps.onDrop(DropPayloadSchema.parse(payload));
+  });
+  ipcMain.handle(Ch.LaterCapture, (event: IpcMainInvokeEvent) => {
+    if (!isFrom(overlay, event.sender)) throw new Error('Forbidden');
+    return deps.onCaptureLater();
   });
   ipcMain.on(
     Ch.DictationAudio,
@@ -167,12 +176,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   );
   // Clicking the pill during a dictation stops it; otherwise it toggles a hands-free note.
   ipcMain.on(Ch.OverlayClick, (e) => {
-    if (e.sender !== overlay.webContents) return;
+    if (!isFrom(overlay, e.sender)) return;
     if (dictation.active) dictationGesture.toggle();
     else gesture.toggle();
   });
   ipcMain.on(Ch.OverlayRetry, (e) => {
-    if (e.sender === overlay.webContents) controller.retry().catch((err) => log.error(err));
+    if (isFrom(overlay, e.sender)) controller.retry().catch((err) => log.error(err));
   });
 }
 
@@ -317,8 +326,9 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
   });
   handle(Ch.PagesDeleteMany, IdListSchema, async (requested) => {
-    // The built-in Review later page can't be deleted, whatever the renderer asks.
-    const ids = requested.filter((id) => id !== d.getSettings().laterPageId);
+    // The built-in Review later and Quick notes pages can't be deleted, whatever the renderer asks.
+    const { laterPageId, notesPageId } = d.getSettings();
+    const ids = requested.filter((id) => id !== laterPageId && id !== notesPageId);
     try {
       await pages.deleteMany(ids);
     } finally {

@@ -3,6 +3,7 @@ import type { OverlayState, RecordingSource } from '../../shared/channels';
 import { isSilent, levelFromRms, rmsOf } from '../../shared/audio-level';
 import { progress } from '../../shared/pomodoro';
 import { PHASE_COLOR, PomodoroChip } from './Pomodoro';
+import { SaveThisButton } from './SaveLater';
 import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
 
@@ -167,7 +168,9 @@ const CHIP_LINGER_MS = 350;
  * The resting bar. Hovering it raises the pomodoro chip above it (the bar itself never moves, so a
  * click aimed at it still records); a running pomodoro fills the bar with its progress.
  */
-function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boolean; pomo: PomodoroControls; hover: Hover }) {
+type IdleBarProps = { visible: boolean; film: boolean; pomo: PomodoroControls; hover: Hover; onSave: () => void };
+
+function IdleBar({ visible, film, pomo, hover, onSave }: IdleBarProps) {
   const api = window.overlayApi;
   const [open, setOpen] = useState(false);
   const linger = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -194,7 +197,12 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
       }}
       className="flex flex-col items-center gap-1.5"
     >
-      {(open || pomo.ended) && <PomodoroChip pomo={pomo} />}
+      {(open || pomo.ended) && (
+        <div className="flex items-center gap-1.5">
+          {open && <SaveThisButton onSave={onSave} />}
+          <PomodoroChip pomo={pomo} />
+        </div>
+      )}
       <div className="flex items-center gap-1.5">
         {film && (
           <span
@@ -228,7 +236,7 @@ function IdleBar({ visible, film, pomo, hover }: { visible: boolean; film: boole
   );
 }
 
-type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls };
+type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls; onSave: () => void };
 
 const SHELL =
   'flex items-center justify-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
@@ -248,7 +256,7 @@ export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
   return <div data-morph className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
 }
 
-export function Pill({ state, analyser, pomo }: PillProps) {
+export function Pill({ state, analyser, pomo, onSave }: PillProps) {
   const api = window.overlayApi;
   const [silent, setSilent] = useState(false);
   const recording = state.kind === 'recording';
@@ -264,7 +272,7 @@ export function Pill({ state, analyser, pomo }: PillProps) {
 
   switch (state.kind) {
     case 'idle':
-      return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} />;
+      return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} onSave={onSave} />;
     case 'busy':
       return (
         <div data-morph className={`${shell} h-9 gap-2 px-4 text-sm text-white/80`}>

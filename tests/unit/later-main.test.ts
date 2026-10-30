@@ -5,7 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import type { DropPayload, Settings } from '../../src/shared/channels';
 import { DEFAULT_SETTINGS } from '../../src/main/settings';
-import { ensureLaterPage, guardWidgets, saveDrop } from '../../src/main/later';
+import { ensureLaterPage, guardWidgets, saveCapture, saveDrop } from '../../src/main/later';
+import type { Capture } from '../../src/main/commands/capture';
+import type { Described } from '../../src/main/commands/describe';
 import { NoteStore } from '../../src/main/store/note-store';
 
 const T0 = new Date(2026, 9, 24, 14, 32).getTime();
@@ -93,4 +95,31 @@ it('guardWidgets drops locked flags for other pages and re-adds the real card', 
     () => 'w',
   );
   expect(patch.homeWidgets).toEqual([{ id: 'w', type: 'page', pageId: later, locked: true }]);
+});
+
+const CHROME: Capture = { hwnd: 1, title: 'How Rust lifetimes work - YouTube - Google Chrome', processName: 'chrome.exe', pid: 7 };
+const captureDeps = (capture: Capture | null, described: Described) => ({
+  ...deps(),
+  capture: () => capture,
+  describe: async () => described,
+  saveImage: async () => 'vn-image://shot.jpg',
+});
+
+it('Save this writes the window in front to Review later as an unticked line', async () => {
+  const r = await saveCapture(captureDeps(CHROME, { label: 'How Rust lifetimes work', app: 'Chrome', url: 'https://youtube.com/watch?v=x' }));
+  expect(r).toEqual({ kind: 'saved', label: 'How Rust lifetimes work' });
+  expect(laterBody()).toContain('- [ ] [How Rust lifetimes work](https://youtube.com/watch?v=x)');
+});
+
+it('Save this keeps a screenshot when nothing else could be read', async () => {
+  const shot = { hwnd: 2, title: 'Game', processName: 'game.exe', pid: 8 };
+  await saveCapture(captureDeps(shot, { label: 'Game', app: 'game', image: new Uint8Array([1]) }));
+  expect(laterBody()).toContain('- [ ] Game ![Game](vn-image://shot.jpg)');
+});
+
+it('Save this saves nothing with no window or only the desktop in front', async () => {
+  const d: Described = { label: 'x', app: 'x' };
+  expect(await saveCapture(captureDeps(null, d))).toEqual({ kind: 'nothing' });
+  expect(await saveCapture(captureDeps({ hwnd: 3, title: 'Program Manager', processName: 'explorer.exe', pid: 9 }, d))).toEqual({ kind: 'nothing' });
+  expect(settings.laterPageId).toBeNull();
 });

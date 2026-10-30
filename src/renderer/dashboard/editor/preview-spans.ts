@@ -68,6 +68,12 @@ export function previewSpans(
       const node = ref.node;
       const name = node.name;
 
+      // "\[" shows as "[" (titles added by voice commands escape their brackets).
+      if (name === 'Escape') {
+        if (!touches(node.from, node.to)) hide(node.from, node.from + 1);
+        return false;
+      }
+
       if (name === 'TaskMarker') {
         if (!inside(node.from, node.to)) {
           const checked = /x/i.test(doc.sliceString(node.from, node.to));

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { OverlayState } from '../../src/shared/channels';
 import { DictationController, type DictationPorts } from '../../src/main/dictation/controller';
+import type { Capture } from '../../src/main/commands/capture';
 
 const IDLE: OverlayState = { kind: 'idle', visible: true };
 let log: string[];
@@ -12,6 +13,9 @@ let save: (text: string, app: string | null) => void;
 let paste: (text: string) => Promise<void>;
 let calendarOn: boolean;
 let calendarAdd: (text: string) => Promise<{ ok: boolean; message: string }>;
+let listOn: boolean;
+let listAdd: (text: string, capture: Capture | null) => Promise<{ ok: boolean; message: string }>;
+let capture: Capture | null;
 let ctl: DictationController;
 
 const audio = (durationMs: number) => ({ bytes: new Uint8Array([1, 2, 3]), durationMs });
@@ -33,6 +37,12 @@ beforeEach(() => {
     log.push(`add:${text}`);
     return { ok: true, message: 'Added · Lunch · Fri 30 Oct, 13:00' };
   };
+  listOn = false;
+  capture = null;
+  listAdd = async (text) => {
+    log.push(`list:${text}`);
+    return { ok: true, message: 'Added · blueberry → Groceries' };
+  };
   const ports: DictationPorts = {
     overlay: {
       start: (deviceId, ping) => log.push(`start:${deviceId}:${ping}`),
@@ -45,11 +55,13 @@ beforeEach(() => {
     getDeviceId: () => 'mic1',
     sound: () => true,
     getApp: () => 'Slack',
+    getCapture: () => capture,
     transcribe: (wav, signal) => transcribe(wav, signal),
     save: (text, app) => save(text, app),
     paste: (text) => paste(text),
     idleState: () => IDLE,
     calendar: { enabled: () => calendarOn, add: (text) => calendarAdd(text) },
+    list: { enabled: () => listOn, wakeWords: () => ['Pixie'], add: (text, c) => listAdd(text, c) },
     onIdle: () => log.push('idle'),
     onCaptureStart: () => log.push('capture-start'),
     onCaptureEnd: () => log.push('capture-end'),
@@ -263,4 +275,77 @@ it('voice to calendar: off, or no trigger, pastes as usual', async () => {
   ctl.handleGesture('stop');
   await ctl.onAudio(audio(800));
   expect(log.filter((l) => l.startsWith('paste:') || l.startsWith('add:'))).toEqual(['paste:Calendar lunch at 1', 'paste:Schedule is tight']);
+});
+
+it('voice to lists: the wake word adds to a list instead of pasting', async () => {
+  listOn = true;
+  transcribe = async () => 'Pixie, add blueberry to my grocery list.';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log).toContain('save:📝 Pixie, add blueberry to my grocery list.:Slack');
+  expect(log).toContain('list:add blueberry to my grocery list');
+  expect(log.some((l) => l.startsWith('paste:'))).toBe(false);
+  expect(states.slice(-2)).toEqual([
+    { kind: 'busy', message: 'Saving note…' },
+    { kind: 'done', message: 'Added · blueberry → Groceries' },
+  ]);
+  expect(ctl.state).toBe('idle');
+});
+
+it('voice to lists: a failed add says why, then pastes the text', async () => {
+  listOn = true;
+  transcribe = async () => 'Pixie milk to shopping';
+  listAdd = async () => ({ ok: false, message: 'No matching list' });
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(states.at(-1)).toEqual({ kind: 'error', message: 'No matching list', retry: false });
+  expect(log).toContain('paste:Pixie milk to shopping');
+});
+
+it('voice to lists: a throwing add still pastes', async () => {
+  listOn = true;
+  transcribe = async () => 'Pixie milk to shopping';
+  listAdd = async () => {
+    throw new Error('boom');
+  };
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(states.at(-1)).toEqual({ kind: 'error', message: "Couldn't save the note", retry: false });
+  expect(log).toContain('paste:Pixie milk to shopping');
+});
+
+it('voice to lists: off, or no wake word, pastes as usual; the calendar trigger comes first', async () => {
+  transcribe = async () => 'Pixie milk to shopping';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  listOn = true;
+  calendarOn = true;
+  transcribe = async () => 'Notebook is here';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  transcribe = async () => 'Calendar lunch at 1';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(log.filter((l) => /^(paste|add|list):/.test(l))).toEqual(['paste:Pixie milk to shopping', 'paste:Notebook is here', 'add:lunch at 1']);
+});
+
+it('voice to lists: passes the window that was in front at key-down', async () => {
+  listOn = true;
+  const CAP: Capture = { hwnd: 7, title: 'V - YouTube - Google Chrome', processName: 'chrome.exe', pid: 9 };
+  capture = CAP;
+  let got: Capture | null = null;
+  listAdd = async (_text, c) => ((got = c), { ok: true, message: 'Added · V → YouTube' });
+  transcribe = async () => 'Pixie, add this to YouTube';
+  ctl.handleGesture('start');
+  capture = { ...CAP, hwnd: 8, title: 'Other' }; // switched windows while speaking
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(got).toEqual(CAP);
 });

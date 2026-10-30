@@ -20,7 +20,7 @@ import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { LocalWhisper } from './local-whisper';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
-import { ensureLaterPage, guardWidgets, saveDrop } from './later';
+import { ensureLaterPage, guardWidgets, saveCapture, saveDrop } from './later';
 import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
@@ -33,6 +33,14 @@ import { SyncEngine } from './sync/engine';
 import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
 import { ConnectorsClient } from './connectors/client';
+import type { Capture } from './commands/capture';
+import { CommandsClient } from './commands/client';
+import { ListCommands } from './commands/service';
+import { describeCapture } from './commands/describe';
+import { readBrowserUrl } from './commands/browser-url';
+import { readFilePath } from './commands/file-path';
+import { windowScreenshot } from './commands/screenshot';
+import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
@@ -102,6 +110,12 @@ async function boot(): Promise<void> {
   // The built-in Review later page and its locked Home card always exist.
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
   if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
+  // And the built-in Quick notes page, where a "Note, …" that matches no page lands.
+  const notesPatch = ensureNotesPage(settings, store.pages);
+  if (notesPatch) {
+    Object.assign(settings, saveSettings(settingsFile, notesPatch));
+    recordPrefs(notesPatch, store.sync.outbox); // nothing is recorded while sync is off
+  }
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
   // Audio and images from the account come through FileSync, made with the sync wiring below.
   const filesHolder: { files?: FileSync } = {};
@@ -179,11 +193,22 @@ async function boot(): Promise<void> {
 
   // Which window the note was recorded over. Replaceable under test (there's no real foreground window).
   let foreground = foregroundWindow;
-  const getContext = (): NoteContext | null => {
+  const captureWindow = (): Capture | null => {
     const fg = foreground();
     // No window, or our own dashboard in front: nothing to attribute the note to.
     if (!fg || !fg.title || fg.pid === process.pid) return null;
-    return { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
+    return { hwnd: fg.hwnd ?? 0, title: fg.title, processName: fg.processName, pid: fg.pid };
+  };
+  // What a captured window shows, for "add this to …" and the pill's Save this.
+  const describeWindow = (c: Capture) =>
+    describeCapture(
+      c,
+      { browserUrl: (c) => readBrowserUrl(c), filePath: (c) => readFilePath(c), screenshot: (h) => windowScreenshot(h, (o) => desktopCapturer.getSources(o)) },
+      (line) => log.info(line),
+    );
+  const getContext = (): NoteContext | null => {
+    const fg = captureWindow();
+    return fg && { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
   };
 
   // Auto-pause asks the overlay whether anything is playing before pressing play/pause.
@@ -269,6 +294,7 @@ async function boot(): Promise<void> {
     getDeviceId: () => settings.micDeviceId,
     sound: () => settings.dictationSound,
     getApp: () => getContext()?.show ?? null,
+    getCapture: captureWindow,
     transcribe: async (audio, signal) => {
       const { transcription, transcribeLanguage } = settings;
       const ep = await endpoint();
@@ -317,6 +343,11 @@ async function boot(): Promise<void> {
         const r = await connectors.quickAdd(text);
         return 'event' in r ? { ok: true, message: `Added · ${formatAdded(r.event)}` } : { ok: false, message: addErrorText(r.error) };
       },
+    },
+    list: {
+      enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
+      wakeWords: () => settings.noteWakeWords,
+      add: (text, capture) => listCommands.add(text, capture),
     },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
@@ -398,6 +429,24 @@ async function boot(): Promise<void> {
         return result;
       } catch (err) {
         log.error('[later] drop not saved', err);
+        throw err;
+      }
+    },
+    onCaptureLater: async () => {
+      try {
+        const result = await saveCapture({
+          pages: store.pages,
+          getSettings: () => settings,
+          updateSettings,
+          capture: captureWindow,
+          describe: describeWindow,
+          saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),
+          newId: randomUUID,
+        });
+        if (result.kind === 'saved') toDashboard(Ch.PagesChanged);
+        return result;
+      } catch (err) {
+        log.error('[later] capture not saved', err);
         throw err;
       }
     },
@@ -652,6 +701,32 @@ async function boot(): Promise<void> {
     },
   });
   connectorsHolder.service = connectors;
+
+  // Voice to lists through the `commands` Edge Function, which holds the Groq key.
+  let testCommandsToken: (() => Promise<string | null>) | null = null;
+  const makeCommandsClient = (baseUrl: string) =>
+    new CommandsClient({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      getToken: async () => {
+        if (testCommandsToken) return testCommandsToken();
+        return (await supabase.auth.getSession()).data.session?.access_token ?? null;
+      },
+      fetch: connectorsFetch,
+    });
+  let commandsClient = makeCommandsClient(SUPABASE_URL);
+  const listCommands = new ListCommands({
+    resolve: (req) => commandsClient.resolve(req),
+    describe: describeWindow,
+    saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),
+    pages: store.pages,
+    quickNotes: () => {
+      const patch = ensureNotesPage(settings, store.pages);
+      if (patch) updateSettings(patch);
+      return settings.notesPageId!;
+    },
+    pagesChanged: () => toDashboard(Ch.PagesChanged),
+  });
   onDashboardFocus = () => connectors.onFocus();
   void connectors.refresh();
   const wavBridge = new WavBridge();
@@ -742,6 +817,11 @@ async function boot(): Promise<void> {
         useServer: (url: string) => void (connectorsApi = makeConnectors(url, `${url}/calendar/v3`)),
         useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
         service: connectors,
+      },
+      commands: {
+        // A local stand-in for the function: its handler over memory, with a fake Groq.
+        useServer: (url: string) => void (commandsClient = makeCommandsClient(url)),
+        useToken: (fn: () => Promise<string | null>) => void (testCommandsToken = fn),
       },
     };
   }

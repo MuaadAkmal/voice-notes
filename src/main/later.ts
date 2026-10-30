@@ -1,6 +1,9 @@
-import type { DropPayload, Settings } from '../shared/channels';
+import type { CaptureResult, DropPayload, Settings } from '../shared/channels';
 import { ensureLocked } from '../shared/home-widgets';
+import { captureLine } from '../shared/capture-line';
 import { LATER_PAGE_TITLE, laterEntry, parseDrop } from '../shared/later';
+import type { Capture } from './commands/capture';
+import type { Described } from './commands/describe';
 import type { PageStore } from './store/page-store';
 
 /**
@@ -50,4 +53,27 @@ export function saveDrop(payload: DropPayload, deps: DropDeps): 'saved' | 'ignor
   const { laterPageId } = patch ? deps.updateSettings(patch) : deps.getSettings();
   deps.pages.appendEntry(laterPageId!, laterEntry(item, deps.source()));
   return 'saved';
+}
+
+type CaptureDeps = Omit<DropDeps, 'source'> & {
+  capture(): Capture | null; // the window in front, never our own
+  describe(c: Capture): Promise<Described>;
+  saveImage(bytes: Uint8Array): Promise<string>; // vn-image:// src
+};
+
+/**
+ * The pill's "Save this" button: the window in front (the overlay never takes focus) becomes a
+ * Review later entry, as "Pixie, add this to …" would write it. Nothing in front, or only the
+ * desktop, saves nothing. Throws if the append fails.
+ */
+export async function saveCapture(deps: CaptureDeps): Promise<CaptureResult> {
+  const c = deps.capture();
+  if (!c || (c.processName.toLowerCase().replace(/\.exe$/, '') === 'explorer' && c.title === 'Program Manager')) return { kind: 'nothing' };
+  const d = await deps.describe(c);
+  const imageSrc = d.image ? await deps.saveImage(d.image).catch(() => undefined) : undefined;
+  const line = captureLine({ label: d.label, app: d.app, url: d.url, path: d.path, imageSrc });
+  const patch = ensureLaterPage(deps.getSettings(), deps.pages, deps.newId);
+  const { laterPageId } = patch ? deps.updateSettings(patch) : deps.getSettings();
+  deps.pages.appendEntry(laterPageId!, `[ ] ${line}`);
+  return { kind: 'saved', label: d.label };
 }

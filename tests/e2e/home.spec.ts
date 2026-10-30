@@ -41,12 +41,12 @@ test('home: default view and quick add', async () => {
   await dialog.getByRole('combobox', { name: 'Page' }).click();
   await page.getByRole('option', { name: 'New page…' }).click();
   await expect(dialog.getByLabel('New page name')).toHaveValue('New words');
-  await expect(dialog.getByLabel('Label')).toHaveValue('Learned today');
+  await expect(dialog.getByLabel('Label')).toHaveCount(0); // a card is named by its page
   await shot('2-dialog');
   await dialog.getByRole('button', { name: 'Add widget' }).click();
   await expect(dialog).toBeHidden();
 
-  const input = page.getByLabel('Add entry to Learned today');
+  const input = page.getByLabel('Add entry to New words');
   await input.click();
   await input.fill('hola: hello');
   await input.press('Enter');
@@ -77,22 +77,9 @@ test('home: default view and quick add', async () => {
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
 
-  // Rename the box from its ⋯ menu; Escape cancels a second rename.
-  const rename = async (label: string, key: 'Enter' | 'Escape') => {
-    await cards().first().getByRole('button', { name: 'Widget options' }).click();
-    await page.getByRole('menuitem', { name: 'Rename' }).click();
-    const field = page.getByLabel('Label');
-    await expect(field).toBeFocused();
-    await field.fill(label);
-    await field.press(key);
-    await expect(field).toBeHidden();
-  };
-  await rename('Words', 'Enter');
-  await expect(page.getByLabel('Add entry to Words')).toBeVisible();
-  await rename('Nope', 'Escape');
-  await page.waitForTimeout(300);
-  await expect(page.getByLabel('Add entry to Words')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Nope' })).toHaveCount(0);
+  await cards().first().getByRole('button', { name: 'Widget options' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Rename' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
   // Remove: only the built-in Review later card is left; the page itself stays.
   await cards().first().getByRole('button', { name: 'Widget options' }).click();
@@ -189,10 +176,10 @@ test('home: reorder persists and delete prunes', async () => {
     });
     return { words, keys };
   });
-  await expect(cardTitles()).toHaveText(['Learned today', 'Shortcuts']);
+  await expect(cardTitles()).toHaveText(['New words', 'Shortcuts']);
 
   await cards().nth(1).locator('header').dragTo(cards().nth(0));
-  await expect(cardTitles()).toHaveText(['Shortcuts', 'Learned today']);
+  await expect(cardTitles()).toHaveText(['Shortcuts', 'New words']);
   await setTheme('light');
   await shot('5-reordered-light');
   await setTheme('dark');
@@ -201,7 +188,7 @@ test('home: reorder persists and delete prunes', async () => {
   await t.close();
   t = await launch({ userData: t.userData });
   page = t.dashboard;
-  await expect(cardTitles()).toHaveText(['Shortcuts', 'Learned today']);
+  await expect(cardTitles()).toHaveText(['Shortcuts', 'New words']);
 
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const row = page.locator('li[aria-selected]', { hasText: 'Shortcuts' });
@@ -214,7 +201,7 @@ test('home: reorder persists and delete prunes', async () => {
   await expect(row).toHaveCount(0);
 
   await page.locator('aside').getByRole('button', { name: 'Home' }).click();
-  await expect(cardTitles()).toHaveText(['Learned today']);
+  await expect(cardTitles()).toHaveText(['New words']);
   const widgets = await page.evaluate(() =>
     window.dashboardApi.getSettings().then((s) => s.homeWidgets),
   );

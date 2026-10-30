@@ -14,6 +14,7 @@ import { PageRow } from './PageRow';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { useHomeWidgets } from './useHomeWidgets';
+import { useBuiltInPages } from './useBuiltInPages';
 import { useTranscription } from './useTranscription';
 
 /** Why a remote note's audio couldn't be brought to this PC. */
@@ -73,6 +74,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const shows = useMemo(() => distinctShows(notes ?? []), [notes]);
   const home = useHomeWidgets();
   const laterId = builtInPageId(home.widgets);
+  const builtIns = useBuiltInPages();
   const transcription = useTranscription();
 
   useEffect(() => {
@@ -194,7 +196,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   };
 
   const remove = async (all: string[]) => {
-    const ids = all.filter((id) => id !== laterId); // the built-in Review later page stays
+    const ids = all.filter((id) => id !== laterId && !builtIns.has(id)); // the built-in pages stay
     if (!ids.length) return;
     const ok = await confirm({ title: ids.length === 1 ? 'Delete this note?' : `Delete ${ids.length} notes?` });
     if (!ok) return;
@@ -360,7 +362,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
               {transcription.ready ? `Transcribe (${selectedAudio.length})` : 'Set up transcription'}
             </button>
           )}
-          {[...selected].some((id) => id !== laterId) && (
+          {[...selected].some((id) => id !== laterId && !builtIns.has(id)) && (
             <button className="rounded-md px-2 py-1 text-destructive hover:bg-destructive/10" onClick={() => remove(order.filter((id) => selected.has(id)))}>
               Delete
             </button>
@@ -401,7 +403,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
                       pinned={home.widgets && isPinned(home.widgets, page.id)}
                       homeFull={home.widgets !== null && !canAdd(home.widgets)}
                       onTogglePin={() => home.togglePin(page.id)}
-                      builtIn={page.id === laterId}
+                      builtIn={page.id === laterId || builtIns.has(page.id)}
                     />
                   );
                 }

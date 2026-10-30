@@ -5,7 +5,7 @@ import type Database from 'better-sqlite3';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Page } from '../../shared/channels';
-import { appendEntry } from '../../shared/learn-log';
+import { appendEntry, appendLine } from '../../shared/learn-log';
 import { setTaskChecked } from '../../shared/task-lines';
 import {
   MAX_IMAGE_BYTES,
@@ -115,6 +115,17 @@ export class PageStore {
       const updated = this.update(id, { body: appendEntry(page.body, text, new Date(now)) });
       // Sent as an append, not a new body: an edit made meanwhile on another PC keeps it.
       this.record({ op: 'page.append', id, text, day: localDay(now), at: updated.updatedAt });
+      return updated;
+    })();
+  }
+
+  /** Adds `text` as a plain `- text` last line (voice to lists), atomically. */
+  appendLine(id: string, text: string): Page {
+    return this.sqlite.transaction(() => {
+      const page = this.get(id);
+      if (!page) throw new Error('Page not found');
+      const updated = this.update(id, { body: appendLine(page.body, text) });
+      this.record({ op: 'page.appendLine', id, text, at: updated.updatedAt });
       return updated;
     })();
   }

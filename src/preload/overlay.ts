@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   type AudioDevice,
   type AudioPayload,
+  type CaptureResult,
   Ch,
   type DictationAudio,
   type DropPayload,
@@ -47,6 +48,7 @@ const overlayApi = {
   sendPomodoro: (timer: Pomodoro) => ipcRenderer.send(Ch.PomodoroState, timer),
   pomodoroDone: (focusMs: number) => ipcRenderer.send(Ch.PomodoroDone, { focusMs }),
   dropLater: (p: DropPayload): Promise<'saved' | 'ignored'> => ipcRenderer.invoke(Ch.LaterDrop, p),
+  captureLater: (): Promise<CaptureResult> => ipcRenderer.invoke(Ch.LaterCapture),
 };
 
 export type OverlayApi = typeof overlayApi;

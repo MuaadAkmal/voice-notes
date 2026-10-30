@@ -90,3 +90,28 @@ it('a remote Review later id equal to ours changes nothing', () => {
   });
   expect(calls).toEqual([]);
 });
+
+it("the account's Quick notes page wins; ours is kept as a normal page", () => {
+  const ours = store.pages.create(null);
+  store.pages.rename(ours.id, 'Quick notes');
+  const theirs = store.pages.create(null);
+  let settings: Settings = { ...DEFAULT_SETTINGS, notesPageId: ours.id };
+  applyRemotePrefs([{ key: 'notesPageId', value: theirs.id }], {
+    getSettings: () => settings,
+    updateSettings: (patch) => (settings = { ...settings, ...patch }),
+    pages: store.pages,
+    deviceName: 'PC-A',
+  });
+  expect(settings.notesPageId).toBe(theirs.id);
+  expect(store.pages.get(ours.id)?.title).toBe('Quick notes (PC-A)');
+});
+
+it('Quick notes is created once and re-created when gone', async () => {
+  const { ensureNotesPage } = await import('../../src/main/commands/notes-page');
+  const patch = ensureNotesPage(DEFAULT_SETTINGS, store.pages)!;
+  expect(store.pages.get(patch.notesPageId!)?.title).toBe('Quick notes');
+  const settings = { ...DEFAULT_SETTINGS, ...patch };
+  expect(ensureNotesPage(settings, store.pages)).toBeNull();
+  await store.pages.deleteMany([patch.notesPageId!]);
+  expect(ensureNotesPage(settings, store.pages)?.notesPageId).not.toBe(patch.notesPageId);
+});

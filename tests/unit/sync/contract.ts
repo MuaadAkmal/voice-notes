@@ -83,6 +83,15 @@ export function runContract(label: string, make: () => Promise<TestServer>, time
       expect((await s.rows()).filter((r) => r.entity === 'page')).toHaveLength(1);
     });
 
+    it('a plain list line made meanwhile on another PC survives a body edit', async () => {
+      const s = await make();
+      const [created] = (await s.push({ ...A, mutations: [m({ op: 'page.create', id: 'p', row: page('p', '- eggs\n') })] })).acked;
+      await s.push({ ...A, mutations: [m({ op: 'page.appendLine', id: 'p', text: 'blueberry' }, created.version)] });
+      await s.push({ ...B, mutations: [m({ op: 'page.setBody', id: 'p', body: '- eggs\n- bread\n' }, created.version)] });
+      expect((await s.row('page', 'p'))!.data!.body).toBe('- eggs\n- bread\n- blueberry\n');
+      expect((await s.rows()).filter((r) => r.entity === 'page')).toHaveLength(1);
+    });
+
     it('a folder move that would make a loop is refused, and the folder is re-sent', async () => {
       const s = await make();
       await s.push({ ...A, mutations: [m({ op: 'folder.create', id: 'x', row: folder('x', 'X') }), m({ op: 'folder.create', id: 'y', row: folder('y', 'Y') })] });

@@ -52,12 +52,13 @@ it('an update is based on the version the row was last synced at', async () => {
   expect(store.sync.outbox.pending()[0].baseVersion).toBe(1);
 });
 
-it('pages record create, title, body, append, task, move, star and delete', () => {
+it('pages record create, title, body, append, list line, task, move, star and delete', () => {
   const p = store.pages.create(null);
   clear();
   store.pages.rename(p.id, 'Shop');
   store.pages.setBody(p.id, '- [ ] milk\n- [ ] eggs');
   store.pages.appendEntry(p.id, 'bread');
+  store.pages.appendLine(p.id, 'jam');
   store.pages.setTask(p.id, 1, true);
   const f = store.folders.create('F', null);
   store.pages.move([p.id], f.id);
@@ -66,6 +67,7 @@ it('pages record create, title, body, append, task, move, star and delete', () =
     { op: 'page.update', id: p.id, fields: { title: 'Shop', updatedAt: T0 } },
     { op: 'page.setBody', id: p.id, body: '- [ ] milk\n- [ ] eggs', at: T0 },
     { op: 'page.append', id: p.id, text: 'bread', day: localDay(T0), at: T0 },
+    { op: 'page.appendLine', id: p.id, text: 'jam', at: T0 },
     { op: 'page.setTask', id: p.id, line: 1, lineText: '- [ ] eggs', checked: true, at: T0 },
     { op: 'page.update', id: p.id, fields: { folderId: f.id, starred: true } },
   ]);

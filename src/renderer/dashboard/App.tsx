@@ -115,7 +115,7 @@ export function App() {
           </div>
         </div>
         <div className="flex min-h-0 flex-1">
-          <Sidebar view={view} onSelect={navigate} folders={folders} counts={counts} onNewPage={newPage} />
+          <Sidebar view={view} onSelect={navigate} folders={folders} pages={pages} counts={counts} onNewPage={newPage} onOpenPage={openPage} />
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'home' ? (
               <HomePage pages={pages} onOpenPage={openPage} onOpenConnectors={() => navigate({ kind: 'connectors' })} />

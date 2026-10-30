@@ -50,7 +50,6 @@ export function AddWidgetDialog({
   const [type, setType] = useState<WidgetType>(initialType);
   const [pageId, setPageId] = useState('');
   const [newName, setNewName] = useState('New words');
-  const [label, setLabel] = useState('Learned today');
   const [busy, setBusy] = useState(false);
   // The page made by "New page…", kept across retries so a failed rename or save doesn't make another.
   const created = useRef<string | null>(null);
@@ -61,7 +60,6 @@ export function AddWidgetDialog({
     setType(initialType);
     setPageId(pages.length === 0 ? NEW_PAGE : '');
     setNewName('New words');
-    setLabel('Learned today');
     setBusy(false);
     created.current = null;
   }, [open]);
@@ -71,8 +69,7 @@ export function AddWidgetDialog({
     type === 'calendar' ||
     ((creating
       ? newName.trim().length > 0
-      : pages.some((p) => p.id === pageId)) &&
-    (type === 'page' || label.trim().length > 0));
+      : pages.some((p) => p.id === pageId)));
 
   const submit = async () => {
     if (!valid || busy) return;
@@ -84,15 +81,18 @@ export function AddWidgetDialog({
         return;
       }
       let target = pageId;
+      let title = pages.find((p) => p.id === pageId)?.title ?? '';
       if (creating) {
         created.current ??= (await api.createPage(null)).id;
-        await api.renamePage(created.current, newName.trim());
+        title = newName.trim();
+        await api.renamePage(created.current, title);
         target = created.current;
       }
       const id = crypto.randomUUID();
       await onAdd(
         type === 'quick-add'
-          ? { id, type, pageId: target, label: label.trim() }
+          ? // The card shows its page's title; label stays filled in for older builds, which require one.
+            { id, type, pageId: target, label: (title || 'Quick add').slice(0, 60) }
           : { id, type, pageId: target },
       );
       onOpenChange(false);
@@ -171,18 +171,6 @@ export function AddWidgetDialog({
               onChange={(e) => setNewName(e.target.value)}
               className={inputClass}
             />
-          )}
-
-          {type === 'quick-add' && (
-            <label className="flex flex-col gap-1.5 text-sm font-medium">
-              Label
-              <input
-                value={label}
-                maxLength={60}
-                onChange={(e) => setLabel(e.target.value)}
-                className={`${inputClass} font-normal`}
-              />
-            </label>
           )}
 
           <DialogFooter>
