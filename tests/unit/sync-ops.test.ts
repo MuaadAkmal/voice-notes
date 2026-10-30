@@ -58,6 +58,10 @@ it('an append lands under the heading of the day it was made', () => {
   });
 });
 
+it('a list line lands as the last line, with no heading', () => {
+  expect(applyOp(page, { op: 'page.appendLine', id: 'p1', text: 'x', at: 80 })).toEqual({ ...page, body: 'a\n- x\n', updatedAt: 80 });
+});
+
 it('a tick finds its line by text when lines shifted', () => {
   const body = '- [ ] milk\n- [ ] eggs';
   expect(setTaskByText(body, 1, taskText('- [ ] eggs'), true)).toBe('- [ ] milk\n- [x] eggs');

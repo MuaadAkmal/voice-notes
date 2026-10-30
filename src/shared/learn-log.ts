@@ -55,3 +55,12 @@ export function todayEntries(body: string, d: Date): string[] {
   }
   return out;
 }
+
+/** `- entry` as the last line of the body, no day heading (voice-to-lists pages are plain lists). */
+export function appendLine(body: string, entry: string): string {
+  const text = entry.trim().replace(/\s*[\r\n]\s*/g, ' ');
+  if (!text) throw new Error('Entry is empty');
+  const e = body.trimEnd().length;
+  if (e === 0) return `- ${text}\n`;
+  return `${body.slice(0, e)}\n- ${text}${body.slice(e) || '\n'}`;
+}

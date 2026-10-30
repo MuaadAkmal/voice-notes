@@ -1,5 +1,5 @@
 import type { Folder, Note, Page } from './channels';
-import { appendEntry } from './learn-log';
+import { appendEntry, appendLine } from './learn-log';
 import { setTaskChecked } from './task-lines';
 
 // The changes one PC sends the other through the server, and how each one changes a row.
@@ -11,7 +11,7 @@ export type PageRow = Page;
 export type FolderRow = Folder;
 
 /** Settings that follow the account; everything else in settings.json stays on this PC. */
-export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId'] as const;
+export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId', 'notesPageId'] as const;
 export type SyncedKey = (typeof SYNCED_KEYS)[number];
 
 // updatedAt travels with a change (the sender's clock; it only sorts lists, never orders changes).
@@ -28,6 +28,7 @@ export type SyncOp =
   // at: when the body changed on the sender (becomes updatedAt)
   | { op: 'page.setBody'; id: string; body: string; at?: number }
   | { op: 'page.append'; id: string; text: string; day: string; at?: number } // day: local 'YYYY-MM-DD' it was added on
+  | { op: 'page.appendLine'; id: string; text: string; at?: number } // a plain `- text` as the last line
   | { op: 'page.setTask'; id: string; line: number; lineText: string; checked: boolean; at?: number }
   | { op: 'page.delete'; id: string }
   | { op: 'folder.create'; id: string; row: FolderRow }
@@ -57,6 +58,10 @@ export function applyOp<T>(row: T | undefined, op: RowOp): T | undefined {
     case 'page.append': {
       const page = row as PageRow | undefined;
       return page && ({ ...page, body: appendOnDay(page.body, op.text, op.day), ...stamp(op.at) } as T);
+    }
+    case 'page.appendLine': {
+      const page = row as PageRow | undefined;
+      return page && ({ ...page, body: appendLine(page.body, op.text), ...stamp(op.at) } as T);
     }
     case 'page.setTask': {
       const page = row as PageRow | undefined;

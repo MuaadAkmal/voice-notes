@@ -8,7 +8,6 @@ import {
   hasCalendar,
   moveWidget,
   removeWidget,
-  renameWidget,
   resizeWidget,
   spanFor,
   widgetSize,
@@ -188,28 +187,14 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
               }
               dropping={dropId === widget.id}
               dropProps={dropProps(widget.id)}
-              title={
-                widget.type === 'quick-add'
-                  ? widget.label
-                  : (page?.title ?? todayTitle(new Date()))
-              }
-              onTitleClick={
-                widget.type === 'page' && page ? () => onOpenPage(page.id) : undefined
-              }
+              // A card is named by its page, the same name voice commands use.
+              title={page?.title ?? todayTitle(new Date())}
+              onTitleClick={page ? () => onOpenPage(page.id) : undefined}
               onOpenPage={page ? () => onOpenPage(page.id) : undefined}
-              onRename={
-                widget.type === 'quick-add'
-                  ? (label) => run((cur) => renameWidget(cur, widget.id, label))
-                  : undefined
-              }
               onRemove={widget.locked ? undefined : () => run((cur) => removeWidget(cur, widget.id))}
             >
               {widget.type === 'quick-add' && page && (
-                <QuickAddWidget
-                  widget={widget}
-                  page={page}
-                  onOpenPage={onOpenPage}
-                />
+                <QuickAddWidget page={page} />
               )}
               {widget.type === 'page' && page && <PageWidget page={page} />}
               {widget.type === 'calendar' && <CalendarWidget onOpenConnectors={onOpenConnectors} />}
@@ -243,8 +228,6 @@ type CardProps = {
   onTitleClick?: () => void;
   /** Absent for the calendar card, which has no page. */
   onOpenPage?: () => void;
-  /** Quick-add widgets: rename the label inline. */
-  onRename?: (label: string) => void;
   /** Absent for the locked Review later card. */
   onRemove?: () => void;
   children?: React.ReactNode;
@@ -260,16 +243,10 @@ function WidgetCard({
   title,
   onTitleClick,
   onOpenPage,
-  onRename,
   onRemove,
   children,
 }: CardProps) {
-  const [editing, setEditing] = useState(false);
-  const editFromMenu = useRef(false);
-  const input = useRef<HTMLInputElement>(null);
   const card = useRef<HTMLElement>(null);
-  // Set once Enter or Escape has ended the edit, so the unmount blur can't commit again.
-  const closed = useRef(false);
   // The size shown while the corner handle is dragged; cleared once the saved size arrives.
   const [preview, setPreview] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => setPreview(null), [size.w, size.h]);
@@ -305,18 +282,6 @@ function WidgetCard({
     handle.addEventListener('pointercancel', end);
   };
 
-  useEffect(() => {
-    if (editing) closed.current = false;
-  }, [editing]);
-
-  const commit = (value: string) => {
-    if (closed.current) return;
-    closed.current = true;
-    setEditing(false);
-    const label = value.trim();
-    if (label && label !== title) onRename?.(label);
-  };
-
   return (
     <section
       ref={card}
@@ -330,7 +295,7 @@ function WidgetCard({
     >
       {/* The header is the drag handle; the whole card is the drag image. */}
       <header
-        draggable={!editing}
+        draggable
         onDragStart={(e) => {
           setDragging({ kind: 'widget', id });
           e.dataTransfer.setData(WIDGET_MIME, id);
@@ -346,33 +311,15 @@ function WidgetCard({
         onDragEnd={() => setDragging(null)}
         className="mb-2 flex shrink-0 cursor-grab items-center gap-2 active:cursor-grabbing"
       >
-        {editing ? (
-          <input
-            ref={input}
-            aria-label="Label"
-            defaultValue={title}
-            maxLength={60}
-            onBlur={(e) => commit(e.currentTarget.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commit(e.currentTarget.value);
-              if (e.key === 'Escape') {
-                closed.current = true;
-                setEditing(false);
-              }
-            }}
-            className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-0.5 font-display text-[13px] font-semibold outline-none focus:border-ring"
-          />
-        ) : (
-          <h2 className="min-w-0 flex-1 truncate font-display text-[13px] font-semibold tracking-tight">
-            {onTitleClick ? (
-              <button onClick={onTitleClick} className="hover:underline">
-                {title}
-              </button>
-            ) : (
-              title
-            )}
-          </h2>
-        )}
+        <h2 className="min-w-0 flex-1 truncate font-display text-[13px] font-semibold tracking-tight">
+          {onTitleClick ? (
+            <button onClick={onTitleClick} className="hover:underline">
+              {title}
+            </button>
+          ) : (
+            title
+          )}
+        </h2>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -382,30 +329,8 @@ function WidgetCard({
               <MoreHorizontal className="size-4" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-40"
-            // Focus the rename input once the menu has closed; while it is open the menu holds focus,
-            // and returning focus to the trigger would blur (and commit) the input.
-            onCloseAutoFocus={(e) => {
-              if (editFromMenu.current) {
-                e.preventDefault();
-                editFromMenu.current = false;
-                input.current?.select();
-              }
-            }}
-          >
+          <DropdownMenuContent align="end" className="w-40">
             {onOpenPage && <DropdownMenuItem onSelect={onOpenPage}>Open page</DropdownMenuItem>}
-            {onRename && (
-              <DropdownMenuItem
-                onSelect={() => {
-                  editFromMenu.current = true;
-                  setEditing(true);
-                }}
-              >
-                Rename
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>Size</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>

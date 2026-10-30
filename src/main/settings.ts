@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
+import { DEFAULT_WAKE_WORDS } from '../shared/note-command';
 import { DEFAULT_POMODORO } from '../shared/pomodoro';
 import { DEFAULT_TRANSCRIPTION, type ModelId } from '../shared/transcription';
 
@@ -31,10 +32,13 @@ export const DEFAULT_SETTINGS: Settings = {
   transcription: DEFAULT_TRANSCRIPTION,
   transcribeLanguage: 'auto',
   laterPageId: null,
+  notesPageId: null,
   dictationHotkey: [CTRL, META],
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,
   voiceToCalendar: true,
+  voiceToLists: true,
+  noteWakeWords: DEFAULT_WAKE_WORDS,
   pomodoro: DEFAULT_POMODORO,
 };
 

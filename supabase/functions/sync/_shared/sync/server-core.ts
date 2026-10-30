@@ -97,7 +97,7 @@ export class SyncCore {
     }
     data = await this.place(tx, entity, op.id, data);
     const version = await this.save(tx, { ...current, data });
-    if (op.op === 'page.append' || op.op === 'page.setTask') await tx.logBody(op.id, { version, clientId, deviceName, op });
+    if (op.op === 'page.append' || op.op === 'page.appendLine' || op.op === 'page.setTask') await tx.logBody(op.id, { version, clientId, deviceName, op });
     return version;
   }
 

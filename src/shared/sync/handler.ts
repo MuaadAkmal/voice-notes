@@ -110,7 +110,7 @@ function readPush(b: unknown): PushRequest {
   };
 }
 
-/** What each update may change: never ids, and a body only through setBody/append/setTask (they carry the conflict rules). */
+/** What each update may change: never ids, and a body only through setBody/append/appendLine/setTask (they carry the conflict rules). */
 const UPDATABLE: Record<string, readonly string[]> = {
   'note.update': ['title', 'folderId', 'starred', 'show', 'transcript', 'transcriptLang', 'transcribedAt', 'updatedAt'],
   'page.update': ['title', 'folderId', 'starred', 'updatedAt'],
@@ -126,7 +126,7 @@ const REQUIRED: Record<string, Record<string, 'string' | 'number' | 'boolean'>> 
 
 const ROW_OPS = new Set([
   'note.create', 'note.update', 'note.delete',
-  'page.create', 'page.update', 'page.setBody', 'page.append', 'page.setTask', 'page.delete',
+  'page.create', 'page.update', 'page.setBody', 'page.append', 'page.appendLine', 'page.setTask', 'page.delete',
   'folder.create', 'folder.update', 'folder.delete',
 ]);
 
@@ -160,6 +160,9 @@ function readOp(o: unknown): SyncOp {
       break;
     case 'page.append':
       need(typeof o.text === 'string' && typeof o.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.day) && at, 'append');
+      break;
+    case 'page.appendLine':
+      need(typeof o.text === 'string' && o.text.trim() !== '' && at, 'append');
       break;
     case 'page.setTask':
       need(count(o.line) && typeof o.lineText === 'string' && typeof o.checked === 'boolean' && at, 'task');

@@ -33,6 +33,9 @@ import { SyncEngine } from './sync/engine';
 import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
 import { ConnectorsClient } from './connectors/client';
+import { CommandsClient } from './commands/client';
+import { ListCommands } from './commands/service';
+import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
@@ -102,6 +105,12 @@ async function boot(): Promise<void> {
   // The built-in Review later page and its locked Home card always exist.
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
   if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
+  // And the built-in Quick notes page, where a "Note, …" that matches no page lands.
+  const notesPatch = ensureNotesPage(settings, store.pages);
+  if (notesPatch) {
+    Object.assign(settings, saveSettings(settingsFile, notesPatch));
+    recordPrefs(notesPatch, store.sync.outbox); // nothing is recorded while sync is off
+  }
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
   // Audio and images from the account come through FileSync, made with the sync wiring below.
   const filesHolder: { files?: FileSync } = {};
@@ -317,6 +326,11 @@ async function boot(): Promise<void> {
         const r = await connectors.quickAdd(text);
         return 'event' in r ? { ok: true, message: `Added · ${formatAdded(r.event)}` } : { ok: false, message: addErrorText(r.error) };
       },
+    },
+    list: {
+      enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
+      wakeWords: () => settings.noteWakeWords,
+      add: (text) => listCommands.add(text),
     },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
@@ -652,6 +666,30 @@ async function boot(): Promise<void> {
     },
   });
   connectorsHolder.service = connectors;
+
+  // Voice to lists through the `commands` Edge Function, which holds the Groq key.
+  let testCommandsToken: (() => Promise<string | null>) | null = null;
+  const makeCommandsClient = (baseUrl: string) =>
+    new CommandsClient({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      getToken: async () => {
+        if (testCommandsToken) return testCommandsToken();
+        return (await supabase.auth.getSession()).data.session?.access_token ?? null;
+      },
+      fetch: connectorsFetch,
+    });
+  let commandsClient = makeCommandsClient(SUPABASE_URL);
+  const listCommands = new ListCommands({
+    resolve: (req) => commandsClient.resolve(req),
+    pages: store.pages,
+    quickNotes: () => {
+      const patch = ensureNotesPage(settings, store.pages);
+      if (patch) updateSettings(patch);
+      return settings.notesPageId!;
+    },
+    pagesChanged: () => toDashboard(Ch.PagesChanged),
+  });
   onDashboardFocus = () => connectors.onFocus();
   void connectors.refresh();
   const wavBridge = new WavBridge();
@@ -742,6 +780,11 @@ async function boot(): Promise<void> {
         useServer: (url: string) => void (connectorsApi = makeConnectors(url, `${url}/calendar/v3`)),
         useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
         service: connectors,
+      },
+      commands: {
+        // A local stand-in for the function: its handler over memory, with a fake Groq.
+        useServer: (url: string) => void (commandsClient = makeCommandsClient(url)),
+        useToken: (fn: () => Promise<string | null>) => void (testCommandsToken = fn),
       },
     };
   }

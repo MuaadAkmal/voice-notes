@@ -1,4 +1,5 @@
 import type { Settings } from '../../shared/channels';
+import { QUICK_NOTES_TITLE } from '../commands/notes-page';
 import { SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import type { PageStore } from '../store/page-store';
 import type { Outbox } from './outbox';
@@ -40,6 +41,11 @@ export function applyRemotePrefs(prefs: { key: SyncedKey; value: unknown }[], d:
     if (key === 'laterPageId') {
       if (typeof value !== 'string' || value === current.laterPageId) continue;
       d.updateSettings(mergeLaterPage(current, value, d.pages, d.deviceName), { record: false });
+    } else if (key === 'notesPageId') {
+      // As with Review later: the account's Quick notes page wins, ours stays as a normal page.
+      if (typeof value !== 'string' || value === current.notesPageId) continue;
+      if (current.notesPageId && d.pages.get(current.notesPageId)) d.pages.rename(current.notesPageId, `${QUICK_NOTES_TITLE} (${d.deviceName})`);
+      d.updateSettings({ notesPageId: value }, { record: false });
     } else {
       d.updateSettings({ [key]: value } as Partial<Settings>, { record: false });
     }

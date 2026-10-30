@@ -75,10 +75,13 @@ export type Settings = {
   transcription: TranscriptionSettings;
   transcribeLanguage: TranscribeLanguage; // last used in the Transcribe menu
   laterPageId: string | null; // the built-in Review later page; created at boot
+  notesPageId: string | null; // the built-in Quick notes page, where "Note, …" lands when no page matches; created at boot
   dictationHotkey: number[]; // uiohook keycodes: hold to dictate into the focused app
   dictationHotkeyLabel: string;
   dictationSound: boolean; // a ping when dictation starts listening
   voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
+  voiceToLists: boolean; // "List, …" dictations add to a page (via the `commands` function) while signed in
+  noteWakeWords: string[]; // the names that start a voice-to-lists command ("Pixie, …"); empty = Pixie
   pomodoro: PomodoroSettings;
 };
 

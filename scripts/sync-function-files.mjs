@@ -1,5 +1,5 @@
-// Copies the shared code into the Edge Functions (supabase/functions/<name>/_shared), so `sync` and
-// `connectors` run exactly the app's rules. Only relative import paths change: Deno needs the `.ts`.
+// Copies the shared code into the Edge Functions (supabase/functions/<name>/_shared), so `sync`,
+// `connectors` and `commands` run exactly the app's rules. Only relative import paths change: Deno needs the `.ts`.
 // Run: npm run sync:function   (tests/unit/sync/function-files.test.ts checks the copies)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,6 +33,14 @@ const FUNCTIONS = {
     'connectors/google-oauth.ts',
     'connectors/core.ts',
     'connectors/handler.ts',
+  ],
+  commands: [
+    'commands/protocol.ts',
+    'commands/store.ts',
+    'commands/pg-store.ts',
+    'commands/groq.ts',
+    'commands/core.ts',
+    'commands/handler.ts',
   ],
 };
 

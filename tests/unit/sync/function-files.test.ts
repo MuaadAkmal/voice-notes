@@ -31,6 +31,14 @@ const FUNCTIONS: Record<string, string[]> = {
     'connectors/core.ts',
     'connectors/handler.ts',
   ],
+  commands: [
+    'commands/protocol.ts',
+    'commands/store.ts',
+    'commands/pg-store.ts',
+    'commands/groq.ts',
+    'commands/core.ts',
+    'commands/handler.ts',
+  ],
 };
 const stripExt = (code: string) => code.replace(/(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2');
 

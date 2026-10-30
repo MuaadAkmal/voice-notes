@@ -317,8 +317,9 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
   });
   handle(Ch.PagesDeleteMany, IdListSchema, async (requested) => {
-    // The built-in Review later page can't be deleted, whatever the renderer asks.
-    const ids = requested.filter((id) => id !== d.getSettings().laterPageId);
+    // The built-in Review later and Quick notes pages can't be deleted, whatever the renderer asks.
+    const { laterPageId, notesPageId } = d.getSettings();
+    const ids = requested.filter((id) => id !== laterPageId && id !== notesPageId);
     try {
       await pages.deleteMany(ids);
     } finally {

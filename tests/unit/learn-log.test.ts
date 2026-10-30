@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendEntry,
+  appendLine,
   dayHeading,
   todayEntries,
 } from '../../src/shared/learn-log';
@@ -103,5 +104,20 @@ describe('todayEntries', () => {
   });
   it('is empty for an empty body', () => {
     expect(todayEntries('', D)).toEqual([]);
+  });
+});
+
+describe('appendLine', () => {
+  it('adds a bullet as the last line, keeping the trailing newline', () => {
+    expect(appendLine('', 'milk')).toBe('- milk\n');
+    expect(appendLine('\n\n', 'milk')).toBe('- milk\n');
+    expect(appendLine('- eggs\n', 'milk')).toBe('- eggs\n- milk\n');
+    expect(appendLine('- eggs', 'milk')).toBe('- eggs\n- milk\n');
+    expect(appendLine('# Groceries\n\n- eggs\n\n\n', ' milk ')).toBe('# Groceries\n\n- eggs\n- milk\n\n\n');
+  });
+
+  it('keeps an entry on one line and refuses an empty one', () => {
+    expect(appendLine('', 'a\nb')).toBe('- a b\n');
+    expect(() => appendLine('', '  ')).toThrow();
   });
 });

@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines, CalendarDays, House, Mic, Plug, Timer } from 'lucide-react';
-import type { Folder } from '../../shared/channels';
+import { AudioLines, CalendarDays, FilePlus, FileText, House, Mic, Plug, Timer } from 'lucide-react';
+import type { Folder, Page } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
+import { canAdd, isPinned } from '../../shared/home-widgets';
 import { cleanIpcError } from '../../shared/format';
-import { FOLDER_MIME, getDragging, notifyDropped, setDragging } from './dnd';
+import { FOLDER_MIME, getDragging, NOTES_MIME, notifyDropped, setDragging } from './dnd';
 import { useToast } from './Toast';
 import { useConfirm } from './ConfirmDialog';
 import { AccountChip } from './AccountChip';
 import { useConnectors } from './useConnectors';
+import { useHomeWidgets } from './useHomeWidgets';
+import { useBuiltInPages } from './useBuiltInPages';
 import type { View } from './App';
 import {
   ContextMenu,
@@ -27,7 +30,7 @@ import {
 const api = window.dashboardApi;
 const EXPANDED_KEY = 'vn.expanded';
 
-type Editing = { mode: 'create'; parentId: string | null } | { mode: 'rename'; id: string } | null;
+type Editing = { mode: 'create'; parentId: string | null } | { mode: 'rename'; id: string } | { mode: 'rename-page'; id: string } | null;
 type DropKey = 'inbox' | 'root' | string;
 
 function loadExpanded(): Set<string> {
@@ -50,11 +53,16 @@ type Props = {
   view: View;
   onSelect: (v: View) => void;
   folders: Folder[];
+  /** Text pages, shown in the tree under their folder (unfiled ones at the root). */
+  pages: Page[] | null;
   counts: { inbox: number; all: number; starred: number };
   onNewPage: (folderId: string | null) => void;
+  onOpenPage: (id: string) => void;
 };
 
-export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
+const pageName = (p: Page) => p.title.trim() || 'Untitled';
+
+export function Sidebar({ view, onSelect, folders, pages, counts, onNewPage, onOpenPage }: Props) {
   const toast = useToast();
   // The Calendar tab is there only while Google Calendar is connected.
   const calendarOn = useConnectors()?.state === 'connected';
@@ -65,6 +73,14 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   const confirm = useConfirm();
   const [dropKey, setDropKey] = useState<DropKey | null>(null);
   const tree = buildTree(folders);
+  const home = useHomeWidgets();
+  const builtIns = useBuiltInPages();
+  // Pages per folder ('' = root), in name order like a file browser.
+  const pagesIn = new Map<string, Page[]>();
+  for (const p of [...(pages ?? [])].sort((a, b) => pageName(a).localeCompare(pageName(b)))) {
+    const key = p.folderId ?? '';
+    pagesIn.set(key, [...(pagesIn.get(key) ?? []), p]);
+  }
 
   // dragleave is unreliable in Chromium; make sure no drop highlight outlives the drag.
   useEffect(() => {
@@ -105,6 +121,8 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
         const folder = await api.createFolder(name, current.parentId);
         if (current.parentId) setOpen(current.parentId, true);
         onSelect({ kind: 'folder', id: folder.id });
+      } else if (current.mode === 'rename-page') {
+        await api.renamePage(current.id, name);
       } else {
         await api.renameFolder(current.id, name);
       }
@@ -114,6 +132,11 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
       toast(cleanIpcError(e));
       return false;
     }
+  };
+
+  const removePage = async (page: Page) => {
+    const ok = await confirm({ title: `Delete "${pageName(page)}"?` });
+    if (ok) run(api.deletePages([page.id]));
   };
 
   const remove = async (folder: Folder) => {
@@ -131,7 +154,7 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   const accepts = (key: DropKey): boolean => {
     const d = getDragging();
     if (!d || d.kind === 'widget') return false;
-    if (d.kind === 'notes') return key !== 'root';
+    if (d.kind === 'notes') return true; // the Files header is the root, like Inbox
     if (key === 'inbox') return false;
     if (key === 'root') return folders.find((f) => f.id === d.id)?.parentId !== null;
     return !isDescendant(folders, d.id, key) && folders.find((f) => f.id === d.id)?.parentId !== key;
@@ -169,6 +192,13 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
   const ring = (key: DropKey) => (dropKey === key ? 'ring-2 ring-ring bg-background' : '');
 
   // ---- rendering ---------------------------------------------------------
+  const holdFocus = (e: Event) => {
+    if (keepFocus.current) {
+      e.preventDefault();
+      keepFocus.current = false;
+    }
+  };
+
   const renderNode = (node: FolderNode, depth: number): React.ReactNode => {
     const open = expanded.has(node.id);
     const active = view.kind === 'folder' && view.id === node.id;
@@ -200,12 +230,6 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
         </Item>
       </>
     );
-    const holdFocus = (e: Event) => {
-      if (keepFocus.current) {
-        e.preventDefault();
-        keepFocus.current = false;
-      }
-    };
     return (
       <li key={node.id}>
         <ContextMenu>
@@ -228,7 +252,7 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
             aria-label={open ? 'Collapse' : 'Expand'}
             onClick={() => setOpen(node.id, !open)}
             className={`grid h-6 w-5 shrink-0 place-items-center text-muted-foreground hover:text-foreground ${
-              node.children.length ? '' : 'invisible'
+              node.children.length || pagesIn.has(node.id) ? '' : 'invisible'
             }`}
           >
             <Chevron open={open} />
@@ -270,11 +294,101 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
               <NewFolderRow depth={depth + 1} onCommit={commitName} />
             )}
             {open && node.children.map((c) => renderNode(c, depth + 1))}
+            {open && pagesIn.get(node.id)?.map((p) => renderPage(p, depth + 1))}
           </ul>
         )}
       </li>
     );
   };
+
+  const renderPage = (page: Page, depth: number): React.ReactNode => {
+    const active = view.kind === 'page' && view.id === page.id;
+    const renaming = editing?.mode === 'rename-page' && editing.id === page.id;
+    const builtIn = builtIns.has(page.id);
+    const pinned = home.widgets !== null && isPinned(home.widgets, page.id);
+    // The locked Review later card always stays on Home; a full Home takes no new card.
+    const canPin = home.widgets !== null && !home.widgets.some((w) => w.locked && w.pageId === page.id) && (pinned || canAdd(home.widgets));
+    // Same actions for the ⋯ dropdown and the right-click context menu.
+    const items = (Item: typeof DropdownMenuItem | typeof ContextMenuItem, Separator: React.ElementType) => (
+      <>
+        <Item onSelect={() => onOpenPage(page.id)}>Open</Item>
+        <Item
+          onSelect={() => {
+            keepFocus.current = true;
+            setEditing({ mode: 'rename-page', id: page.id });
+          }}
+        >
+          Rename
+        </Item>
+        <Item onSelect={() => run(api.starPages([page.id], !page.starred))}>{page.starred ? 'Unstar' : 'Star'}</Item>
+        {canPin && <Item onSelect={() => home.togglePin(page.id)}>{pinned ? 'Unpin from Home' : 'Pin to Home'}</Item>}
+        {!builtIn && (
+          <>
+            <Separator />
+            <Item variant="destructive" onSelect={() => removePage(page)}>
+              Delete
+            </Item>
+          </>
+        )}
+      </>
+    );
+    return (
+      <li key={page.id}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div
+              draggable={!renaming}
+              onDragStart={(e) => {
+                setDragging({ kind: 'notes', ids: [], pageIds: [page.id] });
+                e.dataTransfer.setData(NOTES_MIME, page.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragEnd={() => setDragging(null)}
+              className={`group flex items-center rounded-lg pr-1 text-sm transition-colors ${
+                active ? 'bg-background font-medium shadow-sm ring-1 ring-border' : 'text-sidebar-foreground/85 hover:bg-sidebar-accent'
+              }`}
+              style={{ paddingLeft: 6 + depth * 14 + 20 }}
+            >
+              {renaming ? (
+                <span className="flex min-w-0 flex-1 items-center gap-2 py-0.5">
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.8} />
+                  <NameInput initial={page.title} placeholder="Note title" onCommit={commitName} />
+                </span>
+              ) : (
+                <button
+                  onClick={() => onOpenPage(page.id)}
+                  onDoubleClick={() => setEditing({ mode: 'rename-page', id: page.id })}
+                  title={pageName(page)}
+                  className="flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left"
+                >
+                  <FileText className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.8} />
+                  <span className="truncate">{pageName(page)}</span>
+                </button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    aria-label="Note options"
+                    className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground opacity-0 hover:bg-sidebar-accent hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+                  >
+                    <Dots />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-44" onCloseAutoFocus={holdFocus}>
+                  {items(DropdownMenuItem, DropdownMenuSeparator)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-44" onCloseAutoFocus={holdFocus}>
+            {items(ContextMenuItem, ContextMenuSeparator)}
+          </ContextMenuContent>
+        </ContextMenu>
+      </li>
+    );
+  };
+
+  const rootPages = pagesIn.get('') ?? [];
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
@@ -333,7 +447,16 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
           {...dropProps('root')}
           className={`mt-5 flex items-center justify-between rounded-md px-2 py-1 ${ring('root')}`}
         >
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Folders</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Files</span>
+          <span className="flex items-center gap-0.5">
+          <button
+            aria-label="New text note in Files"
+            title="New text note"
+            onClick={() => onNewPage(null)}
+            className="grid h-5 w-5 place-items-center rounded text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <FilePlus className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
           <button
             aria-label="New folder"
             title="New folder"
@@ -344,13 +467,15 @@ export function Sidebar({ view, onSelect, folders, counts, onNewPage }: Props) {
               <path d="M12 5v14M5 12h14" strokeLinecap="round" />
             </svg>
           </button>
+          </span>
         </div>
         <ul className="flex flex-col gap-0.5">
           {editing?.mode === 'create' && editing.parentId === null && <NewFolderRow depth={0} onCommit={commitName} />}
           {tree.map((n) => renderNode(n, 0))}
+          {rootPages.map((p) => renderPage(p, 0))}
         </ul>
-        {tree.length === 0 && editing === null && (
-          <p className="px-2 py-1 text-xs text-muted-foreground/70">No folders yet. Click + to create one.</p>
+        {tree.length === 0 && rootPages.length === 0 && editing === null && (
+          <p className="px-2 py-1 text-xs text-muted-foreground/70">Nothing here yet. Click + to create a folder.</p>
         )}
       </div>
       <div className="flex flex-col gap-0.5 border-t border-sidebar-border px-3 py-3">
@@ -420,7 +545,15 @@ function NewFolderRow({ depth, onCommit }: { depth: number; onCommit: (name: str
   );
 }
 
-function NameInput({ initial, onCommit }: { initial: string; onCommit: (name: string) => Promise<boolean> }) {
+function NameInput({
+  initial,
+  placeholder = 'Folder name',
+  onCommit,
+}: {
+  initial: string;
+  placeholder?: string;
+  onCommit: (name: string) => Promise<boolean>;
+}) {
   const ref = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
   useEffect(() => ref.current?.select(), []);
@@ -437,8 +570,8 @@ function NameInput({ initial, onCommit }: { initial: string; onCommit: (name: st
     <input
       ref={ref}
       defaultValue={initial}
-      placeholder="Folder name"
-      maxLength={100}
+      placeholder={placeholder}
+      maxLength={200}
       onKeyDown={(e) => {
         if (e.key === 'Enter') commit(e.currentTarget.value);
         if (e.key === 'Escape') {

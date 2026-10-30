@@ -1,19 +1,15 @@
 import { useRef, useState } from 'react';
-import type { HomeWidget, Page } from '../../../shared/channels';
+import type { Page } from '../../../shared/channels';
 import { cleanIpcError } from '../../../shared/format';
 import { todayEntries } from '../../../shared/learn-log';
 import { useToast } from '../Toast';
 
 const api = window.dashboardApi;
 
-type Props = {
-  widget: Extract<HomeWidget, { type: 'quick-add' }>;
-  page: Page;
-  onOpenPage: (id: string) => void;
-};
+type Props = { page: Page };
 
 /** "Learned today" box: each entry is appended to the page under today's heading. */
-export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
+export function QuickAddWidget({ page }: Props) {
   const toast = useToast();
   const [text, setText] = useState('');
   const entries = todayEntries(page.body, new Date());
@@ -38,14 +34,8 @@ export function QuickAddWidget({ widget, page, onOpenPage }: Props) {
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        onClick={() => onOpenPage(page.id)}
-        className="-mt-1.5 max-w-full self-start truncate text-[11px] text-muted-foreground hover:text-foreground hover:underline"
-      >
-        {page.title}
-      </button>
       <input
-        aria-label={`Add entry to ${widget.label}`}
+        aria-label={`Add entry to ${page.title || 'Untitled'}`}
         placeholder="Type and press Enter"
         value={text}
         maxLength={500}
