@@ -73,14 +73,6 @@ export const DEFAULT_TRANSCRIPTION: TranscriptionSettings = {
   localModel: null,
 };
 
-/** Planned Voice Notes Cloud models, previewed on the Transcription page until the cloud backend ships. */
-export const CLOUD_TIERS = [
-  { name: 'Auto', detail: 'Picks the model by language' },
-  { name: 'Fast', detail: 'Whisper large-v3 turbo' },
-  { name: 'Most accurate', detail: 'Whisper large-v3' },
-  { name: 'Indian languages', detail: 'Hindi, Tamil, Bengali and more' },
-] as const;
-
 /** whisper.cpp answers silence with markers like "[BLANK_AUDIO]": text made only of markers means no speech. */
 export function cleanTranscript(text: string): string {
   const trimmed = text.trim();

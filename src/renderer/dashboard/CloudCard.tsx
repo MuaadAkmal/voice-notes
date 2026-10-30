@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CloudUsageResult, Settings } from '../../shared/channels';
+import { usageText } from '../../shared/cloud-usage';
 import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
 import { useAccount } from './useAccount';
@@ -7,29 +8,41 @@ import { useToast } from './Toast';
 
 const api = window.dashboardApi;
 
-export function usageText(u: { used: number; limit: number; resetsAt: string }): string {
-  const resets = new Date(u.resetsAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${Math.floor(u.used / 60)} / ${Math.floor(u.limit / 60)} min this month · resets ${resets}`;
-}
-
 export function CloudCard({ settings, onSaved }: { settings: Settings; onSaved: (s: Settings) => void }) {
   const toast = useToast();
   const account = useAccount();
-  const [usage, setUsage] = useState<CloudUsageResult | null>(null);
+  const [usage, setUsage] = useState<CloudUsageResult | { error: 'unknown' } | null>(null);
   const signedIn = account?.state === 'signed-in';
 
-  const refresh = useCallback(() => {
-    api.cloudUsage().then(setUsage).catch(() => setUsage({ error: 'offline' }));
-  }, []);
+  const inUse = settings.transcription.provider === 'cloud';
+  const seq = useRef(0);
 
   useEffect(() => {
+    setUsage(null);
     if (!signedIn) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      const mine = ++seq.current;
+      api
+        .cloudUsage()
+        .then((u) => mine === seq.current && setUsage(u))
+        .catch(() => mine === seq.current && setUsage({ error: 'unknown' }));
+    };
     refresh();
-    // A job leaving the queue (done or failed) changes what was used.
-    return api.onTranscriptionStatus(refresh);
-  }, [signedIn, refresh]);
+    // Only Cloud jobs change what was used; a bulk run sends many events, so wait for it to settle.
+    const off = inUse
+      ? api.onTranscriptionStatus(() => {
+          clearTimeout(timer);
+          timer = setTimeout(refresh, 1000);
+        })
+      : undefined;
+    return () => {
+      off?.();
+      clearTimeout(timer);
+      seq.current++;
+    };
+  }, [signedIn, inUse]);
 
-  const inUse = settings.transcription.provider === 'cloud';
   const use = () =>
     api
       .setSettings({ transcription: { ...settings.transcription, provider: 'cloud' } })
