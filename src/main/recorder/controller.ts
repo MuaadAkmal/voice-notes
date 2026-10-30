@@ -33,7 +33,8 @@ type ControllerOpts = {
   /** A dictation is active: no recording or rewind may start. */
   blocked?: () => boolean;
   minMs?: number;
-  maxMs?: number;
+  /** Longest a recording may run, read at each start; null = no limit. */
+  maxMs?: () => number | null;
   savedMs?: number;
   errorMs?: number;
   stopTimeoutMs?: number;
@@ -64,7 +65,7 @@ export class RecorderController {
   /** The user is typing a title: the saved flash must not time out. */
   private held = false;
   private readonly minMs: number;
-  private readonly maxMs: number;
+  private readonly maxMs: () => number | null;
   private readonly savedMs: number;
   private readonly errorMs: number;
   private readonly stopTimeoutMs: number;
@@ -75,7 +76,7 @@ export class RecorderController {
     private readonly opts: ControllerOpts,
   ) {
     this.minMs = opts.minMs ?? 1000;
-    this.maxMs = opts.maxMs ?? 300_000;
+    this.maxMs = opts.maxMs ?? (() => null);
     this.savedMs = opts.savedMs ?? 4000;
     this.errorMs = opts.errorMs ?? 3000;
     this.stopTimeoutMs = opts.stopTimeoutMs ?? 5000;
@@ -148,7 +149,7 @@ export class RecorderController {
         this.capturing = true;
         this.opts.onCaptureStart?.(this.requestedSource);
         this.overlay.setState({ kind: 'recording', mode: 'hold', startedAt: this.startedAt, source: this.requestedSource });
-        this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
+        this.startMax();
         break;
       case 'handsfree':
         if (this._state !== 'recording') return;
@@ -315,6 +316,12 @@ export class RecorderController {
   private toIdle(): void {
     this._state = 'idle';
     this.opts.onIdle?.();
+  }
+
+  /** Auto-stop exactly like a user stop once the limit (if any) is reached. */
+  private startMax(): void {
+    const max = this.maxMs();
+    if (max !== null) this.maxTimer = setTimeout(() => this.handleGesture('stop'), max);
   }
 
   private clearMax(): void {

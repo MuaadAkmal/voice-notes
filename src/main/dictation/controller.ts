@@ -52,7 +52,8 @@ export type DictationPorts = {
   minMs?: number;
   errorMs?: number;
   stopTimeoutMs?: number;
-  maxMs?: number;
+  /** Longest a recording may run, read at each start; null = no limit. */
+  maxMs?: () => number | null;
 };
 
 type State = 'idle' | 'listening' | 'stopping' | 'transcribing' | 'adding' | 'pasting';
@@ -75,13 +76,13 @@ export class DictationController {
   private readonly minMs: number;
   private readonly errorMs: number;
   private readonly stopTimeoutMs: number;
-  private readonly maxMs: number;
+  private readonly maxMs: () => number | null;
 
   constructor(private readonly p: DictationPorts) {
     this.minMs = p.minMs ?? MIN_DICTATION_MS;
     this.errorMs = p.errorMs ?? 3000;
     this.stopTimeoutMs = p.stopTimeoutMs ?? 5000;
-    this.maxMs = p.maxMs ?? 300_000;
+    this.maxMs = p.maxMs ?? (() => null);
   }
 
   get state(): State {
@@ -110,7 +111,7 @@ export class DictationController {
         this.capturing = true;
         this.p.onCaptureStart?.();
         this.showRecording('hold');
-        this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
+        this.startMax();
         break;
       case 'handsfree':
         if (this._state === 'listening') this.showRecording('handsfree');
@@ -219,6 +220,12 @@ export class DictationController {
   /** A voice note takes over the pill: drop a pending error flash without touching the state shown. */
   dismissFlash(): void {
     this.clearFlash();
+  }
+
+  /** Auto-stop exactly like a user stop once the limit (if any) is reached. */
+  private startMax(): void {
+    const max = this.maxMs();
+    if (max !== null) this.maxTimer = setTimeout(() => this.handleGesture('stop'), max);
   }
 
   private showRecording(mode: 'hold' | 'handsfree'): void {

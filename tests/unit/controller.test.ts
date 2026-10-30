@@ -81,6 +81,7 @@ beforeEach(() => {
     onIdle: () => idles++,
     onTitleAbandoned: () => abandoned++,
     blocked: () => blocked,
+    maxMs: () => 300_000,
   });
 });
 afterEach(() => vi.useRealTimers());
@@ -357,5 +358,53 @@ describe('next to a dictation', () => {
     vi.advanceTimersByTime(5000);
     expect(states).toHaveLength(n);
     expect(c.holdFlash()).toBe(false); // the saved flash is gone: no title input can open on it
+  });
+});
+
+describe('auto-stop at 300 s (cloud)', () => {
+  const make = (maxMs: number | null) =>
+    new RecorderController(
+      { start: (d, s) => calls.push(`start:${d}:${s}`), stop: () => calls.push('stop'), cancel: () => calls.push('cancel'), rewind: () => {}, setState: (s) => states.push(s) },
+      { create: async (a) => (created.push(a), fakeNote(a)) },
+      { getDeviceId: () => 'mic-1', getSource: () => source, onSaved: (n) => saved.push(n), idleState: () => IDLE, maxMs: () => maxMs },
+    );
+
+  for (const s of ['mic', 'system', 'both'] as const) {
+    it(`a ${s} note still recording at 300 s stops like a normal stop, and a new one can start`, async () => {
+      source = s;
+      const r = make(300_000);
+      r.handleGesture('start');
+      vi.advanceTimersByTime(299_999);
+      expect(calls).not.toContain('stop');
+      vi.advanceTimersByTime(1);
+      expect(calls).toContain('stop');
+      await r.onAudio({ ...audio(300_000), source: s });
+      expect(saved).toHaveLength(1);
+      expect(lastState()).toMatchObject({ kind: 'saved' });
+      expect(states.some((st) => st.kind === 'error')).toBe(false);
+      r.handleGesture('start');
+      expect(r.state).toBe('recording');
+    });
+  }
+
+  it('no limit for other providers', () => {
+    const r = make(null);
+    r.handleGesture('start');
+    vi.advanceTimersByTime(3_600_000);
+    expect(calls).not.toContain('stop');
+    expect(r.state).toBe('recording');
+  });
+
+  it('reads the limit at each start', () => {
+    let max: number | null = null;
+    const r = new RecorderController(
+      { start: () => {}, stop: () => calls.push('stop'), cancel: () => {}, rewind: () => {}, setState: () => {} },
+      { create: async (a) => fakeNote(a) },
+      { getDeviceId: () => null, getSource: () => 'mic', onSaved: () => {}, idleState: () => IDLE, maxMs: () => max },
+    );
+    max = 300_000;
+    r.handleGesture('start');
+    vi.advanceTimersByTime(300_000);
+    expect(calls).toEqual(['stop']);
   });
 });

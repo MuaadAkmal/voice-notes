@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { OverlayState } from '../../src/shared/channels';
 import { DictationController, type DictationPorts } from '../../src/main/dictation/controller';
 import type { Capture } from '../../src/main/commands/capture';
+import { CloudNotSignedIn, QuotaExceeded } from '../../src/main/transcription/cloud-client';
 
 const IDLE: OverlayState = { kind: 'idle', visible: true };
 let log: string[];
@@ -18,6 +19,7 @@ let listAdd: (text: string, capture: Capture | null) => Promise<{ ok: boolean; m
 let capture: Capture | null;
 let reminderOn: boolean;
 let ctl: DictationController;
+let ports: DictationPorts;
 
 const audio = (durationMs: number) => ({ bytes: new Uint8Array([1, 2, 3]), durationMs });
 const flush = () => vi.advanceTimersByTimeAsync(0);
@@ -45,7 +47,7 @@ beforeEach(() => {
     log.push(`list:${text}`);
     return { ok: true, message: 'Added · blueberry → Groceries' };
   };
-  const ports: DictationPorts = {
+  ports = {
     overlay: {
       start: (deviceId, ping) => log.push(`start:${deviceId}:${ping}`),
       stop: () => log.push('stop'),
@@ -381,4 +383,53 @@ it('voice reminders: off, the wake word goes to lists as before', async () => {
   ctl.handleGesture('stop');
   await ctl.onAudio(audio(800));
   expect(log).toContain('list:remind me to buy milk');
+});
+
+it('signed out keeps cloud: a cloud failure shows the message, pastes nothing, saves nothing', async () => {
+  transcribe = async () => {
+    throw new CloudNotSignedIn();
+  };
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(2000));
+  expect(states.at(-1)).toEqual({ kind: 'error', message: new CloudNotSignedIn().message, retry: false });
+  expect(log.some((l) => l.startsWith('paste:') || l.startsWith('save:'))).toBe(false);
+  expect(ctl.state).toBe('idle');
+});
+
+it('a quota failure shows the message, pastes nothing, saves nothing', async () => {
+  transcribe = async () => {
+    throw new QuotaExceeded('2026-11-01T00:00:00Z');
+  };
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(2000));
+  expect(states.at(-1)).toMatchObject({ kind: 'error', message: new QuotaExceeded('2026-11-01T00:00:00Z').message });
+  expect(log.some((l) => l.startsWith('paste:') || l.startsWith('save:'))).toBe(false);
+});
+
+for (const mode of ['hold', 'handsfree'] as const) {
+  it(`auto-stop at 300 s (${mode}, cloud): transcribed and pasted like a normal stop; a new one can start`, async () => {
+    const c2 = new DictationController({ ...ports, maxMs: () => 300_000 });
+    c2.handleGesture('start');
+    if (mode === 'handsfree') c2.handleGesture('handsfree');
+    vi.advanceTimersByTime(299_999);
+    expect(log).not.toContain('stop');
+    vi.advanceTimersByTime(1);
+    expect(log).toContain('stop');
+    await c2.onAudio(audio(300_000));
+    expect(log).toContain('paste:hello');
+    expect(log).toContain('save:hello:Slack');
+    expect(states.at(-1)).toEqual(IDLE);
+    c2.handleGesture('start');
+    expect(c2.state).toBe('listening');
+  });
+}
+
+it('no dictation limit for other providers', () => {
+  const c2 = new DictationController({ ...ports, maxMs: () => null });
+  c2.handleGesture('start');
+  vi.advanceTimersByTime(3_600_000);
+  expect(log).not.toContain('stop');
+  expect(c2.state).toBe('listening');
 });
