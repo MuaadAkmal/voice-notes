@@ -194,6 +194,7 @@ async function boot(): Promise<void> {
   // `supabase` is read lazily: it is set up further down, before any transcription can run.
   const cloudAsr = new CloudAsrClient({
     baseUrl: `${SUPABASE_URL}/functions/v1/asr`,
+    apiKey: SUPABASE_PUBLISHABLE_KEY,
     token: async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
     refresh: async () => {
       await supabase.auth.refreshSession();

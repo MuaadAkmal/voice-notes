@@ -17,6 +17,7 @@ const make = (fetch: (url: string, init?: RequestInit) => Promise<Response>, tok
   const f = vi.fn(fetch);
   const client = new CloudAsrClient({
     baseUrl: 'https://x.supabase.co/functions/v1/asr',
+    apiKey: 'pk',
     token: async () => token,
     refresh,
     fetch: f as never,
@@ -76,6 +77,7 @@ it('sends language as a query only when set, with the bearer token', async () =>
   expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/transcribe');
   expect(f.mock.calls[1][0]).toBe('https://x.supabase.co/functions/v1/asr/transcribe?language=fr');
   expect((f.mock.calls[0][1]!.headers as Record<string, string>).authorization).toBe('Bearer t');
+  expect((f.mock.calls[1][1]!.headers as Record<string, string>).apikey).toBe('pk');
 });
 
 it('reads usage', async () => {
@@ -83,6 +85,7 @@ it('reads usage', async () => {
   const { client, f } = make(async () => ok(u));
   expect(await client.usage()).toEqual(u);
   expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/usage');
+  expect((f.mock.calls[0][1]!.headers as Record<string, string>).apikey).toBe('pk');
 });
 
 it('says what to do in its messages', () => {

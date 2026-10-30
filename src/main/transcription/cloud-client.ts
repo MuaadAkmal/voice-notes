@@ -32,6 +32,7 @@ export class ProviderFailed extends Error {
 
 type Deps = {
   baseUrl: string; // …/functions/v1/asr
+  apiKey: string; // publishable key
   token: () => Promise<string | null>;
   refresh: () => Promise<void>;
   fetch: typeof fetch;
@@ -79,7 +80,7 @@ export class CloudAsrClient {
     try {
       return await this.d.fetch(`${this.d.baseUrl}${path}`, {
         method: o.method,
-        headers: { authorization: `Bearer ${token}`, ...(o.contentType ? { 'content-type': o.contentType } : {}) },
+        headers: { authorization: `Bearer ${token}`, apikey: this.d.apiKey, ...(o.contentType ? { 'content-type': o.contentType } : {}) },
         body: o.body as BodyInit | undefined,
         signal: o.signal ? AbortSignal.any([o.signal, timeout]) : timeout,
       });
