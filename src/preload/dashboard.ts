@@ -21,6 +21,7 @@ import {
   type PomodoroAction,
   type PomodoroSession,
   type FetchAudioResult,
+  type CloudUsageResult,
   type Settings,
   type StatusMap,
   type TestResult,
@@ -108,6 +109,7 @@ const dashboardApi = {
   },
   testTranscription: (baseUrl: string, model: string): Promise<TestResult> =>
     ipcRenderer.invoke(Ch.TranscriptionTest, { baseUrl, model }),
+  cloudUsage: (): Promise<CloudUsageResult> => ipcRenderer.invoke(Ch.TranscriptionCloudUsage),
   getKeyInfo: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionKeyInfo),
   setKey: (key: string): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionSetKey, { key }),
   removeKey: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionRemoveKey),

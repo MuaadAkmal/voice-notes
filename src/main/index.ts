@@ -857,6 +857,7 @@ async function boot(): Promise<void> {
     dictationsChanged: () => toDashboard(Ch.DictationsChanged),
     openedExternal,
     transcription,
+    cloud: cloudAsr,
     secrets,
     wavBridge,
     localWhisper,

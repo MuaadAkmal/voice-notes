@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Cloud, Cpu, Server, ShieldCheck, Sparkles, Target, Zap } from 'lucide-react';
+import { Cloud, Cpu, Server } from 'lucide-react';
 import type { KeyInfo, Settings, TestResult } from '../../shared/channels';
 import { cleanIpcError } from '../../shared/format';
 import {
-  CLOUD_TIERS,
   normaliseBaseUrl,
   sendsKeyInsecurely,
   TRANSCRIBE_LANGUAGES,
@@ -18,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { CloudCard } from './CloudCard';
 import { LocalWhisperCard } from './LocalWhisperCard';
 import { useToast } from './Toast';
 
@@ -145,7 +145,7 @@ export function TranscriptionPage() {
         ))}
       </div>
 
-      {mode === 'cloud' && <CloudPanel />}
+      {mode === 'cloud' && <CloudCard settings={settings} onSaved={setSettings} />}
       {mode === 'local' && <LocalWhisperCard settings={settings} onSaved={setSettings} />}
       <div className={cn('divide-y divide-border rounded-2xl border bg-card', mode !== 'server' && 'hidden')}>
         <div className="space-y-4 px-5 py-4">
@@ -270,70 +270,6 @@ export function TranscriptionPage() {
             </SelectContent>
           </Select>
         </div>
-      </div>
-    </div>
-  );
-}
-
-const CLOUD_HIGHLIGHTS = [
-  { icon: Zap, title: 'Lightning fast', text: 'A minute of audio back as text in seconds.' },
-  { icon: Target, title: 'Pin-point accuracy', text: 'Whisper large-v3, auto-picked for each language, including Hindi, Tamil, Bengali and more.' },
-  { icon: ShieldCheck, title: 'Private by design', text: 'Your audio is encrypted in transit.' },
-] as const;
-
-/** Preview of the planned hosted service; nothing here works until the cloud backend ships. */
-function CloudPanel() {
-  return (
-    <div className="rounded-2xl border bg-card">
-      <div className="px-6 pt-6 pb-5">
-        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-          <Sparkles className="size-3" /> Coming soon
-        </span>
-        <h2 className="mt-3 text-xl font-semibold tracking-tight">Studio-grade transcription. Zero setup.</h2>
-        <p className="mt-1.5 text-sm text-muted-foreground">
-          The fastest, most accurate models, tuned and hosted for you. No GPU, no server, nothing to install.
-        </p>
-      </div>
-
-      <div className="grid gap-3 px-6 pb-5 sm:grid-cols-3">
-        {CLOUD_HIGHLIGHTS.map(({ icon: Icon, title, text }) => (
-          <div key={title} className="rounded-xl bg-muted/60 p-3">
-            <Icon className="size-4 text-primary" />
-            <div className="mt-2 text-sm font-medium">{title}</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{text}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-3 border-t px-6 py-5 sm:grid-cols-2">
-        <div className="rounded-xl border p-4">
-          <div className="text-sm font-medium">Free</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">15 min</div>
-          <div className="text-xs text-muted-foreground">of transcription every month</div>
-        </div>
-        <div className="rounded-xl border-2 border-primary p-4">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            Pro
-            <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">Best value</span>
-          </div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">Unlimited</div>
-          <div className="text-xs text-muted-foreground">transcription, priority speed and every model</div>
-        </div>
-      </div>
-
-      <div className="border-t px-6 py-5">
-        <div className="text-xs font-medium text-muted-foreground">Models</div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {CLOUD_TIERS.map((tier) => (
-            <span key={tier.name} className="rounded-full bg-muted px-3 py-1 text-xs" title={tier.detail}>
-              <span className="font-medium">{tier.name}</span>
-              <span className="text-muted-foreground"> · {tier.detail}</span>
-            </span>
-          ))}
-        </div>
-        <Button className="mt-5" size="sm" disabled>
-          Coming soon
-        </Button>
       </div>
     </div>
   );

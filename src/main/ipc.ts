@@ -67,6 +67,9 @@ import type { ConnectorsService } from './connectors/service';
 import type { SyncController } from './sync/controller';
 import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
+import type { CloudAsrClient } from './transcription/cloud-client';
+import { NotSignedIn, Offline } from './sync/http-server';
+import type { CloudUsageResult } from '../shared/channels';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
 import type { WavBridge } from './transcription/wav-bridge';
@@ -204,6 +207,7 @@ type DashboardDeps = {
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
   transcription: TranscriptionService;
+  cloud: CloudAsrClient;
   secrets: Secrets;
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
@@ -391,6 +395,15 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     }
   });
   handle(Ch.LocalTest, none, () => d.transcription.testCurrent());
+  handle(Ch.TranscriptionCloudUsage, none, async (): Promise<CloudUsageResult> => {
+    try {
+      return await d.cloud.usage();
+    } catch (e) {
+      if (e instanceof NotSignedIn) return { error: 'signed-out' };
+      if (e instanceof Offline) return { error: 'offline' };
+      throw e;
+    }
+  });
   handle(Ch.AccountGet, none, () => d.account.current());
   handle(Ch.AccountSignIn, none, () => d.account.signIn());
   handle(Ch.AccountCancel, none, () => d.account.cancel());

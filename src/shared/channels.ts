@@ -223,6 +223,7 @@ export const Ch = {
   TranscriptionGetStatus: 'transcription:get-status', // → StatusMap
   TranscriptionEnqueue: 'transcription:enqueue', // { ids, language }
   TranscriptionTest: 'transcription:test', // { baseUrl, model } → TestResult
+  TranscriptionCloudUsage: 'transcription:cloud-usage', // → CloudUsageResult
   TranscriptionKeyInfo: 'transcription:key-info', // → KeyInfo
   TranscriptionSetKey: 'transcription:set-key', // { key } → KeyInfo
   TranscriptionRemoveKey: 'transcription:remove-key', // → KeyInfo
@@ -278,6 +279,11 @@ export const Ch = {
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
+
+/** Cloud minutes used this month, in seconds; or why they are unknown. */
+export type CloudUsageResult =
+  | { used: number; limit: number; resetsAt: string; plan: string }
+  | { error: 'signed-out' | 'offline' };
 
 /** A voice note's transcription job; a note with no entry has none (or it finished). */
 export type JobStatus = { state: 'queued' } | { state: 'running' } | { state: 'failed'; error: string };
