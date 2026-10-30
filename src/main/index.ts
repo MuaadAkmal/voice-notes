@@ -36,6 +36,10 @@ import { ConnectorsClient } from './connectors/client';
 import type { Capture } from './commands/capture';
 import { CommandsClient } from './commands/client';
 import { ListCommands } from './commands/service';
+import { describeCapture } from './commands/describe';
+import { readBrowserUrl } from './commands/browser-url';
+import { readFilePath } from './commands/file-path';
+import { windowScreenshot } from './commands/screenshot';
 import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
@@ -336,7 +340,7 @@ async function boot(): Promise<void> {
     list: {
       enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
       wakeWords: () => settings.noteWakeWords,
-      add: (text) => listCommands.add(text),
+      add: (text, capture) => listCommands.add(text, capture),
     },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
@@ -688,6 +692,13 @@ async function boot(): Promise<void> {
   let commandsClient = makeCommandsClient(SUPABASE_URL);
   const listCommands = new ListCommands({
     resolve: (req) => commandsClient.resolve(req),
+    describe: (c) =>
+      describeCapture(
+        c,
+        { browserUrl: (c) => readBrowserUrl(c), filePath: (c) => readFilePath(c), screenshot: (h) => windowScreenshot(h, (o) => desktopCapturer.getSources(o)) },
+        (line) => log.info(line),
+      ),
+    saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),
     pages: store.pages,
     quickNotes: () => {
       const patch = ensureNotesPage(settings, store.pages);
