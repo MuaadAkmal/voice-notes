@@ -70,7 +70,11 @@ export class AsrCore {
     try {
       out = await this.d.transcribe(wav, language);
     } catch (e) {
-      await this.d.store.refund(user, period, seconds);
+      try {
+        await this.d.store.refund(user, period, seconds);
+      } catch (re) {
+        console.error('[asr] refund', re);
+      }
       throw new ProviderFailed(e instanceof Error ? e.message : 'provider failed');
     }
     return { text: out.text, language: out.language, seconds, used: r.used, limit: r.limit, resetsAt };

@@ -41,13 +41,13 @@ async function verify(jwt: string): Promise<{ userId: string } | null> {
   if (localKeys) {
     try {
       const { payload } = await jwtVerify(jwt, localKeys, { issuer: `${SUPABASE_URL}/auth/v1` });
-      return payload.sub && payload.role === 'authenticated' ? { userId: payload.sub } : null;
+      return payload.sub && payload.role === 'authenticated' && payload.is_anonymous !== true ? { userId: payload.sub } : null;
     } catch {
       // A key the environment doesn't have yet (rotation) or a legacy token: let Auth decide.
     }
   }
   const { data, error } = await auth.getClaims(jwt);
-  if (error || !data?.claims?.sub || data.claims.role !== 'authenticated') return null;
+  if (error || !data?.claims?.sub || data.claims.role !== 'authenticated' || data.claims.is_anonymous === true) return null;
   return { userId: data.claims.sub as string };
 }
 

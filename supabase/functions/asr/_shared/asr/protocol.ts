@@ -11,8 +11,6 @@ export type TranscribeResponse = {
 
 export type UsageResponse = { used: number; limit: number; resetsAt: string; plan: string };
 
-export type AsrErrorCode = 'bad_audio' | 'too_large' | 'quota_exceeded' | 'provider_failed' | 'misconfigured';
-
 /** Longest clip one request may send, in seconds. */
 export const MAX_SECONDS = 300;
 /** Largest request body, in bytes. */

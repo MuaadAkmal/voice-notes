@@ -94,7 +94,7 @@ it('postgres uses the account plan limit', async () => {
 
 it('only the service role may run the functions', async () => {
   await pgStore();
-  for (const fn of ['reserve_asr_seconds', 'refund_asr_seconds', 'asr_usage_for']) {
+  for (const fn of ['asr_limit_for', 'reserve_asr_seconds', 'refund_asr_seconds', 'asr_usage_for']) {
     const grants = (
       await pg!.query<{ grantee: string }>('select grantee from information_schema.routine_privileges where routine_name = $1', [fn])
     ).rows.map((r) => r.grantee);

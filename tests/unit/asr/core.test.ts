@@ -104,6 +104,16 @@ describe('AsrCore', () => {
     expect((await core.usage(U)).used).toBe(1);
   });
 
+  it('a failing refund is logged and the provider failure still surfaces', async () => {
+    const { core, store, transcribe } = setup();
+    transcribe.mockRejectedValueOnce(new Error('boom'));
+    vi.spyOn(store, 'refund').mockRejectedValueOnce(new Error('db down'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await expect(core.transcribe(U, wav(5), null)).rejects.toBeInstanceOf(ProviderFailed);
+    expect(log).toHaveBeenCalledWith('[asr] refund', expect.any(Error));
+    log.mockRestore();
+  });
+
   it('refund uses reservation period', async () => {
     const { core, store, transcribe, setNow } = setup('2026-10-31T23:59:59.5Z');
     transcribe.mockImplementationOnce(async () => {
