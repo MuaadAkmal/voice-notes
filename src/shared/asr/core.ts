@@ -27,6 +27,30 @@ export function periodOf(t: number): { period: string; resetsAt: string } {
   };
 }
 
+/** A 44-byte PCM 16-bit header followed by `pcm`. */
+export function canonicalWav(pcm: Uint8Array, sampleRate: number, channels: number): Uint8Array {
+  const out = new Uint8Array(44 + pcm.length);
+  const v = new DataView(out.buffer);
+  const tag = (at: number, t: string) => {
+    for (let i = 0; i < 4; i++) out[at + i] = t.charCodeAt(i);
+  };
+  tag(0, 'RIFF');
+  v.setUint32(4, 36 + pcm.length, true);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, channels, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * channels * 2, true);
+  v.setUint16(32, channels * 2, true);
+  v.setUint16(34, 16, true);
+  tag(36, 'data');
+  v.setUint32(40, pcm.length, true);
+  out.set(pcm, 44);
+  return out;
+}
+
 export class AsrCore {
   constructor(private readonly d: { store: AsrStore; transcribe: Transcriber; now: () => number }) {}
 
@@ -34,14 +58,17 @@ export class AsrCore {
     if (body.length > MAX_BYTES) throw new TooLarge('body too large');
     const info = wavInfo(body);
     if (!info || info.dataBytes <= 0) throw new BadAudio('not a 16-bit PCM WAV');
+    if (info.sampleRate < 8000 || info.sampleRate > 48000 || info.channels > 2) throw new BadAudio('unsupported format');
     if (info.seconds > MAX_SECONDS) throw new TooLarge('clip too long');
+    // Forward only what was measured and charged: a fresh header over exactly the data chunk's bytes.
+    const wav = canonicalWav(body.subarray(info.dataOffset, info.dataOffset + info.dataBytes), info.sampleRate, info.channels);
     const seconds = chargedSeconds(info.seconds);
     const { period, resetsAt } = periodOf(this.d.now()); // once: a refund goes back to this same month
     const r = await this.d.store.reserve(user, period, seconds);
     if (!r.ok) throw new QuotaExceeded(resetsAt);
     let out: { text: string; language: string | null };
     try {
-      out = await this.d.transcribe(body, language);
+      out = await this.d.transcribe(wav, language);
     } catch (e) {
       await this.d.store.refund(user, period, seconds);
       throw new ProviderFailed(e instanceof Error ? e.message : 'provider failed');

@@ -57,6 +57,30 @@ describe('AsrCore', () => {
     expect(reserve).not.toHaveBeenCalled();
   });
 
+  it('a header declaring 1 s on a 60 s body is charged 1 s and forwards exactly 1 s', async () => {
+    const { core, transcribe } = setup();
+    const body = wav(60);
+    new DataView(body.buffer).setUint32(40, 32000, true); // data chunk claims 1 s
+    const r = await core.transcribe(U, body, null);
+    expect(r.seconds).toBe(1);
+    const sent = transcribe.mock.calls[0][0];
+    expect(sent.length).toBe(44 + 32000);
+    expect([...sent.subarray(0, 44)]).toEqual([...wav(1).subarray(0, 44)]);
+  });
+
+  it.each([
+    [7999, 1],
+    [48001, 1],
+    [16000, 3],
+  ])('rate %i, %i channels is BadAudio', async (rate, ch) => {
+    const { core, transcribe } = setup();
+    const body = wav(1, rate);
+    const v = new DataView(body.buffer);
+    v.setUint16(22, ch, true);
+    await expect(core.transcribe(U, body, null)).rejects.toBeInstanceOf(BadAudio);
+    expect(transcribe).not.toHaveBeenCalled();
+  });
+
   it('over 10 MB is TooLarge', async () => {
     const { core } = setup();
     await expect(core.transcribe(U, new Uint8Array(10 * 1024 * 1024 + 1), null)).rejects.toBeInstanceOf(TooLarge);
