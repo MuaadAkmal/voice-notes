@@ -2,6 +2,7 @@ import { BrowserWindow, clipboard, ipcMain, type IpcMainEvent, type IpcMainInvok
 import log from 'electron-log/main';
 import { z } from 'zod';
 import {
+  type CaptureResult,
   AppendEntrySchema,
   type AudioDevice,
   AudioPayloadSchema,
@@ -80,6 +81,7 @@ type OverlayDeps = {
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
+  onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;
 };
@@ -158,6 +160,10 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.handle(Ch.LaterDrop, (event: IpcMainInvokeEvent, payload: unknown) => {
     if (event.sender !== overlay.webContents) throw new Error('Forbidden');
     return deps.onDrop(DropPayloadSchema.parse(payload));
+  });
+  ipcMain.handle(Ch.LaterCapture, (event: IpcMainInvokeEvent) => {
+    if (event.sender !== overlay.webContents) throw new Error('Forbidden');
+    return deps.onCaptureLater();
   });
   ipcMain.on(
     Ch.DictationAudio,

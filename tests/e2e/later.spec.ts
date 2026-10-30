@@ -94,3 +94,29 @@ test('main keeps the page and its card even if asked to drop them', async () => 
   await page.getByRole('button', { name: 'Home' }).first().click();
   await expect(page.locator('main section h2', { hasText: 'Review later' })).toBeVisible();
 });
+
+test('Save this on the pill saves the window in front', async () => {
+  t = await launch();
+  await t.hooks((h) => h.setForeground(() => ({ title: 'general | Slack', processName: 'slack.exe', pid: 1 })));
+  const pill = await overlay(t);
+  await expect.poll(laterBody).toBe('');
+  await pill.getByTestId('pill').locator('button').first().hover();
+  await pill.getByTestId('save-this').click();
+  await expect(pill.getByText('Saved to Review later')).toBeVisible({ timeout: 10_000 });
+  await pill.waitForTimeout(150);
+  await pill.screenshot({ path: '.superpowers/shots/save-this-landing.png' });
+  await pill.waitForTimeout(1000);
+  await pill.screenshot({ path: '.superpowers/shots/save-this-saved.png' });
+  await expect.poll(laterBody).toContain('- [ ] general | Slack (slack)');
+  await expect(pill.getByTestId('save-later')).toHaveCount(0, { timeout: 5000 });
+});
+
+test('Save this with nothing in front saves nothing', async () => {
+  t = await launch();
+  await t.hooks((h) => h.setForeground(() => null));
+  const pill = await overlay(t);
+  await pill.getByTestId('pill').locator('button').first().hover();
+  await pill.getByTestId('save-this').click();
+  await expect(pill.getByText('Nothing to save here')).toBeVisible();
+  expect(await laterBody()).toBe('');
+});

@@ -104,6 +104,8 @@ export type OverlayState =
 
 /** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
 export type DropPayload = { text: string; uriList: string; html: string };
+/** The pill's Save this: label of the window saved to Review later, or nothing worth saving in front. */
+export type CaptureResult = { kind: 'saved'; label: string } | { kind: 'nothing' };
 /** A dropped item for the Review later page. title null = no usable link text. */
 export type LaterItem = { kind: 'link'; url: string; title: string | null } | { kind: 'text'; text: string };
 
@@ -162,6 +164,7 @@ export const Ch = {
   MediaProbe: 'media:probe', // { id } is sound playing?
   MediaProbeResult: 'media:probe-result', // { id, playing }
   LaterDrop: 'later:drop', // DropPayload → 'saved' | 'ignored' (invoke)
+  LaterCapture: 'later:capture', // the pill's Save this: the window in front → CaptureResult (invoke)
   DictationAudio: 'dictation:audio', // DictationAudio
   PomodoroState: 'pomodoro:state', // Pomodoro: the overlay's timer, whenever it changes
   PomodoroDone: 'pomodoro:done', // { focusMs } a focus phase ran to the end

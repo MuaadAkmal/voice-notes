@@ -20,7 +20,7 @@ import { HotkeyGesture } from './hotkey/gesture';
 import { HotkeyService } from './hotkey/service';
 import { LocalWhisper } from './local-whisper';
 import { registerDashboardIpc, registerOverlayIpc } from './ipc';
-import { ensureLaterPage, guardWidgets, saveDrop } from './later';
+import { ensureLaterPage, guardWidgets, saveCapture, saveDrop } from './later';
 import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
@@ -199,6 +199,13 @@ async function boot(): Promise<void> {
     if (!fg || !fg.title || fg.pid === process.pid) return null;
     return { hwnd: fg.hwnd ?? 0, title: fg.title, processName: fg.processName, pid: fg.pid };
   };
+  // What a captured window shows, for "add this to …" and the pill's Save this.
+  const describeWindow = (c: Capture) =>
+    describeCapture(
+      c,
+      { browserUrl: (c) => readBrowserUrl(c), filePath: (c) => readFilePath(c), screenshot: (h) => windowScreenshot(h, (o) => desktopCapturer.getSources(o)) },
+      (line) => log.info(line),
+    );
   const getContext = (): NoteContext | null => {
     const fg = captureWindow();
     return fg && { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
@@ -422,6 +429,24 @@ async function boot(): Promise<void> {
         return result;
       } catch (err) {
         log.error('[later] drop not saved', err);
+        throw err;
+      }
+    },
+    onCaptureLater: async () => {
+      try {
+        const result = await saveCapture({
+          pages: store.pages,
+          getSettings: () => settings,
+          updateSettings,
+          capture: captureWindow,
+          describe: describeWindow,
+          saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),
+          newId: randomUUID,
+        });
+        if (result.kind === 'saved') toDashboard(Ch.PagesChanged);
+        return result;
+      } catch (err) {
+        log.error('[later] capture not saved', err);
         throw err;
       }
     },
@@ -692,12 +717,7 @@ async function boot(): Promise<void> {
   let commandsClient = makeCommandsClient(SUPABASE_URL);
   const listCommands = new ListCommands({
     resolve: (req) => commandsClient.resolve(req),
-    describe: (c) =>
-      describeCapture(
-        c,
-        { browserUrl: (c) => readBrowserUrl(c), filePath: (c) => readFilePath(c), screenshot: (h) => windowScreenshot(h, (o) => desktopCapturer.getSources(o)) },
-        (line) => log.info(line),
-      ),
+    describe: describeWindow,
     saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),
     pages: store.pages,
     quickNotes: () => {

@@ -4,12 +4,14 @@ import type { OverlayState } from '../../shared/channels';
 import { acceptsDrops } from '../../shared/later';
 import { Confetti } from './Confetti';
 import { DropPill, Pill } from './Pill';
+import { SaveLaterPill } from './SaveLater';
 import { useDrag } from './useDrag';
 import { useDropLater } from './useDropLater';
 import { useFilmBuffer } from './useFilmBuffer';
 import { useMorph } from './useMorph';
 import { usePomodoro } from './usePomodoro';
 import { useRecorder } from './useRecorder';
+import { useSaveLater } from './useSaveLater';
 import './overlay.css';
 
 function Overlay() {
@@ -19,6 +21,7 @@ function Overlay() {
   const drag = useDrag();
   const pomo = usePomodoro(state.kind === 'recording');
   const drop = useDropLater(acceptsDrops(state));
+  const later = useSaveLater();
   const pill = useRef<HTMLDivElement>(null);
   useMorph(pill);
   // A finished focus phase gets a burst of confetti.
@@ -44,13 +47,19 @@ function Overlay() {
   }, []);
   // The element under the cursor is replaced on every state change; make the window click-through
   // again until the new pill reports mouseenter, so a vanished pill can't leave a dead click zone.
-  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, drop]);
+  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, drop, later.phase.kind]);
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
       <div {...drag} ref={pill} className="touch-none" data-testid="pill">
-        {drop === 'none' ? <Pill state={state} analyser={analyser} pomo={pomo} /> : <DropPill phase={drop} />}
+        {drop !== 'none' ? (
+          <DropPill phase={drop} />
+        ) : later.phase.kind !== 'none' && state.kind === 'idle' ? (
+          <SaveLaterPill phase={later.phase} />
+        ) : (
+          <Pill state={state} analyser={analyser} pomo={pomo} onSave={later.save} />
+        )}
       </div>
     </div>
   );
