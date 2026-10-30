@@ -193,15 +193,23 @@ async function boot(): Promise<void> {
   if (checked !== settings) Object.assign(settings, saveSettings(settingsFile, { transcription: checked.transcription }));
   // Cloud transcription through the `asr` Edge Function, with the app's own sign-in.
   // `supabase` is read lazily: it is set up further down, before any transcription can run.
-  const cloudAsr = new CloudAsrClient({
-    baseUrl: `${SUPABASE_URL}/functions/v1/asr`,
-    apiKey: SUPABASE_PUBLISHABLE_KEY,
-    token: async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
-    refresh: async () => {
-      await supabase.auth.refreshSession();
-    },
-    fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
-  });
+  let testAsrToken: (() => Promise<string | null>) | null = null;
+  const makeCloudAsr = (baseUrl: string) =>
+    new CloudAsrClient({
+      baseUrl,
+      apiKey: SUPABASE_PUBLISHABLE_KEY,
+      token: async () => (testAsrToken ? testAsrToken() : ((await supabase.auth.getSession()).data.session?.access_token ?? null)),
+      refresh: async () => {
+        await supabase.auth.refreshSession();
+      },
+      fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
+    });
+  let cloudClient = makeCloudAsr(`${SUPABASE_URL}/functions/v1/asr`);
+  // Through the current client, so a test's useServer() applies to jobs already wired.
+  const cloudAsr: Pick<CloudAsrClient, 'transcribe' | 'usage'> = {
+    transcribe: (audio, language, signal) => cloudClient.transcribe(audio, language, signal),
+    usage: () => cloudClient.usage(),
+  };
   const endpoint = () => resolveEndpoint({ settings: () => settings, secrets, local: localWhisper });
   setInterval(() => {
     if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
@@ -921,6 +929,11 @@ async function boot(): Promise<void> {
         check: () => reminderScheduler.check(),
         service: reminders,
         setNow: (fn: () => number) => void (reminderNow = fn),
+      },
+      asr: {
+        // A local stand-in for the `asr` function: its handler over memory, with a fake transcriber.
+        useServer: (url: string) => void (cloudClient = makeCloudAsr(url)),
+        useToken: (fn: () => Promise<string | null>) => void (testAsrToken = fn),
       },
       commands: {
         // A local stand-in for the function: its handler over memory, with a fake Groq.

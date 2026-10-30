@@ -207,7 +207,7 @@ type DashboardDeps = {
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
   transcription: TranscriptionService;
-  cloud: CloudAsrClient;
+  cloud: Pick<CloudAsrClient, 'usage'>;
   secrets: Secrets;
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
