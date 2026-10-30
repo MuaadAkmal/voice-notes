@@ -321,3 +321,17 @@ it('a remote note is fetched before it is transcribed', async () => {
   expect(fetchAudio).toHaveBeenCalledWith(ID);
   expect(deps.store.setTranscript).toHaveBeenCalled();
 });
+
+it('sends notes, peeks and tests through the cloud client when the provider is cloud', async () => {
+  const cloud = { transcribe: vi.fn(async () => ({ text: ' nube ', language: 'es' })) };
+  const { service, deps, requests, setSettings } = setup({ cloud });
+  setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
+  service.enqueue([ID], 'fr');
+  await service.idle();
+  expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), 'fr');
+  expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, 'nube', 'es');
+  (deps.toWav as ReturnType<typeof vi.fn>).mockResolvedValueOnce(silentWav(10));
+  expect(await service.peek(ID, 4)).toBe(' nube ');
+  expect(await service.testCurrent()).toMatchObject({ ok: true, language: 'es' });
+  expect(requests).toEqual([]);
+});

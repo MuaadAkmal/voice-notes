@@ -46,6 +46,7 @@ import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
+import { CloudAsrClient } from './transcription/cloud-client';
 import { resolveEndpoint } from './transcription/endpoint';
 import { matchFolderCommand, PEEK_SECONDS } from '../shared/folder-command';
 import { transcribe } from './transcription/openai-client';
@@ -189,6 +190,16 @@ async function boot(): Promise<void> {
   localWhisper.boot();
   const checked = normaliseLocal(settings, (id) => localWhisper.status().models[id]);
   if (checked !== settings) Object.assign(settings, saveSettings(settingsFile, { transcription: checked.transcription }));
+  // Cloud transcription through the `asr` Edge Function, with the app's own sign-in.
+  // `supabase` is read lazily: it is set up further down, before any transcription can run.
+  const cloudAsr = new CloudAsrClient({
+    baseUrl: `${SUPABASE_URL}/functions/v1/asr`,
+    token: async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
+    refresh: async () => {
+      await supabase.auth.refreshSession();
+    },
+    fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string), init),
+  });
   const endpoint = () => resolveEndpoint({ settings: () => settings, secrets, local: localWhisper });
   setInterval(() => {
     if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
@@ -314,6 +325,8 @@ async function boot(): Promise<void> {
       const { transcription, transcribeLanguage } = settings;
       const ep = await endpoint();
       try {
+        const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
+        if (ep.cloud) return cleanTranscript((await cloudAsr.transcribe(audio, language, signal)).text);
         const result = await transcribe({
           baseUrl: ep.baseUrl,
           model: ep.model,
@@ -791,6 +804,7 @@ async function boot(): Promise<void> {
   const transcription = new TranscriptionService({
     store,
     endpoint,
+    cloud: cloudAsr,
     secrets,
     toWav: (bytes, mimeType) =>
       wavBridge.request((requestId) => {

@@ -42,3 +42,14 @@ it('refuses when nothing is set up', async () => {
     resolveEndpoint({ settings: () => DEFAULT_SETTINGS, secrets: { get: () => null }, local: fakeLocal() }),
   ).rejects.toThrow('Set up transcription first');
 });
+
+it('uses the cloud without a server URL or key', async () => {
+  const local = fakeLocal();
+  const ep = await resolveEndpoint({
+    settings: () => withTranscription({ provider: 'cloud', baseUrl: '' }),
+    secrets: { get: () => null },
+    local,
+  });
+  expect(ep).toMatchObject({ cloud: true, local: false });
+  expect(local.ensure).not.toHaveBeenCalled();
+});

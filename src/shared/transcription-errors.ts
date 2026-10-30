@@ -2,7 +2,13 @@ export type TranscriptionFailure =
   | { kind: 'network' }
   | { kind: 'timeout' }
   | { kind: 'bad-response' }
-  | { kind: 'http'; status: number; body: string };
+  | { kind: 'http'; status: number; body: string }
+  | { kind: 'signed-out' }
+  | { kind: 'quota'; resetsAt: string }
+  | { kind: 'too-large' }
+  | { kind: 'provider-failed' };
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** The server's own explanation: the first string among the usual JSON error fields, else the raw body. */
 function serverMessage(body: string): string {
@@ -37,6 +43,18 @@ export function transcriptionError(f: TranscriptionFailure): string {
       return 'Timed out';
     case 'bad-response':
       return 'Unexpected response from the server';
+    case 'signed-out':
+      return 'Sign in to use Cloud';
+    case 'quota': {
+      const d = new Date(f.resetsAt);
+      return Number.isNaN(d.getTime())
+        ? 'Free minutes used'
+        : `Free minutes used · resets ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    }
+    case 'too-large':
+      return 'Recording too long for Cloud';
+    case 'provider-failed':
+      return 'Cloud transcription failed, try again later';
     case 'http': {
       if (f.status === 401 || f.status === 403) return 'API key rejected';
       if (f.status === 404) return 'URL or model not found';

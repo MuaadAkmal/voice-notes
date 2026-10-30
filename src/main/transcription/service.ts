@@ -3,6 +3,7 @@ import type { Note, StatusMap, TestResult } from '../../shared/channels';
 import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
 import { silentWav, trimWav } from '../../shared/wav';
 import type { NoteStore } from '../store/note-store';
+import type { CloudAsrClient } from './cloud-client';
 import type { Endpoint } from './endpoint';
 import { transcribe as realTranscribe } from './openai-client';
 import { TranscriptionQueue } from './queue';
@@ -19,10 +20,15 @@ export type ServiceDeps = {
   /** Brings a remote note's audio (recorded on another PC) to this PC first. */
   fetchAudio?: (id: string) => Promise<void>;
   transcribe?: typeof realTranscribe;
+  /** The `cloud` provider's client. */
+  cloud?: Pick<CloudAsrClient, 'transcribe'>;
   now?: () => number;
   notesChanged: () => void;
   onStatus: (s: StatusMap) => void;
 };
+
+/** Only set for the cloud, so requests to a server keep their exact shape. */
+const cloudFlag = (ep: Endpoint) => (ep.cloud ? { cloud: true } : {});
 
 const MISSING = 'Audio file is missing';
 const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
@@ -31,13 +37,20 @@ const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 export class TranscriptionService {
   private readonly queue: TranscriptionQueue;
   private readonly readFile: (absPath: string) => Promise<Uint8Array>;
-  private readonly transcribe: typeof realTranscribe;
+  private readonly transcribe: (req: Parameters<typeof realTranscribe>[0] & { cloud?: boolean }) => ReturnType<typeof realTranscribe>;
   private readonly now: () => number;
 
   constructor(private readonly d: ServiceDeps) {
     this.readFile = d.readFile ?? ((p) => fs.promises.readFile(p));
     this.transcribe = d.transcribe ?? realTranscribe;
     this.now = d.now ?? Date.now;
+    const openai = this.transcribe;
+    // Every request goes through here: the cloud client for `cloud`, else the OpenAI-shaped one.
+    this.transcribe = (req) => {
+      if (!req.cloud) return openai(req);
+      if (!d.cloud) return Promise.reject(new Error('Set up transcription first'));
+      return req.signal ? d.cloud.transcribe(req.audio, req.language, req.signal) : d.cloud.transcribe(req.audio, req.language);
+    };
     this.queue = new TranscriptionQueue(
       (id, language) => this.run(id, language),
       d.onStatus,
@@ -63,7 +76,7 @@ export class TranscriptionService {
     const audio = trimWav(await this.d.toWav(await this.readAudio(note), note.mimeType), seconds);
     const ep = await this.d.endpoint();
     try {
-      const { text } = await this.transcribe({ baseUrl: ep.baseUrl, model: ep.model, apiKey: ep.apiKey, language: null, audio, filename: `${id}.wav` });
+      const { text } = await this.transcribe({ ...cloudFlag(ep), baseUrl: ep.baseUrl, model: ep.model, apiKey: ep.apiKey, language: null, audio, filename: `${id}.wav` });
       return text;
     } finally {
       ep.release();
@@ -72,7 +85,7 @@ export class TranscriptionService {
 
   /** One second of silence through the same client: checks URL, key and model together. */
   test(baseUrl: string, model: string): Promise<TestResult> {
-    return this.probe(async () => ({ baseUrl, model, apiKey: this.d.secrets.get('server'), local: false, release: () => undefined }));
+    return this.probe(async () => ({ baseUrl, model, apiKey: this.d.secrets.get('server'), local: false, cloud: false, release: () => undefined }));
   }
 
   /** The same check against the provider in use (for the built-in engine, includes loading the model). */
@@ -86,6 +99,7 @@ export class TranscriptionService {
       const ep = await endpoint();
       try {
         const { language } = await this.transcribe({
+          ...cloudFlag(ep),
           baseUrl: ep.baseUrl,
           model: ep.model,
           apiKey: ep.apiKey,
@@ -117,6 +131,7 @@ export class TranscriptionService {
     let result: Awaited<ReturnType<typeof realTranscribe>>;
     try {
       result = await this.transcribe({
+        ...cloudFlag(ep),
         baseUrl: ep.baseUrl,
         model: ep.model,
         apiKey: ep.apiKey,

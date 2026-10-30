@@ -27,7 +27,7 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
 
 const TranscriptionSchema = z
   .object({
-    provider: z.enum(['server', 'local']).nullable(),
+    provider: z.enum(['server', 'local', 'cloud']).nullable(),
     // Stored already normalised; anything else is a hand-edited file.
     baseUrl: z
       .string()

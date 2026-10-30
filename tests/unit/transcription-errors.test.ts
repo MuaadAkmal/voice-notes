@@ -41,3 +41,10 @@ it('falls back to the raw body when detail is not a string', () => {
   const body = '{"detail":[{"msg":"Field required"}]}';
   expect(http(422, body)).toBe(`Server error 422: ${body}`);
 });
+
+it('maps cloud failures', () => {
+  expect(transcriptionError({ kind: 'quota', resetsAt: new Date(2026, 10, 1, 9).toISOString() })).toBe(
+    'Free minutes used · resets 1 Nov',
+  );
+  expect(transcriptionError({ kind: 'signed-out' })).toBe('Sign in to use Cloud');
+});
