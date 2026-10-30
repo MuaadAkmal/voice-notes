@@ -11,6 +11,8 @@ const PERIOD = /\b(?:this\s+|in the\s+)?(morning|afternoon|evening)\b/i;
 const PERIOD_HOUR: Record<string, number> = { morning: 9, afternoon: 15, evening: 18 };
 // "at" is required so numbers in the task ("buy 2 apples") are left alone.
 const CLOCK = /\bat\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?(?=$|[\s,.!?])/i;
+// Without "at", only with am/pm: "tomorrow 7 pm".
+const BARE_CLOCK = /\b(\d{1,2})(?::(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)(?=$|[\s,.!?])/i;
 
 const isTrim = (s: string) => s.replace(/\s{2,}/g, ' ').replace(/^[\s,.:;!?-]+|[\s,.:;!?-]+$/g, '').trim();
 
@@ -36,7 +38,7 @@ export function parseReminder(text: string, now: number): { text: string; dueAt:
   if (rel) dueAt = now + relativeMs(rel[1]);
   else {
     const day = take(DAY);
-    const clock = take(CLOCK);
+    const clock = take(CLOCK) ?? take(BARE_CLOCK);
     const period = take(PERIOD);
     if (day || clock || period) dueAt = absolute(now, day, clock, period?.[1].toLowerCase());
   }
@@ -87,6 +89,6 @@ function absolute(now: number, day: RegExpExecArray | null, clock: RegExpExecArr
     const t = dayAt(offset, hour, min);
     return t > now || fixedDay ? t : dayAt(offset + 1, hour, min);
   }
-  // "at 5" with no day: the next 5:00 or 17:00.
-  return [dayAt(0, hour, min), dayAt(0, hour + 12, min), dayAt(1, hour, min)].find((t) => t > now)!;
+  // "at 5" with no day: the next 5:00 or 17:00; once both have passed, tomorrow's, PM for 1–6.
+  return [dayAt(0, hour, min), dayAt(0, hour + 12, min), dayAt(1, hour < 7 ? hour + 12 : hour, min)].find((t) => t > now)!;
 }

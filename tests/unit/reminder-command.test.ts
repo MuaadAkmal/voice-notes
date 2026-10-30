@@ -22,7 +22,7 @@ it('reads relative times', () => {
 });
 
 it('reads clock times, rolling past ones to the next occurrence', () => {
-  expect(p('remind me to call mom at 5')).toEqual({ text: 'call mom', dueAt: at(31, 5) });
+  expect(p('remind me to call mom at 5')).toEqual({ text: 'call mom', dueAt: at(31, 17) }); // evening: 5 PM tomorrow, not 5 AM
   expect(p('remind me to call mom at 6 pm')).toEqual({ text: 'call mom', dueAt: at(30, 18) });
   expect(p('remind me at 18:15 to eat')).toEqual({ text: 'eat', dueAt: at(30, 18, 15) });
   expect(p('remind me at 5 pm to go')?.dueAt).toBe(at(31, 17));
@@ -40,4 +40,9 @@ it('gives no time when none is said, and null when it is not a reminder', () => 
   expect(p('remind me to water plants')).toEqual({ text: 'water plants', dueAt: null });
   expect(p('remind me')).toBeNull();
   expect(p('call mom later')).toBeNull();
+});
+
+it('reads a clock time said without "at" when it has am/pm', () => {
+  expect(p('remind me tomorrow 7 pm to call Alex')).toEqual({ text: 'call Alex', dueAt: at(31, 19) });
+  expect(p('remind me to buy 2 apples tomorrow')).toEqual({ text: 'buy 2 apples', dueAt: at(31, 9) });
 });
