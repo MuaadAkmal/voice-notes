@@ -42,7 +42,7 @@ export function TranscriptionPage() {
     // The fields start from what's saved; later setting changes don't overwrite what's being typed.
     api.getSettings().then((s) => {
       setSettings(s);
-      if (s.transcription.provider === 'local') setMode('local');
+      if (s.transcription.provider === 'local' || s.transcription.provider === 'cloud') setMode(s.transcription.provider);
       setBaseUrl(s.transcription.baseUrl);
       setModel(s.transcription.model);
     });

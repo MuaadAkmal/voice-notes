@@ -49,6 +49,8 @@ export function CloudCard({ settings, onSaved }: { settings: Settings; onSaved: 
       .then(onSaved)
       .catch((e) => toast(cleanIpcError(e)));
 
+  if (!account) return null; // still loading: don't flash "Sign in"
+
   return (
     <div className="rounded-2xl border bg-card px-6 py-5">
       <h2 className="text-xl font-semibold tracking-tight">Voice Notes Cloud</h2>

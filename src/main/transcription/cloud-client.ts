@@ -30,6 +30,18 @@ export class ProviderFailed extends Error {
   }
 }
 
+// ElevenLabs says ISO 639-3 ("eng"); notes store the 2-letter code the other providers use.
+const THREE: Record<string, string> = {
+  eng: 'en', spa: 'es', hin: 'hi', ara: 'ar', fra: 'fr', fre: 'fr', deu: 'de', ger: 'de', ita: 'it', por: 'pt',
+  rus: 'ru', jpn: 'ja', kor: 'ko', zho: 'zh', chi: 'zh', tur: 'tr', urd: 'ur', nld: 'nl', dut: 'nl',
+};
+function twoLetter(code: unknown): string | null {
+  if (typeof code !== 'string') return null;
+  const s = code.trim().toLowerCase();
+  if (/^[a-z]{2}$/.test(s)) return s;
+  return THREE[s] ?? null;
+}
+
 type Deps = {
   baseUrl: string; // …/functions/v1/asr
   apiKey: string; // publishable key
@@ -46,7 +58,7 @@ export class CloudAsrClient {
     const body = trimWav(audio, MAX_SECONDS);
     const query = language ? `?language=${encodeURIComponent(language)}` : '';
     const r = await this.call<TranscribeResponse>(`/transcribe${query}`, { method: 'POST', body, contentType: 'audio/wav', signal });
-    return { text: typeof r.text === 'string' ? r.text : '', language: r.language ?? null };
+    return { text: typeof r.text === 'string' ? r.text : '', language: language ?? twoLetter(r.language) };
   }
 
   usage(): Promise<UsageResponse> {

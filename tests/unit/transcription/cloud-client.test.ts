@@ -91,3 +91,14 @@ it('reads usage', async () => {
 it('says what to do in its messages', () => {
   expect(new QuotaExceeded(new Date(2026, 10, 1, 9).toISOString()).message).toBe('Free minutes used · resets 1 Nov');
 });
+
+it.each([
+  ['eng', null, 'en'],
+  ['zho', null, 'zh'],
+  ['fr', null, 'fr'],
+  ['xyz', null, null],
+  ['eng', 'fr', 'fr'],
+])('stores a two-letter language: said %s, asked %s -> %s', async (said, asked, want) => {
+  const { client } = make(async () => ok({ ...RESULT, language: said }));
+  expect((await client.transcribe(silentWav(1), asked)).language).toBe(want);
+});

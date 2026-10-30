@@ -67,8 +67,9 @@ test('signing in makes Cloud the provider, and a dictation is transcribed by it'
 test('the Cloud card shows the month so far', async () => {
   const page = await signedIn();
   await server.setUsed(38 * 60);
+  await expect.poll(() => page.evaluate(() => window.dashboardApi.getSettings().then((s) => s.transcription.provider))).toBe('cloud');
   await page.getByRole('button', { name: 'Transcription' }).click();
-  await page.getByRole('tab', { name: /Voice Notes Cloud/ }).click();
+  await expect(page.getByRole('tab', { name: /Voice Notes Cloud/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('Voice Notes Cloud', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/38 \/ 120 min this month · resets/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'In use' })).toBeDisabled();
