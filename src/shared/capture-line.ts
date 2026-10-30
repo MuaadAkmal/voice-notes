@@ -61,7 +61,8 @@ export function captureLine(p: LineParts): string {
   const label = oneLine(p.label);
   const escaped = label.replace(/[\\[\]]/g, '\\$&');
   if (p.url) return `[${escaped}](${p.url.replace(/\(/g, '%28').replace(/\)/g, '%29').replace(/ /g, '%20')})`;
-  const named = label.toLowerCase() === p.app.toLowerCase() ? label : `${label} (${p.app})`;
+  // Titles come from web pages: escaped everywhere, so one can't turn into a link or a checkbox.
+  const named = label.toLowerCase() === p.app.toLowerCase() ? escaped : `${escaped} (${p.app})`;
   if (p.path) return `${named} · ${p.path.includes('`') ? p.path : `\`${p.path}\``}`;
   if (p.imageSrc) return `${named} ![${escaped}](${p.imageSrc})`;
   return named;

@@ -57,3 +57,11 @@ it('escapes link syntax', () => {
   expect(captureLine({ label: 'f', app: 'Notepad', path: 'C:\\we`ird.txt' })).toBe('f (Notepad) · C:\\we`ird.txt');
   expect(captureLine({ label: 'a\nb', app: 'VLC' })).toBe('a b (VLC)');
 });
+
+it('escapes the label in every shape, so a page title cannot make a link or a checkbox', () => {
+  expect(captureLine({ label: 'x [click](https://e.com)', app: 'Firefox' })).toBe('x \\[click\\](https://e.com) (Firefox)');
+  expect(captureLine({ label: '[ ] task', app: 'Firefox', imageSrc: 'vn-image://u.jpg' })).toBe(
+    '\\[ \\] task (Firefox) ![\\[ \\] task](vn-image://u.jpg)',
+  );
+  expect(captureLine({ label: 'a [b]', app: 'Word', path: 'C:\\a.docx' })).toBe('a \\[b\\] (Word) · `C:\\a.docx`');
+});

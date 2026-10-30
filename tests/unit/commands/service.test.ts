@@ -174,3 +174,28 @@ it('describes the window while the server is asked', async () => {
   expect((await svc.add('add this', CAP)).ok).toBe(true);
   expect(order.sort()).toEqual(['describe', 'resolve']); // resolve waits on describe: run one after the other, this hangs
 });
+
+it('offline, "that" or "it" in an ordinary sentence never attaches the window', async () => {
+  const { svc, appended, saveImage } = setup(new Offline(), PAGES, { label: 'Bank', app: 'Chrome', image: new Uint8Array([1]) });
+  await svc.add('remember that the dentist is Friday', CAP);
+  await svc.add('buy it tomorrow', CAP);
+  expect(appended).toEqual([['q', 'remember that the dentist is Friday'], ['q', 'buy it tomorrow']]);
+  expect(saveImage).not.toHaveBeenCalled();
+});
+
+it('an unclear reply still keeps what "this" was', async () => {
+  const { svc, appended } = setup({ action: 'none', reason: 'unclear' });
+  await svc.add('add this to youtube', CAP);
+  expect(appended).toEqual([['q', 'add this to youtube · [Video](https://y.com/w)']]);
+});
+
+it('a page deleted meanwhile: the line goes to Quick notes, the screenshot with it', async () => {
+  const { svc, appended, saveImage } = setup({ action: 'append', pageId: 'gone', items: ['@this'] }, PAGES, {
+    label: 'Dark',
+    app: 'VLC',
+    image: new Uint8Array([1]),
+  });
+  await svc.add('add this to films', CAP);
+  expect(saveImage).toHaveBeenCalledOnce();
+  expect(appended).toEqual([['q', 'Dark (VLC) ![Dark](vn-image://u.jpg)']]);
+});

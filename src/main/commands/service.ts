@@ -26,8 +26,9 @@ type Deps = {
 
 export type ListResult = { ok: boolean; message: string };
 
-// Offline there's no LLM to tell what the user meant, so only the English words count.
-const MEANS_THIS = /\b(?:this|that|it)\b/i;
+// No LLM answer to say what the user meant: only the word "this" counts ("that" and "it" are in
+// too many ordinary sentences to attach, and maybe screenshot, whatever window was open).
+const MEANS_THIS = /\bthis\b/i;
 
 export class ListCommands {
   constructor(private readonly d: Deps) {}
@@ -45,16 +46,23 @@ export class ListCommands {
         ...(capture ? { here: true as const } : {}),
       });
     } catch (err) {
-      const d = MEANS_THIS.test(text) ? await described : null;
-      return this.save(fallback, [d ? `${text} · ${await this.line(d)}` : text], failureText(err), text);
+      return this.save(fallback, [await this.withLine(text, described)], failureText(err), text);
     }
-    const items = r.action === 'append' ? r.items : r.action === 'none' && r.items?.length ? r.items : [text];
+    const items = r.action === 'append' ? r.items : r.action === 'none' && r.items?.length ? r.items : null;
+    if (!items) return this.save(fallback, [await this.withLine(text, described)], undefined, text);
     const d = items.includes(THIS_ITEM) ? await described : null;
     const line = d && (await this.line(d));
     const filled = items.map((i) => (i === THIS_ITEM ? (line ?? text) : i));
     const shown = items.length === 1 && d ? d.label : undefined;
     if (r.action === 'append' && pages.some((p) => p.id === r.pageId) && this.d.pages.get(r.pageId)) return this.save(r.pageId, filled, undefined, shown);
-    return this.save(fallback, r.action === 'none' && r.items?.length ? filled : [text], undefined, shown);
+    // A page it didn't send (or deleted meanwhile): the whole command, unless "this" was made out.
+    return this.save(fallback, r.action === 'none' || d ? filled : [text], undefined, shown);
+  }
+
+  /** The spoken text, with the window's line after it when it says "this". */
+  private async withLine(text: string, described: Promise<Described | null>): Promise<string> {
+    const d = MEANS_THIS.test(text) ? await described : null;
+    return d ? `${text} · ${await this.line(d)}` : text;
   }
 
   private async line(d: Described): Promise<string> {

@@ -1,34 +1,51 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { isChromium, normaliseUrl } from '../../shared/capture-line';
+import { captureLabel, isChromium, normaliseUrl } from '../../shared/capture-line';
 import type { Capture } from './capture';
 import { runPowerShell, type RunPowerShell } from './powershell';
 
-// The file (or folder) a window shows. Explorer and Office can say so directly; other apps only
-// through the command line they were started with, which counts only when it names an existing
-// file whose name is in the window title, so a wrong file is never named.
+// The file (or folder) a window shows. Explorer and Office can say so directly (picked by window
+// handle, then by title); other apps only through the command line they were started with, which
+// counts only when it names an existing file whose name is in the window title, so a wrong file is
+// never named.
 
 export type FileHit = { path: string } | { url: string };
 
+/** Whether a path is a file, a folder, or neither. Never blocks main: an offline share times out. */
+export type PathKind = (p: string) => Promise<'file' | 'dir' | null>;
+
+const STAT_TIMEOUT_MS = 1500;
+
+export const pathKind: PathKind = (p) =>
+  Promise.race([
+    fs.promises.stat(p).then(
+      (s) => (s.isFile() ? 'file' : s.isDirectory() ? 'dir' : null),
+      () => null,
+    ),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), STAT_TIMEOUT_MS)),
+  ]);
+
+// Windows 11 tabs are one Shell window each, all with the same HWND: return them all.
 const EXPLORER = `
 $h = [long]$env:VN_HWND
-$p = $null
+$tabs = @()
 foreach ($w in (New-Object -ComObject Shell.Application).Windows()) {
-  try { if ([long]$w.HWND -eq $h) { $p = $w.Document.Folder.Self.Path; break } } catch {}
+  try { if ([long]$w.HWND -eq $h) { $tabs += @{ path = $w.Document.Folder.Self.Path; name = $w.LocationName } } } catch {}
 }
-@{ path = $p } | ConvertTo-Json -Compress
+@{ tabs = $tabs } | ConvertTo-Json -Compress -Depth 3
 `;
 
-// VN_PROGID comes from the fixed map below; VN_TITLE is only compared, never run.
+// VN_PROGID comes from the fixed map below.
 const OFFICE = `
 $app = [Runtime.InteropServices.Marshal]::GetActiveObject($env:VN_PROGID)
 $docs = switch ($env:VN_PROGID) { 'Word.Application' { $app.Documents } 'Excel.Application' { $app.Workbooks } default { $app.Presentations } }
-$t = $env:VN_TITLE
-$p = $null
+$out = @()
 foreach ($d in $docs) {
-  if ($t.Contains($d.Name) -or $t.Contains([IO.Path]::GetFileNameWithoutExtension($d.Name))) { $p = $d.FullName; break }
+  $h = @()
+  try { foreach ($w in $d.Windows) { try { $h += [long]$w.Hwnd } catch {} } } catch {}
+  $out += @{ name = $d.Name; fullName = $d.FullName; hwnds = $h }
 }
-@{ path = $p } | ConvertTo-Json -Compress
+@{ docs = $out } | ConvertTo-Json -Compress -Depth 4
 `;
 
 const COMMAND_LINE = `
@@ -41,6 +58,9 @@ const OFFICE_APPS: Record<string, string> = {
   excel: 'Excel.Application',
   powerpnt: 'PowerPoint.Application',
 };
+
+// ConvertTo-Json writes a one-element array as the element itself.
+const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v == null ? [] : [v]);
 
 /** Arguments of a Windows command line; double quotes group, and are dropped. */
 export function splitCommandLine(s: string): string[] {
@@ -66,14 +86,14 @@ export function splitCommandLine(s: string): string[] {
 }
 
 /** The argument (never the program itself) that is an existing absolute file named in the title. */
-export function pathFromCommandLine(commandLine: string, title: string, exists: (p: string) => boolean): string | null {
+export async function pathFromCommandLine(commandLine: string, title: string, kind: PathKind): Promise<string | null> {
   const t = title.toLowerCase();
   for (const arg of splitCommandLine(commandLine).slice(1)) {
     if (!/^(?:[a-z]:\\|\\\\)/i.test(arg)) continue;
     const name = path.win32.basename(arg).toLowerCase();
     const stem = path.win32.parse(arg).name.toLowerCase();
     if (!(inTitle(t, name) || inTitle(t, stem))) continue;
-    if (exists(arg)) return arg;
+    if ((await kind(arg)) === 'file') return arg;
   }
   return null;
 }
@@ -90,11 +110,32 @@ function inTitle(title: string, word: string): boolean {
   return false;
 }
 
-export async function readFilePath(
-  c: Capture,
-  run: RunPowerShell = runPowerShell,
-  exists: (p: string) => boolean = fs.existsSync,
-): Promise<FileHit | null> {
+/** The Explorer tab the title names ("Downloads - File Explorer"); a lone tab is that tab. */
+export function pickExplorerTab(tabs: { path: string; name: string }[], title: string): string | null {
+  if (tabs.length === 1) return tabs[0].path;
+  const label = captureLabel(title, 'explorer.exe').toLowerCase();
+  const named = tabs.filter((t) => t.name.toLowerCase() === label);
+  return named.length === 1 ? named[0].path : null;
+}
+
+/** The open document shown in window `hwnd`; without handles, the one whose name starts the title. */
+export function pickOfficeDoc(docs: { name: string; fullName: string; hwnds: number[] }[], hwnd: number, title: string): string | null {
+  const byHandle = docs.find((d) => d.hwnds.includes(hwnd));
+  if (byHandle) return byHandle.fullName;
+  const t = title.toLowerCase();
+  let best: { fullName: string; length: number } | null = null;
+  for (const d of docs) {
+    for (const n of [d.name, path.win32.parse(d.name).name]) {
+      const name = n.toLowerCase();
+      const next = t[name.length];
+      if (name && t.startsWith(name) && (next === undefined || next === ' ') && (!best || name.length > best.length))
+        best = { fullName: d.fullName, length: name.length };
+    }
+  }
+  return best?.fullName ?? null;
+}
+
+export async function readFilePath(c: Capture, run: RunPowerShell = runPowerShell, kind: PathKind = pathKind): Promise<FileHit | null> {
   if (isChromium(c.processName)) return null;
   const proc = c.processName.toLowerCase().replace(/\.exe$/, '');
   const progId = OFFICE_APPS[proc];
@@ -102,18 +143,36 @@ export async function readFilePath(
     proc === 'explorer'
       ? await run(EXPLORER, { VN_HWND: String(c.hwnd) })
       : progId
-        ? await run(OFFICE, { VN_PROGID: progId, VN_TITLE: c.title })
+        ? await run(OFFICE, { VN_PROGID: progId, VN_HWND: String(c.hwnd) })
         : await run(COMMAND_LINE, { VN_PID: String(c.pid) })
-  ) as { path?: unknown; commandLine?: unknown } | null;
+  ) as { commandLine?: unknown; tabs?: unknown; docs?: unknown } | null;
   if (!out || typeof out !== 'object') return null;
+
   if (typeof out.commandLine === 'string') {
-    const p = pathFromCommandLine(out.commandLine, c.title, exists);
+    const p = await pathFromCommandLine(out.commandLine, c.title, kind);
     return p ? { path: p } : null;
   }
-  if (typeof out.path !== 'string' || !out.path) return null;
-  if (/^https?:\/\//i.test(out.path)) {
-    const url = normaliseUrl(out.path);
-    return url ? { url } : null;
+  if ('tabs' in out) {
+    const tabs = list(out.tabs).filter(
+      (t): t is { path: string; name: string } => typeof (t as { path?: unknown })?.path === 'string' && typeof (t as { name?: unknown }).name === 'string',
+    );
+    const p = pickExplorerTab(tabs, c.title);
+    return p && !p.startsWith('::') && (await kind(p)) === 'dir' ? { path: p } : null;
   }
-  return out.path.startsWith('::') || !exists(out.path) ? null : { path: out.path };
+  if ('docs' in out) {
+    const docs = list(out.docs)
+      .filter((d): d is { name: string; fullName: string; hwnds?: unknown } => {
+        const x = d as { name?: unknown; fullName?: unknown } | null;
+        return typeof x?.name === 'string' && typeof x.fullName === 'string';
+      })
+      .map((d) => ({ name: d.name, fullName: d.fullName, hwnds: list(d.hwnds).filter((h): h is number => typeof h === 'number') }));
+    const p = pickOfficeDoc(docs, c.hwnd, c.title);
+    if (!p) return null;
+    if (/^https?:\/\//i.test(p)) {
+      const url = normaliseUrl(p);
+      return url ? { url } : null;
+    }
+    return (await kind(p)) === 'file' ? { path: p } : null;
+  }
+  return null;
 }

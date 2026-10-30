@@ -28,6 +28,11 @@ describe('previewSpans', () => {
     expect(spans('# Hi\n\ntext', 3).filter((s) => s.from < 4)).toEqual([]);
   });
 
+  it('hides the backslash of an escaped character unless the cursor is on it', () => {
+    expect(hides(spans('x\n\na \\[b\\]', 0))).toEqual([[5, 6], [8, 9]]);
+    expect(hides(spans('x\n\na \\[b\\]', 6))).toEqual([[8, 9]]);
+  });
+
   it('renders everything in a read-only state, wherever the selection is', () => {
     const state = EditorState.create({
       doc: '# Hi\n- [ ] **a**',
