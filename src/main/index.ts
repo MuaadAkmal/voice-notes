@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
-import { type AudioDevice, Ch, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { type AudioDevice, Ch, type Note, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
 import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
@@ -47,6 +47,7 @@ import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
 import { NoteStore } from './store/note-store';
 import { resolveEndpoint } from './transcription/endpoint';
+import { matchFolderCommand, PEEK_SECONDS } from '../shared/folder-command';
 import { transcribe } from './transcription/openai-client';
 import { safeStorageCipher, Secrets } from './transcription/secrets';
 import { TranscriptionService } from './transcription/service';
@@ -275,6 +276,7 @@ async function boot(): Promise<void> {
       onSaved: (note) => {
         log.info('[recorder] saved', note.id, note.durationMs, 'ms');
         toDashboard(Ch.NotesChanged);
+        void fileByVoice(note);
       },
     },
   );
@@ -802,6 +804,25 @@ async function boot(): Promise<void> {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
     },
   });
+
+  // Voice to folders: "Pixie, movie lines …" at the start of a mic note files it into that folder.
+  const fileByVoice = async (note: Note) => {
+    if (!settings.voiceToFolders || !settings.transcription.provider || note.kind !== 'note' || note.source !== 'mic') return;
+    try {
+      const head = await transcription.peek(note.id, PEEK_SECONDS);
+      const folder = matchFolderCommand(head, settings.noteWakeWords, store.folders.list());
+      if (!folder) return;
+      store.moveNotes([note.id], folder.id);
+      toDashboard(Ch.NotesChanged);
+      log.info('[voice-to-folders]', note.id, '→', folder.name);
+      if (overlayState.kind === 'idle' || (overlayState.kind === 'saved' && overlayState.noteId === note.id)) {
+        setOverlayState({ kind: 'done', message: `Saved → ${folder.name}` });
+        setTimeout(() => overlayState.kind === 'done' && setOverlayState(idleState()), 2500);
+      }
+    } catch (e) {
+      log.warn('[voice-to-folders] skipped', note.id, e instanceof Error ? e.message : e);
+    }
+  };
 
   const openedExternal: string[] = [];
   registerDashboardIpc({

@@ -31,3 +31,15 @@ export function encodeWav(
 
 export const silentWav = (seconds: number, sampleRate = 16000): Uint8Array =>
   encodeWav(new Float32Array(Math.round(seconds * sampleRate)), sampleRate);
+
+/** The first `seconds` of a WAV from `encodeWav` (16-bit mono, 44-byte header). */
+export function trimWav(wav: Uint8Array, seconds: number): Uint8Array {
+  const v = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+  const rate = v.getUint32(24, true);
+  const dataBytes = Math.min(wav.length - 44, Math.floor(seconds * rate) * 2);
+  const out = wav.slice(0, 44 + dataBytes);
+  const o = new DataView(out.buffer);
+  o.setUint32(4, 36 + dataBytes, true);
+  o.setUint32(40, dataBytes, true);
+  return out;
+}

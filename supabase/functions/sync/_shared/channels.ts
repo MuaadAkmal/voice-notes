@@ -83,6 +83,7 @@ export type Settings = {
   voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
   voiceReminders: boolean; // "Remind me to … in 10 min" dictations become reminders on this PC (+ Google Calendar while connected)
   voiceToLists: boolean; // "List, …" dictations add to a page (via the `commands` function) while signed in
+  voiceToFolders: boolean; // a voice note starting "Pixie, <folder>" is filed there (its first seconds are transcribed)
   noteWakeWords: string[]; // the names that start a voice-to-lists command ("Pixie, …"); empty = Pixie
   pomodoro: PomodoroSettings;
 };

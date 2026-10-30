@@ -62,6 +62,7 @@ export const SettingsFieldSchemas = {
   voiceToCalendar: z.boolean(),
   voiceReminders: z.boolean(),
   voiceToLists: z.boolean(),
+  voiceToFolders: z.boolean(),
   noteWakeWords: z.array(z.string().trim().min(1).max(40)).max(10),
   pomodoro: z.object({
     focusMin: z.number().int().min(1).max(120),

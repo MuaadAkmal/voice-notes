@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import type { Note, StatusMap, TestResult } from '../../shared/channels';
 import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
-import { silentWav } from '../../shared/wav';
+import { silentWav, trimWav } from '../../shared/wav';
 import type { NoteStore } from '../store/note-store';
 import type { Endpoint } from './endpoint';
 import { transcribe as realTranscribe } from './openai-client';
@@ -54,6 +54,20 @@ export class TranscriptionService {
 
   idle(): Promise<void> {
     return this.queue.idle();
+  }
+
+  /** Only the first `seconds` of a note, outside the queue: nothing is stored. Throws when it can't. */
+  async peek(id: string, seconds: number): Promise<string> {
+    const note = this.d.store.get(id);
+    if (!note || note.status !== 'ok') throw new Error(MISSING);
+    const audio = trimWav(await this.d.toWav(await this.readAudio(note), note.mimeType), seconds);
+    const ep = await this.d.endpoint();
+    try {
+      const { text } = await this.transcribe({ baseUrl: ep.baseUrl, model: ep.model, apiKey: ep.apiKey, language: null, audio, filename: `${id}.wav` });
+      return text;
+    } finally {
+      ep.release();
+    }
   }
 
   /** One second of silence through the same client: checks URL, key and model together. */

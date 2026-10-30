@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceToCalendar: true,
   voiceReminders: true,
   voiceToLists: true,
+  voiceToFolders: true,
   noteWakeWords: DEFAULT_WAKE_WORDS,
   pomodoro: DEFAULT_POMODORO,
 };
