@@ -58,7 +58,6 @@ import { AccountService } from './account/account';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
 import { applyCloudDefault } from './transcription/cloud-default';
-import { MAX_SECONDS } from '../shared/asr/protocol';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
 import { ReminderScheduler } from './reminders/scheduler';
@@ -265,8 +264,6 @@ async function boot(): Promise<void> {
     },
   });
 
-  // Cloud takes one clip of at most MAX_SECONDS: recordings stop there as if the user stopped them.
-  const cloudMaxMs = (): number | null => (settings.transcription.provider === 'cloud' ? MAX_SECONDS * 1000 : null);
   const gesture = new HotkeyGesture();
   const controller = new RecorderController(
     {
@@ -285,7 +282,6 @@ async function boot(): Promise<void> {
       onCaptureStart: (source) => autoPause.start(source),
       onCaptureEnd: () => autoPause.end(),
       blocked: (): boolean => dictation.active,
-      maxMs: cloudMaxMs,
       idleState,
       // Keep the gesture in step when recording ends without a key (auto-stop, mic error, watchdog).
       onIdle: () => gesture.reset(),
@@ -323,7 +319,6 @@ async function boot(): Promise<void> {
     },
     configured: () => settings.transcription.provider !== null,
     blocked: (): boolean => controller.state !== 'idle',
-    maxMs: cloudMaxMs,
     getDeviceId: () => settings.micDeviceId,
     sound: () => settings.dictationSound,
     getApp: () => getContext()?.show ?? null,

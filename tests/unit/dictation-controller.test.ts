@@ -409,8 +409,8 @@ it('a quota failure shows the message, pastes nothing, saves nothing', async () 
 });
 
 for (const mode of ['hold', 'handsfree'] as const) {
-  it(`auto-stop at 300 s (${mode}, cloud): transcribed and pasted like a normal stop; a new one can start`, async () => {
-    const c2 = new DictationController({ ...ports, maxMs: () => 300_000 });
+  it(`auto-stop at 300 s (${mode}, any provider): transcribed and pasted like a normal stop; a new one can start`, async () => {
+    const c2 = ctl;
     c2.handleGesture('start');
     if (mode === 'handsfree') c2.handleGesture('handsfree');
     vi.advanceTimersByTime(299_999);
@@ -425,11 +425,3 @@ for (const mode of ['hold', 'handsfree'] as const) {
     expect(c2.state).toBe('listening');
   });
 }
-
-it('no dictation limit for other providers', () => {
-  const c2 = new DictationController({ ...ports, maxMs: () => null });
-  c2.handleGesture('start');
-  vi.advanceTimersByTime(3_600_000);
-  expect(log).not.toContain('stop');
-  expect(c2.state).toBe('listening');
-});

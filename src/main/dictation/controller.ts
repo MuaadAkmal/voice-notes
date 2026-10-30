@@ -1,4 +1,5 @@
 import type { GestureEvent } from '../hotkey/gesture';
+import { MAX_SECONDS } from '../../shared/asr/protocol';
 import type { OverlayState } from '../../shared/ipc';
 import { MIN_DICTATION_MS } from '../../shared/dictation';
 import { afterCalendarTrigger, parseCalendarCommand } from '../../shared/calendar-command';
@@ -52,8 +53,7 @@ export type DictationPorts = {
   minMs?: number;
   errorMs?: number;
   stopTimeoutMs?: number;
-  /** Longest a recording may run, read at each start; null = no limit. */
-  maxMs?: () => number | null;
+  maxMs?: number;
 };
 
 type State = 'idle' | 'listening' | 'stopping' | 'transcribing' | 'adding' | 'pasting';
@@ -76,13 +76,13 @@ export class DictationController {
   private readonly minMs: number;
   private readonly errorMs: number;
   private readonly stopTimeoutMs: number;
-  private readonly maxMs: () => number | null;
+  private readonly maxMs: number;
 
   constructor(private readonly p: DictationPorts) {
     this.minMs = p.minMs ?? MIN_DICTATION_MS;
     this.errorMs = p.errorMs ?? 3000;
     this.stopTimeoutMs = p.stopTimeoutMs ?? 5000;
-    this.maxMs = p.maxMs ?? (() => null);
+    this.maxMs = p.maxMs ?? MAX_SECONDS * 1000;
   }
 
   get state(): State {
@@ -111,7 +111,7 @@ export class DictationController {
         this.capturing = true;
         this.p.onCaptureStart?.();
         this.showRecording('hold');
-        this.startMax();
+        this.maxTimer = setTimeout(() => this.handleGesture('stop'), this.maxMs);
         break;
       case 'handsfree':
         if (this._state === 'listening') this.showRecording('handsfree');
@@ -220,12 +220,6 @@ export class DictationController {
   /** A voice note takes over the pill: drop a pending error flash without touching the state shown. */
   dismissFlash(): void {
     this.clearFlash();
-  }
-
-  /** Auto-stop exactly like a user stop once the limit (if any) is reached. */
-  private startMax(): void {
-    const max = this.maxMs();
-    if (max !== null) this.maxTimer = setTimeout(() => this.handleGesture('stop'), max);
   }
 
   private showRecording(mode: 'hold' | 'handsfree'): void {

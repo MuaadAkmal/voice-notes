@@ -58,9 +58,9 @@ export const MODEL_DISPLAY: Record<ModelId, { label: string; note: string; bytes
   turbo: { label: 'Large-v3 Turbo', note: 'Best, needs a strong CPU', bytes: 1_624_555_275, ramGb: 3 },
 };
 
-/** provider null = not set up; 'server' = the user's own OpenAI-compatible server; 'local' = built-in whisper.cpp. */
+/** provider null = not set up; 'server' = the user's own OpenAI-compatible server; 'local' = built-in whisper.cpp; 'cloud' = the app's `asr` function (signed in). */
 export type TranscriptionSettings = {
-  provider: 'server' | 'local' | null;
+  provider: 'server' | 'local' | 'cloud' | null;
   baseUrl: string;
   model: string;
   localModel: ModelId | null;
