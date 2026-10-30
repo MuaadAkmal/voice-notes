@@ -3,6 +3,7 @@ import type { OverlayState } from '../../shared/ipc';
 import { MIN_DICTATION_MS } from '../../shared/dictation';
 import { parseCalendarCommand } from '../../shared/calendar-command';
 import { parseNoteCommand } from '../../shared/note-command';
+import type { Capture } from '../commands/capture';
 
 export type DictationPorts = {
   overlay: { start(deviceId: string | null, ping: boolean): void; stop(): void; cancel(): void; setState(s: OverlayState): void };
@@ -14,6 +15,8 @@ export type DictationPorts = {
   sound(): boolean;
   /** Show label of the window being dictated into, read at start. */
   getApp(): string | null;
+  /** The window in front, read at start with the app label, for a list command's "this". */
+  getCapture?(): Capture | null;
   /** WAV → text. Throws an Error whose message is fit for the pill. */
   transcribe(wav: Uint8Array, signal: AbortSignal): Promise<string>;
   save(text: string, app: string | null): void;
@@ -31,7 +34,7 @@ export type DictationPorts = {
     /** The names that start a command ("Pixie, …"). */
     wakeWords(): string[];
     /** The message is fit for the pill ("Added · blueberry → Groceries" or why not). */
-    add(text: string): Promise<{ ok: boolean; message: string }>;
+    add(text: string, capture: Capture | null): Promise<{ ok: boolean; message: string }>;
   };
   /** Back to idle (keep the gesture in step). */
   onIdle?(): void;
@@ -56,6 +59,7 @@ export class DictationController {
   private _state: State = 'idle';
   private startedAt = 0;
   private app: string | null = null;
+  private capture: Capture | null = null;
   private capturing = false;
   private request: AbortController | null = null;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,6 +98,7 @@ export class DictationController {
         this._state = 'listening';
         this.startedAt = Date.now();
         this.app = this.p.getApp();
+        this.capture = this.p.getCapture?.() ?? null;
         this.p.overlay.start(this.p.getDeviceId(), this.p.sound());
         this.capturing = true;
         this.p.onCaptureStart?.();
@@ -189,7 +194,7 @@ export class DictationController {
     const event = calendar?.enabled() ? parseCalendarCommand(text) : null;
     if (event && calendar) return { mark: '📅', busy: 'Adding to calendar…', failed: "Couldn't add the event.", add: () => calendar.add(event.text) };
     const items = list?.enabled() ? parseNoteCommand(text, list.wakeWords()) : null;
-    if (items && list) return { mark: '📝', busy: 'Saving note…', failed: "Couldn't save the note", add: () => list.add(items.text) };
+    if (items && list) return { mark: '📝', busy: 'Saving note…', failed: "Couldn't save the note", add: () => list.add(items.text, this.capture) };
     return null;
   }
 

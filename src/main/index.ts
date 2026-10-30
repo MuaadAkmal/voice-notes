@@ -33,6 +33,7 @@ import { SyncEngine } from './sync/engine';
 import { FileSync, SyncOff } from './sync/files';
 import { HttpSyncServer } from './sync/http-server';
 import { ConnectorsClient } from './connectors/client';
+import type { Capture } from './commands/capture';
 import { CommandsClient } from './commands/client';
 import { ListCommands } from './commands/service';
 import { ensureNotesPage } from './commands/notes-page';
@@ -188,11 +189,15 @@ async function boot(): Promise<void> {
 
   // Which window the note was recorded over. Replaceable under test (there's no real foreground window).
   let foreground = foregroundWindow;
-  const getContext = (): NoteContext | null => {
+  const captureWindow = (): Capture | null => {
     const fg = foreground();
     // No window, or our own dashboard in front: nothing to attribute the note to.
     if (!fg || !fg.title || fg.pid === process.pid) return null;
-    return { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
+    return { hwnd: fg.hwnd ?? 0, title: fg.title, processName: fg.processName, pid: fg.pid };
+  };
+  const getContext = (): NoteContext | null => {
+    const fg = captureWindow();
+    return fg && { windowTitle: fg.title.slice(0, 500), show: showFromTitle(fg.title, fg.processName) };
   };
 
   // Auto-pause asks the overlay whether anything is playing before pressing play/pause.
@@ -278,6 +283,7 @@ async function boot(): Promise<void> {
     getDeviceId: () => settings.micDeviceId,
     sound: () => settings.dictationSound,
     getApp: () => getContext()?.show ?? null,
+    getCapture: captureWindow,
     transcribe: async (audio, signal) => {
       const { transcription, transcribeLanguage } = settings;
       const ep = await endpoint();

@@ -22,6 +22,8 @@ type Bindings = {
   CloseHandle: (h: unknown) => boolean;
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
   GetAsyncKeyState: (vk: number) => number;
+  /** A pointer's numeric value (window handles fit in 32 bits, so the number is exact). */
+  address: (p: unknown) => number;
 };
 
 let bindings: Bindings | null | undefined;
@@ -45,6 +47,7 @@ function bind(): Bindings | null {
       CloseHandle: kernel32.func('bool __stdcall CloseHandle(void* h)'),
       keybd_event: user32.func('void __stdcall keybd_event(uint8_t vk, uint8_t scan, uint32_t flags, uintptr_t extra)'),
       GetAsyncKeyState: user32.func('int16_t __stdcall GetAsyncKeyState(int vKey)'),
+      address: (p) => Number(koffi.address(p)),
     };
   } catch (err) {
     log.error('[win32] bindings unavailable', err);
@@ -69,7 +72,7 @@ function processName(b: Bindings, pid: number): string {
   }
 }
 
-export type ForegroundWindow = { title: string; processName: string; pid: number };
+export type ForegroundWindow = { title: string; processName: string; pid: number; hwnd: number };
 
 /** The window the user is looking at, e.g. { title: 'Dark | Netflix - Google Chrome', processName: 'chrome.exe' }. */
 export function foregroundWindow(): ForegroundWindow | null {
@@ -82,7 +85,7 @@ export function foregroundWindow(): ForegroundWindow | null {
     const len = b.GetWindowTextW(hwnd, buf, MAX_CHARS);
     const pid = Uint32Array.of(0);
     b.GetWindowThreadProcessId(hwnd, pid);
-    return { title: buf.toString('utf16le', 0, len * 2), processName: processName(b, pid[0]), pid: pid[0] };
+    return { title: buf.toString('utf16le', 0, len * 2), processName: processName(b, pid[0]), pid: pid[0], hwnd: b.address(hwnd) };
   } catch (err) {
     log.warn('[win32] foreground window lookup failed', err);
     return null;
