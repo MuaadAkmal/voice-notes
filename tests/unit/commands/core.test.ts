@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { CommandsCore, LimitReached, readReply, SYSTEM_PROMPT } from '../../../src/shared/commands/core';
+import { CommandsCore, HERE_RULE, LimitReached, readReply, SYSTEM_PROMPT } from '../../../src/shared/commands/core';
 import { groqChat, LlmFailed } from '../../../src/shared/commands/groq';
 import { MemoryUsageStore } from '../../../src/shared/commands/store';
 
@@ -104,4 +104,29 @@ it('counts while the LLM answers, and still refuses past the cap', async () => {
   release();
   await expect(result).rejects.toBeInstanceOf(LimitReached);
   expect(order).toEqual(['answered', 'counted']);
+});
+
+it('with here, adds the @this rule and the flag', async () => {
+  const { chat, core: c } = core('{"page": 3, "items": ["@this"]}');
+  expect(await c.resolve('u', { text: 'add this to youtube', pages: PAGES, here: true })).toEqual({
+    action: 'append',
+    pageId: 'y',
+    items: ['@this'],
+  });
+  expect(chat).toHaveBeenCalledWith(`${SYSTEM_PROMPT}
+${HERE_RULE}`, JSON.stringify({
+    pages: ['1. Groceries', '2. Arabic phrases', '3. YouTube watch list'],
+    command: 'add this to youtube',
+    here: true,
+  }));
+  expect(HERE_RULE).toContain('"@this"');
+});
+
+it('ignores a here that is not true', async () => {
+  const { chat, core: c } = core('{"page": 1, "items": ["x"]}');
+  await c.resolve('u', { text: 'x', pages: PAGES, here: 'yes' });
+  expect(chat).toHaveBeenCalledWith(SYSTEM_PROMPT, JSON.stringify({
+    pages: ['1. Groceries', '2. Arabic phrases', '3. YouTube watch list'],
+    command: 'x',
+  }));
 });
