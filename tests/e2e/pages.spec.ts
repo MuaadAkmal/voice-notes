@@ -38,7 +38,7 @@ const editor = () => page.locator('.cm-content');
 
 /** New text note from the list toolbar; titles it and leaves the cursor in the body. */
 async function newPage(title: string) {
-  await page.getByRole('button', { name: 'New text note' }).click();
+  await page.getByRole('button', { name: 'New text note', exact: true }).click();
   const input = page.getByLabel('Title');
   await expect(input).toBeFocused();
   // The fresh title is selected, so typing replaces it.
@@ -145,7 +145,7 @@ test('pages: folders, search, delete', async () => {
 
   await t.record(1500);
   await page.getByRole('button', { name: /^All notes/ }).click();
-  const rows = page.locator('li[aria-selected]').filter({ hasNotText: 'Review later' });
+  const rows = page.locator('li[aria-selected]').filter({ hasNotText: 'Review later' }).filter({ hasNotText: 'Quick notes' });
   await expect(rows).toHaveCount(2);
   await rows
     .nth(0)

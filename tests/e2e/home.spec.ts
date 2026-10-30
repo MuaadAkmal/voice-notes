@@ -103,7 +103,7 @@ const pageBody = (title: string) =>
 
 test('home: pin a page', async () => {
   await page.getByRole('button', { name: /^Inbox/ }).click();
-  await page.getByRole('button', { name: 'New text note' }).click();
+  await page.getByRole('button', { name: 'New text note', exact: true }).click();
   await expect(page.getByLabel('Title')).toBeFocused();
   await page.keyboard.type('Shortcuts');
   await page.keyboard.press('Enter');
@@ -228,7 +228,7 @@ test('home: a checkbox tick and a quick-add on the same page both stick', async 
   });
   const box = page.locator('main section .cm-content input[type=checkbox]');
   await expect(box).toBeVisible();
-  const input = page.getByLabel('Add entry to More keys');
+  const input = page.getByLabel('Add entry to Shortcuts');
   await input.fill('Ctrl+P palette');
   await box.click();
   await input.press('Enter');
