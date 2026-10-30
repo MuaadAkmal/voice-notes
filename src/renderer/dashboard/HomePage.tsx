@@ -196,7 +196,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
               {widget.type === 'quick-add' && page && (
                 <QuickAddWidget page={page} />
               )}
-              {widget.type === 'page' && page && <PageWidget page={page} />}
+              {widget.type === 'page' && page && <PageWidget page={page} newestFirst={!!widget.locked} />}
               {widget.type === 'calendar' && <CalendarWidget onOpenConnectors={onOpenConnectors} />}
             </WidgetCard>
           ))}
