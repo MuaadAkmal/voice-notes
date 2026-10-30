@@ -9,7 +9,7 @@ const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const OCT = '2026-10-01';
 const NOV = '2026-11-01';
-const MIGRATION = fs.readFileSync(path.resolve('supabase/migrations/20261030120000_asr_usage.sql'), 'utf8');
+const MIGRATION = fs.readFileSync(path.resolve('supabase/migrations/20261030105023_asr_usage.sql'), 'utf8');
 
 let pg: PGlite | null = null;
 async function pgStore(): Promise<AsrStore> {
