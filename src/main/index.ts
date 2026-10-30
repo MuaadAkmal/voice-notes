@@ -744,9 +744,11 @@ async function boot(): Promise<void> {
     },
     pagesChanged: () => toDashboard(Ch.PagesChanged),
   });
+  // Under test the clock can be moved forward (__voiceNotes.reminders.setNow) to make a reminder due.
+  let reminderNow = () => Date.now();
   const reminders = new RemindersService({
     store: store.reminders,
-    now: () => Date.now(),
+    now: () => reminderNow(),
     remind: (req) => commandsClient.remind(req),
     toQuickNotes: (text) => {
       const patch = ensureNotesPage(settings, store.pages);
@@ -767,7 +769,7 @@ async function boot(): Promise<void> {
   const openReminders = () => showDashboardThen(() => toDashboard(Ch.OpenReminders));
   const reminderScheduler = new ReminderScheduler({
     store: store.reminders,
-    now: () => Date.now(),
+    now: () => reminderNow(),
     setInterval: (fn, ms) => setInterval(fn, ms),
     clearInterval: (h) => clearInterval(h as NodeJS.Timeout),
     fire: (r, missed) => {
@@ -873,7 +875,12 @@ async function boot(): Promise<void> {
         useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
         service: connectors,
       },
-      reminders: { fired: firedReminders, check: () => reminderScheduler.check(), service: reminders },
+      reminders: {
+        fired: firedReminders,
+        check: () => reminderScheduler.check(),
+        service: reminders,
+        setNow: (fn: () => number) => void (reminderNow = fn),
+      },
       commands: {
         // A local stand-in for the function: its handler over memory, with a fake Groq.
         useServer: (url: string) => void (commandsClient = makeCommandsClient(url)),

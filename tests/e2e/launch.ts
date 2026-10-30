@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
-import type { Folder, Note, Page as TextPage } from '../../src/shared/channels';
+import type { Folder, Note, Reminder, Page as TextPage } from '../../src/shared/channels';
 
 // Drives the production Vite build (`npm run package` emits .vite/) through the dev Electron binary:
 // packaged builds disable the Node inspector fuse that Playwright needs.
@@ -24,6 +24,12 @@ export type Hooks = {
   dictationGesture: { toggle(): void };
   pasted: string[];
   account: { setTestSession(info: unknown): void };
+  reminders: {
+    fired: { id: string; text: string; missed: boolean }[];
+    check(): void;
+    setNow(fn: () => number): void;
+    service: { list(): Reminder[] };
+  };
 };
 
 export type TestApp = {

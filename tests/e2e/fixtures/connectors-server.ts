@@ -62,8 +62,8 @@ export async function startConnectorsServer(
       return reply(added);
     }
     if (url.pathname === '/calendar/v3/calendars/primary/events' && req.method === 'POST') {
-      const e = JSON.parse(body ?? '{}') as { summary: string; start: unknown; end: unknown };
-      const added = { id: `c${++n}`, summary: e.summary, htmlLink: `https://www.google.com/calendar/event?eid=c${n}`, start: e.start, end: e.end };
+      const e = JSON.parse(body ?? '{}') as { summary: string; start: unknown; end: unknown; reminders?: unknown };
+      const added = { id: `c${++n}`, summary: e.summary, htmlLink: `https://www.google.com/calendar/event?eid=c${n}`, start: e.start, end: e.end, reminders: e.reminders };
       events.push(added);
       return reply(added);
     }

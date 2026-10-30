@@ -209,3 +209,20 @@ test('voice to calendar: a "Calendar, …" dictation adds an event and pastes no
     whisper.close();
   }
 });
+
+test('a reminder while connected also goes to Google, with a popup at its time', async () => {
+  const page = await signedIn();
+  await connect(page);
+  await page.getByRole('button', { name: /^Reminders/ }).click();
+  const box = page.getByRole('textbox', { name: 'New reminder' });
+  await box.fill('call mom in 10 min');
+  await box.press('Enter');
+  await expect(page.getByText(/^Reminder · call mom · /)).toBeVisible();
+  await expect(page.getByLabel('In Google Calendar')).toBeVisible();
+  const added = EVENTS.find((e) => (e as { summary: string }).summary === 'call mom') as unknown as { reminders: unknown };
+  expect(added.reminders).toEqual({ useDefault: false, overrides: [{ method: 'popup', minutes: 0 }] });
+
+  await page.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Cancel reminder' }).click();
+  await expect.poll(() => server.requests(`events/${(EVENTS.find((e) => (e as { summary: string }).summary === 'call mom') as { id: string }).id}`)).toBeGreaterThan(0);
+});
