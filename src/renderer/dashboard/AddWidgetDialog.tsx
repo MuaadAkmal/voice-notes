@@ -30,6 +30,8 @@ type Props = {
   pages: Page[];
   /** Home already has the Today's calendar card (there is only ever one). */
   hasCalendar: boolean;
+  /** Home already has the Upcoming reminders card (only ever one). */
+  hasReminders: boolean;
   onOpenChange: (open: boolean) => void;
   /** Saves the widget; the dialog stays open until it resolves. */
   onAdd: (w: HomeWidget) => Promise<void>;
@@ -43,6 +45,7 @@ export function AddWidgetDialog({
   initialType,
   pages,
   hasCalendar,
+  hasReminders,
   onOpenChange,
   onAdd,
 }: Props) {
@@ -65,8 +68,9 @@ export function AddWidgetDialog({
   }, [open]);
 
   const creating = pageId === NEW_PAGE;
+  const pageless = type === 'calendar' || type === 'reminders';
   const valid =
-    type === 'calendar' ||
+    pageless ||
     ((creating
       ? newName.trim().length > 0
       : pages.some((p) => p.id === pageId)));
@@ -75,7 +79,7 @@ export function AddWidgetDialog({
     if (!valid || busy) return;
     setBusy(true);
     try {
-      if (type === 'calendar') {
+      if (type === 'calendar' || type === 'reminders') {
         await onAdd({ id: crypto.randomUUID(), type });
         onOpenChange(false);
         return;
@@ -118,13 +122,14 @@ export function AddWidgetDialog({
           <div
             role="group"
             aria-label="Widget type"
-            className={`grid gap-1 rounded-lg bg-muted p-1 ${hasCalendar ? 'grid-cols-2' : 'grid-cols-3'}`}
+            className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
           >
             {(
               [
                 ['quick-add', 'Quick add'],
                 ['page', 'Show a page'],
                 ...(hasCalendar ? [] : ([['calendar', "Today's calendar"]] as const)),
+                ...(hasReminders ? [] : ([['reminders', 'Reminders']] as const)),
               ] as const
             ).map(([value, text]) => (
               <button
@@ -139,7 +144,11 @@ export function AddWidgetDialog({
             ))}
           </div>
 
-          {type === 'calendar' ? (
+          {type === 'reminders' ? (
+            <p className="text-sm text-muted-foreground">
+              Your next reminders on this PC, with a box to add one.
+            </p>
+          ) : type === 'calendar' ? (
             <p className="text-sm text-muted-foreground">
               Today's events from your Google Calendar. Connect it on the Connectors page.
             </p>
@@ -163,7 +172,7 @@ export function AddWidgetDialog({
           </label>
           )}
 
-          {type !== 'calendar' && creating && (
+          {!pageless && creating && (
             <input
               aria-label="New page name"
               value={newName}

@@ -123,7 +123,10 @@ export function App() {
           <Sidebar view={view} onSelect={navigate} folders={folders} pages={pages} counts={counts} onNewPage={newPage} onOpenPage={openPage} />
           <main className="flex-1 overflow-y-auto">
             {view.kind === 'home' ? (
-              <HomePage pages={pages} onOpenPage={openPage} onOpenConnectors={() => navigate({ kind: 'connectors' })} />
+              <HomePage pages={pages} onOpenPage={openPage}
+                onOpenConnectors={() => navigate({ kind: 'connectors' })}
+                onOpenReminders={() => navigate({ kind: 'reminders' })}
+              />
             ) : view.kind === 'dictation' ? (
               <DictationPage />
             ) : view.kind === 'pomodoro' ? (

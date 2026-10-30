@@ -9,8 +9,13 @@ export const canAdd = (ws: HomeWidget[]): boolean =>
 /** Home shows at most one Today's calendar card. */
 export const hasCalendar = (ws: HomeWidget[]): boolean => ws.some((w) => w.type === 'calendar');
 
+/** Home shows at most one Upcoming reminders card. */
+export const hasReminders = (ws: HomeWidget[]): boolean => ws.some((w) => w.type === 'reminders');
+
 export const addWidget = (ws: HomeWidget[], w: HomeWidget): HomeWidget[] =>
-  canAdd(ws) && !(w.type === 'calendar' && hasCalendar(ws)) ? [...ws, w] : ws;
+  canAdd(ws) && !(w.type === 'calendar' && hasCalendar(ws)) && !(w.type === 'reminders' && hasReminders(ws))
+    ? [...ws, w]
+    : ws;
 
 export const removeWidget = (ws: HomeWidget[], id: string): HomeWidget[] =>
   ws.filter((w) => w.id !== id || w.locked);
@@ -89,7 +94,7 @@ export const widgetSize = (w: HomeWidget): { w: number; h: number } =>
     ? { w: w.w, h: w.h }
     : w.type === 'quick-add'
       ? { w: 1, h: 2 }
-      : w.type === 'calendar'
+      : w.type === 'calendar' || w.type === 'reminders'
         ? { w: 1, h: 3 }
         : { w: 2, h: 2 };
 

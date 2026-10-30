@@ -6,6 +6,7 @@ import {
   builtInPageId,
   canAdd,
   hasCalendar,
+  hasReminders,
   ensureLocked,
   isPinned,
   keepExisting,
@@ -200,5 +201,24 @@ describe('the calendar widget', () => {
   it('is not a pin', () => {
     expect(isPinned([cal()], p1)).toBe(false);
     expect(unpinPage([cal()], p1)).toEqual([cal()]);
+  });
+});
+
+describe('the reminders widget', () => {
+  const rem = (id = 'r'): HomeWidget => ({ id, type: 'reminders' });
+
+  it('a second reminders card is refused', () => {
+    const one = addWidget([], rem('r1'));
+    expect(hasReminders(one)).toBe(true);
+    expect(addWidget(one, rem('r2'))).toEqual(one);
+  });
+
+  it('pruneWidgets and keepExisting keep it', () => {
+    expect(pruneWidgets([rem(), page('a', p1)], [p1])).toEqual([rem()]);
+    expect(keepExisting([rem()], [])).toEqual([rem()]);
+  });
+
+  it('defaults to 1×3', () => {
+    expect(widgetSize(rem())).toEqual({ w: 1, h: 3 });
   });
 });

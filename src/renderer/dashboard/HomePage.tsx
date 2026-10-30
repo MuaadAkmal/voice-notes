@@ -6,6 +6,7 @@ import {
   canAdd,
   GRID_COLUMNS,
   hasCalendar,
+  hasReminders,
   moveWidget,
   removeWidget,
   resizeWidget,
@@ -18,6 +19,7 @@ import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
 import { PageWidget } from './widgets/PageWidget';
 import { QuickAddWidget } from './widgets/QuickAddWidget';
 import { CalendarWidget } from './widgets/CalendarWidget';
+import { RemindersWidget } from './widgets/RemindersWidget';
 import { todayTitle } from '../../shared/calendar-format';
 import { Button } from '@/components/ui/button';
 import {
@@ -53,9 +55,10 @@ type Props = {
   pages: Page[] | null;
   onOpenPage: (id: string) => void;
   onOpenConnectors: () => void;
+  onOpenReminders: () => void;
 };
 
-export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
+export function HomePage({ pages, onOpenPage, onOpenConnectors, onOpenReminders }: Props) {
   const { widgets, save, run } = useHomeWidgets();
   // The card a widget is being dragged over.
   const [dropId, setDropId] = useState<string | null>(null);
@@ -120,7 +123,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
   };
   // A widget whose page isn't known (not loaded yet, or just deleted) renders nothing; the calendar has none.
   const shown = widgets.flatMap((w): { widget: HomeWidget; page: Page | null }[] => {
-    if (w.type === 'calendar') return [{ widget: w, page: null }];
+    if (w.type === 'calendar' || w.type === 'reminders') return [{ widget: w, page: null }];
     const page = pages?.find((p) => p.id === w.pageId);
     return page ? [{ widget: w, page }] : [];
   });
@@ -188,7 +191,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
               dropping={dropId === widget.id}
               dropProps={dropProps(widget.id)}
               // A card is named by its page, the same name voice commands use.
-              title={page?.title ?? todayTitle(new Date())}
+              title={page?.title ?? (widget.type === 'reminders' ? 'Upcoming reminders' : todayTitle(new Date()))}
               onTitleClick={page ? () => onOpenPage(page.id) : undefined}
               onOpenPage={page ? () => onOpenPage(page.id) : undefined}
               onRemove={widget.locked ? undefined : () => run((cur) => removeWidget(cur, widget.id))}
@@ -198,6 +201,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
               )}
               {widget.type === 'page' && page && <PageWidget page={page} newestFirst={!!widget.locked} />}
               {widget.type === 'calendar' && <CalendarWidget onOpenConnectors={onOpenConnectors} />}
+              {widget.type === 'reminders' && <RemindersWidget onOpenReminders={onOpenReminders} />}
             </WidgetCard>
           ))}
         </div>
@@ -208,6 +212,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors }: Props) {
         initialType={dialog.type}
         pages={pages ?? []}
         hasCalendar={hasCalendar(widgets)}
+        hasReminders={hasReminders(widgets)}
         onOpenChange={(open) => setDialog((d) => ({ ...d, open }))}
         onAdd={(w) => save((cur) => addWidget(cur, w))}
       />

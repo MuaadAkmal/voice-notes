@@ -22,6 +22,7 @@ const HomeWidgetSchema = z.discriminatedUnion('type', [
   }),
   z.object({ id: z.uuid(), type: z.literal('page'), pageId: z.uuid(), w: Span, h: Span, locked: z.literal(true).optional() }),
   z.object({ id: z.uuid(), type: z.literal('calendar'), w: Span, h: Span }),
+  z.object({ id: z.uuid(), type: z.literal('reminders'), w: Span, h: Span }),
 ]);
 
 const TranscriptionSchema = z
