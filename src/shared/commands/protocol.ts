@@ -17,3 +17,8 @@ export type ResolveResponse =
   | { action: 'none'; reason: 'no-match' | 'unclear'; items?: string[] };
 
 export const LIMITS = { text: 500, pages: 300, title: 200, items: 10, item: 200 } as const;
+
+/** Voice reminders, when the app couldn't read the time itself. `now`: ISO with the PC's offset; `tz`: IANA zone. */
+export type RemindRequest = { text: string; now: string; tz: string };
+
+export type RemindResponse = { action: 'remind'; text: string; dueAt: string } | { action: 'none' };

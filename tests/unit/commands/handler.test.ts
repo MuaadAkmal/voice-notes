@@ -9,7 +9,7 @@ const OK: ResolveResponse = { action: 'append', pageId: 'g', items: ['milk'] };
 
 const deps = (resolve: (u: string, b: unknown) => Promise<ResolveResponse>): CommandsHandlerDeps => ({
   verify: async (jwt) => (jwt === 'good' ? { userId: 'u1' } : null),
-  core: { resolve },
+  core: { resolve, remind: async () => ({ action: 'none' }) },
   missing: [],
 });
 

@@ -8,7 +8,7 @@ export type CommandsHandlerDeps = {
   /** The user for a valid access token, else null. */
   verify(jwt: string): Promise<{ userId: string } | null>;
   /** Null when a secret is missing. */
-  core: Pick<CommandsCore, 'resolve'> | null;
+  core: Pick<CommandsCore, 'resolve' | 'remind'> | null;
   missing: string[];
 };
 
@@ -23,7 +23,7 @@ export async function handleCommands(req: Request, d: CommandsHandlerDeps): Prom
     return json(500, { error: 'misconfigured', missing: d.missing });
   }
   const route = new URL(req.url).pathname.split('/').pop();
-  if (req.method !== 'POST' || route !== 'resolve') return json(404, { error: 'Not found' });
+  if (req.method !== 'POST' || (route !== 'resolve' && route !== 'remind')) return json(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -40,7 +40,7 @@ export async function handleCommands(req: Request, d: CommandsHandlerDeps): Prom
   }
 
   try {
-    return json(200, await d.core.resolve(user.userId, body));
+    return json(200, route === 'remind' ? await d.core.remind(user.userId, body) : await d.core.resolve(user.userId, body));
   } catch (err) {
     if (err instanceof BadRequest) return json(400, { error: 'bad-request' });
     if (err instanceof LimitReached) return json(429, { error: 'limit' });
