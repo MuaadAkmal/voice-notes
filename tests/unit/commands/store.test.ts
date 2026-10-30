@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PgUsageStore, RestUsageStore } from '../../../src/shared/commands/pg-store';
 import { MemoryUsageStore, type UsageStore } from '../../../src/shared/commands/store';
 
@@ -27,6 +27,9 @@ async function pgStore(): Promise<UsageStore> {
   const db = pg;
   return new PgUsageStore({ query: async <T>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows });
 }
+
+// Booting PGlite (WASM) can take longer than one test's 5 s while the whole suite runs.
+beforeAll(() => pgStore(), 60_000);
 
 afterAll(async () => {
   await pg?.close();
