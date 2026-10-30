@@ -173,3 +173,20 @@ describe('calendar event schemas', () => {
     expect(RangeSchema.safeParse({ from: 0, to: 63 * DAY }).success).toBe(false);
   });
 });
+
+describe('reminder schemas', async () => {
+  const { ReminderIdSchema, ReminderTextSchema, ReminderUpdateSchema } = await import('../../src/shared/ipc');
+  const id = '3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e';
+  it('accepts a uuid id and a 1-500 char text', () => {
+    expect(ReminderIdSchema.safeParse({ id }).success).toBe(true);
+    expect(ReminderIdSchema.safeParse({ id: 'x' }).success).toBe(false);
+    expect(ReminderTextSchema.safeParse({ text: '  ' }).success).toBe(false);
+    expect(ReminderTextSchema.safeParse({ text: 'a'.repeat(501) }).success).toBe(false);
+  });
+  it('updates text or time only', () => {
+    expect(ReminderUpdateSchema.safeParse({ id, text: 'call dad', dueAt: 5 }).success).toBe(true);
+    expect(ReminderUpdateSchema.safeParse({ id, dueAt: -1 }).success).toBe(false);
+    expect(ReminderUpdateSchema.safeParse({ id, status: 'done' }).success).toBe(false);
+    expect(ReminderUpdateSchema.safeParse({ id, text: 'a'.repeat(201) }).success).toBe(false);
+  });
+});

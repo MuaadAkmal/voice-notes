@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AudioLines, CalendarDays, FilePlus, FileText, House, Mic, Plug, Timer } from 'lucide-react';
+import { AlarmClock, AudioLines, CalendarDays, FilePlus, FileText, House, Mic, Plug, Timer } from 'lucide-react';
 import type { Folder, Page } from '../../shared/channels';
 import { buildTree, type FolderNode, isDescendant } from '../../shared/folders';
 import { canAdd, isPinned } from '../../shared/home-widgets';
@@ -407,6 +407,12 @@ export function Sidebar({ view, onSelect, folders, pages, counts, onNewPage, onO
             icon={<CalendarDays className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
           />
         )}
+        <NavItem
+          label="Reminders"
+          active={view.kind === 'reminders'}
+          onClick={() => onSelect({ kind: 'reminders' })}
+          icon={<AlarmClock className="h-4 w-4 shrink-0" strokeWidth={1.8} />}
+        />
         <NavItem
           label="Dictation"
           active={view.kind === 'dictation'}

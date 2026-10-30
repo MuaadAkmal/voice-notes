@@ -9,6 +9,7 @@ import { NotesPage } from './NotesPage';
 import { PageView } from './PageView';
 import { PomodoroPage } from './PomodoroPage';
 import { CalendarPage } from './CalendarPage';
+import { RemindersPage } from './RemindersPage';
 import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
@@ -30,7 +31,8 @@ export type View =
   | { kind: 'transcription' }
   | { kind: 'account' }
   | { kind: 'connectors' }
-  | { kind: 'calendar' };
+  | { kind: 'calendar' }
+  | { kind: 'reminders' };
 
 const api = window.dashboardApi;
 
@@ -49,13 +51,16 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' } | { kind: 'reminders' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
   const loadNotes = useCallback(() => api.listNotes().then(setNotes), []);
   const loadPages = useCallback(() => api.listPages().then(setPages), []);
   const loadFolders = useCallback(() => api.listFolders().then(setFolders), []);
+
+  // A reminder notification was clicked.
+  useEffect(() => api.onOpenReminders(() => navigate({ kind: 'reminders' })), []);
 
   useEffect(() => {
     loadNotes();
@@ -78,7 +83,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar' && view.kind !== 'reminders')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -131,6 +136,8 @@ export function App() {
               <ConnectorsPage />
             ) : view.kind === 'calendar' ? (
               <CalendarPage onOpenConnectors={() => navigate({ kind: 'connectors' })} />
+            ) : view.kind === 'reminders' ? (
+              <RemindersPage />
             ) : view.kind === 'account' ? (
               <AccountPage onSignedOut={goHome} />
             ) : view.kind === 'page' ? (

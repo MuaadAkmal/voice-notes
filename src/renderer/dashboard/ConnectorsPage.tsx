@@ -24,12 +24,16 @@ export function ConnectorsPage() {
 /** Dictating "Pixie, add blueberry to groceries" adds to that page instead of pasting. Per PC. */
 function VoiceToLists() {
   const [on, setOn] = useState<boolean | null>(null);
+  const [folders, setFolders] = useState(true);
+  const [reminders, setReminders] = useState(true);
   const [words, setWords] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   useEffect(() => {
     const load = () =>
       api.getSettings().then((s) => {
         setOn(s.voiceToLists);
+        setFolders(s.voiceToFolders);
+        setReminders(s.voiceReminders);
         setWords(s.noteWakeWords);
         setDraft(s.noteWakeWords.join(', '));
       });
@@ -66,7 +70,41 @@ function VoiceToLists() {
           }}
         />
       </div>
-      {on && (
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">Voice notes too</div>
+          <div className="mt-0.5 text-sm text-muted-foreground">
+            Start a voice note with “{name}, movie lines …” to file it into that folder. The first seconds are
+            transcribed to check, so transcription must be set up.
+          </div>
+        </div>
+        <Switch
+          aria-label="Voice to folders"
+          checked={folders}
+          onCheckedChange={(v) => {
+            setFolders(v);
+            void api.setSettings({ voiceToFolders: v });
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">Reminders</div>
+          <div className="mt-0.5 text-sm text-muted-foreground">
+            Dictate “Remind me to call mom in 10 minutes” for a notification on this PC (and a Google Calendar event while
+            connected). Times it can't read are sent to Groq while signed in.
+          </div>
+        </div>
+        <Switch
+          aria-label="Voice reminders"
+          checked={reminders}
+          onCheckedChange={(v) => {
+            setReminders(v);
+            void api.setSettings({ voiceReminders: v });
+          }}
+        />
+      </div>
+      {(on || folders) && (
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium">Wake words</span>
           <input
