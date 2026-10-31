@@ -1,0 +1,6 @@
+# Repeats the root .gitignore's build output: oxlint and oxfmt, run from here, only read this file.
+.vite/
+out/
+test-results/
+playwright-report/
+.superpowers/

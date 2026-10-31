@@ -8,7 +8,7 @@ import { runContract } from './contract';
 import { TEST_USER, TestServer } from './reference-server';
 
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
-const MIGRATION = fs.readFileSync(path.resolve('supabase/migrations', fs.readdirSync('supabase/migrations').find((f) => f.endsWith('_sync_rows.sql'))!), 'utf8');
+const MIGRATION = fs.readFileSync(path.resolve('../supabase/migrations', fs.readdirSync('../supabase/migrations').find((f) => f.endsWith('_sync_rows.sql'))!), 'utf8');
 
 // One Postgres (PGlite) for the whole file, with Supabase's auth.users stand-in and the sync migration
 // applied once; each test starts from empty sync tables. (Starting a PGlite per test exhausts WASM memory.)

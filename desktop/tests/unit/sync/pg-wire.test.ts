@@ -14,7 +14,7 @@ import { TEST_USER, TestServer } from './reference-server';
 // wire protocol to PGlite. PGlite's in-process API forgives things postgres.js does not (it passes a
 // pre-serialised JSON string through; postgres.js serialises it again).
 
-const MIGRATION = fs.readFileSync(path.resolve('supabase/migrations', fs.readdirSync('supabase/migrations').find((f) => f.endsWith('_sync_rows.sql'))!), 'utf8');
+const MIGRATION = fs.readFileSync(path.resolve('../supabase/migrations', fs.readdirSync('../supabase/migrations').find((f) => f.endsWith('_sync_rows.sql'))!), 'utf8');
 const PORT = 54_000 + Math.floor(Math.random() * 1000);
 
 let pg: PGlite;

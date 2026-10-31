@@ -9,15 +9,15 @@ import type { ConnectorRow, ConnectorStore } from '../../../src/shared/connector
 const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const MIGRATION = fs.readFileSync(
-  path.resolve('supabase/migrations', fs.readdirSync('supabase/migrations').find((f) => f.endsWith('_connectors.sql'))!),
+  path.resolve('../supabase/migrations', fs.readdirSync('../supabase/migrations').find((f) => f.endsWith('_connectors.sql'))!),
   'utf8',
 );
 // Every connector migration, in order: what the live tables are.
 const MIGRATIONS = fs
-  .readdirSync('supabase/migrations')
+  .readdirSync('../supabase/migrations')
   .filter((f) => f.includes('_connector'))
   .sort()
-  .map((f) => fs.readFileSync(path.resolve('supabase/migrations', f), 'utf8'));
+  .map((f) => fs.readFileSync(path.resolve('../supabase/migrations', f), 'utf8'));
 
 // One PGlite for the file (a PGlite per test exhausts WASM memory); each test starts from empty tables.
 let shared: Promise<PGlite> | null = null;

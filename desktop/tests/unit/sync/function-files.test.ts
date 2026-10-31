@@ -56,7 +56,7 @@ it('the functions carry exact copies of the shared code', () => {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
   });
   for (const [name, files] of Object.entries(FUNCTIONS)) {
-    const out = path.join(ROOT, 'supabase/functions', name, '_shared');
+    const out = path.join(ROOT, '../supabase/functions', name, '_shared');
     for (const f of files) {
       const source = fs.readFileSync(path.join(ROOT, 'src/shared', f), 'utf8');
       const copy = fs.readFileSync(path.join(out, f), 'utf8');

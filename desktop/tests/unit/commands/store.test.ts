@@ -9,10 +9,10 @@ const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 // Every voice-to-lists migration, in order: what the live table and function are.
 const MIGRATIONS = fs
-  .readdirSync('supabase/migrations')
+  .readdirSync('../supabase/migrations')
   .filter((f) => f.endsWith('_commands_usage.sql') || f.endsWith('_count_command.sql'))
   .sort()
-  .map((f) => fs.readFileSync(path.resolve('supabase/migrations', f), 'utf8'));
+  .map((f) => fs.readFileSync(path.resolve('../supabase/migrations', f), 'utf8'));
 
 let pg: PGlite | null = null;
 async function pgStore(): Promise<UsageStore> {
