@@ -52,6 +52,7 @@ const TITLED_MS = 1000; // "Saved ✓" confirmation after a title is saved from 
 export class RecorderController {
   private _state: State = 'idle';
   private startedAt = 0;
+  private stoppedAt: number | null = null;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,6 +144,7 @@ export class RecorderController {
         this.endSaved();
         this._state = 'recording';
         this.startedAt = Date.now();
+        this.stoppedAt = null;
         this.requestedSource = this.opts.getSource();
         this.context = this.opts.getContext?.() ?? null;
         this.overlay.start(this.opts.getDeviceId(), this.requestedSource);
@@ -159,6 +161,7 @@ export class RecorderController {
         if (this._state !== 'recording') return;
         this.clearMax();
         this._state = 'stopping';
+        this.stoppedAt = Date.now();
         this.overlay.stop();
         this.endCapture();
         // If the overlay never answers (renderer crashed, recorder died), don't stay stuck in 'stopping'.
@@ -225,21 +228,24 @@ export class RecorderController {
    */
   async onAudio(audio: NewAudio, { silent = false }: { silent?: boolean } = {}): Promise<void> {
     if (this._state !== 'stopping' && this._state !== 'recording') return;
-    if (silent && audio.durationMs > this.minMs) {
+    // The clip starts once the mic is open, so its own length undercounts the press.
+    const pressMs = (this.stoppedAt ?? Date.now()) - this.startedAt;
+    const lengthMs = Math.max(audio.durationMs, pressMs);
+    if (silent && lengthMs > this.minMs) {
       this.endCapture();
       this.clearTimers();
       this.toIdle();
       this.flash({ kind: 'error', message: 'Nothing heard · not saved', retry: false }, this.errorMs);
       return;
     }
-    await this.accept(audio, 'note');
+    await this.accept(audio, 'note', lengthMs);
   }
 
-  private async accept(audio: NewAudio, kind: NoteKind): Promise<void> {
+  private async accept(audio: NewAudio, kind: NoteKind, lengthMs = audio.durationMs): Promise<void> {
     this.endCapture();
     this.clearTimers();
-    // A clip of a second or less is a mis-click on the hotkey or the pill, not a note.
-    if (audio.durationMs <= this.minMs) {
+    // A press of a second or less is a mis-click on the hotkey or the pill, not a note.
+    if (lengthMs <= this.minMs) {
       this.toIdle();
       this.overlay.setState(this.opts.idleState());
       return;

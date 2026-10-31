@@ -122,6 +122,34 @@ it('audio of 1 s or less is dropped without save', async () => {
   expect(c.state).toBe('idle');
 });
 
+it('the second counts from the press: time the mic took to open still counts', async () => {
+  c.handleGesture('start');
+  vi.advanceTimersByTime(1200);
+  c.handleGesture('stop');
+  await c.onAudio(audio(989));
+  expect(created).toHaveLength(1);
+  expect(created[0].durationMs).toBe(989); // the note keeps its real length
+});
+
+it('a press of 1 s or less is dropped, however long the clip takes to arrive', async () => {
+  c.handleGesture('start');
+  vi.advanceTimersByTime(800);
+  c.handleGesture('stop');
+  vi.advanceTimersByTime(400);
+  await c.onAudio(audio(172));
+  expect(created).toEqual([]);
+  expect(lastState()).toEqual(IDLE);
+});
+
+it('a press over 1 s that heard nothing says so, even if the clip itself is short', async () => {
+  c.handleGesture('start');
+  vi.advanceTimersByTime(1200);
+  c.handleGesture('stop');
+  await c.onAudio(audio(989), { silent: true });
+  expect(created).toEqual([]);
+  expect(lastState()).toEqual({ kind: 'error', message: 'Nothing heard · not saved', retry: false });
+});
+
 it('a clip that heard nothing is dropped and the pill says so', async () => {
   c.handleGesture('start');
   c.handleGesture('stop');
