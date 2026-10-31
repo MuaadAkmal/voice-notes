@@ -163,7 +163,7 @@ test('pages: folders, search, delete', async () => {
     .poll(() =>
       t.hooks((h) => h.store.pages.list().length + h.store.list().length),
     )
-    .toBe(1); // the built-in Review later page can't be deleted
+    .toBe(2); // the built-in Review later and Quick notes pages can't be deleted
   await expect(rows).toHaveCount(0);
 });
 

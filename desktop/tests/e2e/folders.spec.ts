@@ -77,7 +77,7 @@ test('folders: nesting, duplicate-name toast, multi-select drag, cycle refused',
 
   // Shift-select two notes and drag them together into Films.
   await page.getByRole('button', { name: /^Inbox/ }).click();
-  const rows = page.locator('li[draggable="true"]').filter({ hasNotText: 'Review later' });
+  const rows = page.locator('li[draggable="true"]').filter({ hasNotText: 'Review later' }).filter({ hasNotText: 'Quick notes' });
   await expect(rows).toHaveCount(3);
   await rows.nth(0).click({ position: { x: 360, y: 30 } });
   await rows.nth(1).click({ position: { x: 360, y: 30 }, modifiers: ['Shift'] });

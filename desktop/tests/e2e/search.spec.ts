@@ -25,7 +25,7 @@ test('search across folders, filter by show, star a note', async () => {
   await recordOver('La Casa de Papel | Netflix - Google Chrome', '¿Qué pasó?');
   await recordOver('Dark | Netflix - Google Chrome', 'gracias');
   await recordOver('La Casa de Papel | Netflix - Google Chrome', 'tranquilo');
-  const rows = d.locator('li[aria-selected]').filter({ hasNotText: 'Review later' });
+  const rows = d.locator('li[aria-selected]').filter({ hasNotText: 'Review later' }).filter({ hasNotText: 'Quick notes' });
   await expect(rows).toHaveCount(3);
 
   // Accent-insensitive search over titles.

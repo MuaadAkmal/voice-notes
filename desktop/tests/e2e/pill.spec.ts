@@ -59,7 +59,7 @@ test('a plain click on the pill still toggles hands-free recording', async () =>
   const pill = await overlay(t);
   await pill.getByTestId('pill').click();
   await expect.poll(() => t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('recording');
-  await pill.waitForTimeout(800);
+  await pill.waitForTimeout(1500); // a press of 1 s or less is dropped as a mis-click
   await pill.getByTestId('pill').click();
   await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);
 });

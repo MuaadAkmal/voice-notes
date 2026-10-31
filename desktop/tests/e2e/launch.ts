@@ -41,20 +41,39 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-/** fakeAudioFile: feed this WAV to Chromium's fake mic instead of its default beeps. userData: reuse a data dir (relaunch). */
-export async function launch(opts: { fakeAudioFile?: string; userData?: string } = {}): Promise<TestApp> {
-  const userData = opts.userData ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
+/**
+ * fakeAudioFile: the WAV Chromium's fake mic plays. The default is a steady tone: its own beeps are too sparse for a
+ * short clip to count as heard. userData: reuse a data dir (relaunch).
+ */
+export async function launch({ fakeAudioFile = 'tests/e2e/fixtures/tone.wav', userData: reuseData }: { fakeAudioFile?: string; userData?: string } = {}): Promise<TestApp> {
+  const userData = reuseData ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
   const app = await electron.launch({
     args: [
       '.',
       '--use-fake-device-for-media-stream',
       '--use-fake-ui-for-media-stream',
-      ...(opts.fakeAudioFile ? [`--use-file-for-fake-audio-capture=${path.resolve(opts.fakeAudioFile)}`] : []),
+      `--use-file-for-fake-audio-capture=${path.resolve(fakeAudioFile)}`,
     ],
     // Playwright emulates prefers-color-scheme: light by default; let nativeTheme decide, as in the real app.
     colorScheme: null,
     env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData },
   });
+  // The inspector can run a call in the middle of a query in main ("database connection is busy"): wait for the event loop.
+  const evaluate = app.evaluate.bind(app) as (fn: unknown, arg: unknown) => Promise<unknown>;
+  (app as { evaluate: unknown }).evaluate = (fn: unknown, arg?: unknown) =>
+    evaluate(
+      (electronModule: unknown, call: { src: string; arg: unknown }) =>
+        new Promise((resolve, reject) => {
+          setImmediate(() => {
+            try {
+              resolve(new Function('electron', 'arg', `return (${call.src})(electron, arg)`)(electronModule, call.arg));
+            } catch (err) {
+              reject(err);
+            }
+          });
+        }),
+      { src: String(fn), arg },
+    );
   const dashboard = await app.waitForEvent('window', { predicate: (p) => p.url().includes('/dashboard/') });
   await dashboard.waitForLoadState('domcontentloaded');
 

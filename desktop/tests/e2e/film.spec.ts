@@ -69,6 +69,7 @@ test('auto-pause presses play/pause around a mic note while something is playing
   t = await launch({ fakeAudioFile: 'tests/e2e/fixtures/tone.wav' });
   await t.hooks((h) => h.gesture.toggle());
   await expect.poll(() => t.hooks((h) => h.mediaPresses()), { timeout: 4000 }).toBe(1);
+  await t.dashboard.waitForTimeout(1200); // a press of 1 s or less is dropped as a mis-click
   await t.hooks((h) => h.gesture.toggle());
   await expect.poll(() => t.hooks((h) => h.mediaPresses())).toBe(2);
   await expect.poll(() => t.hooks((h) => h.store.list().length)).toBe(1);

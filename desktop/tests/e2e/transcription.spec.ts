@@ -129,8 +129,8 @@ test('provider tabs show one provider at a time', async () => {
   await expect(page.getByLabel('Base URL')).toBeHidden();
   await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeVisible();
   await page.getByRole('tab', { name: /Voice Notes Cloud/ }).click();
-  await expect(page.getByText('Studio-grade transcription. Zero setup.')).toBeVisible();
-  await expect(page.getByText('Unlimited', { exact: true })).toBeVisible();
+  await expect(page.getByText('Fast, accurate transcription hosted for you.')).toBeVisible();
+  await expect(page.getByText('Sign in to use Cloud')).toBeVisible();
   await expect(page.getByText('Runs on this PC. Nothing is sent anywhere.')).toBeHidden();
   await setTheme('light');
   await shot('cloud-light');

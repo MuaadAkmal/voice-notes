@@ -6,9 +6,13 @@ import { launch, type TestApp } from './launch';
 let t: TestApp;
 let dashboard: Page;
 const hooks: TestApp['hooks'] = (fn) => t.hooks(fn);
-// The voice note's ⋯ menu (Inbox also lists the built-in Review later page).
+// The voice note's ⋯ menu (Inbox also lists the built-in Review later and Quick notes pages).
 const noteMenu = () =>
-  dashboard.locator('li[aria-selected]').filter({ hasNotText: 'Review later' }).getByRole('button', { name: 'More' });
+  dashboard
+    .locator('li[aria-selected]')
+    .filter({ hasNotText: 'Review later' })
+    .filter({ hasNotText: 'Quick notes' })
+    .getByRole('button', { name: 'More' });
 
 test.beforeEach(async () => {
   t = await launch();
