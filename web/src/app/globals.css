@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* The app's stone tokens (desktop dashboard.css), plus the site's own subtitle yellow. */
+:root {
+  --background: oklch(0.971 0.005 78.3);
+  --foreground: oklch(0.147 0.004 49.25);
+  --card: oklch(1 0 0);
+  --muted: oklch(0.947 0.007 80.7);
+  --muted-foreground: oklch(0.47 0.013 58.071);
+  --border: oklch(0.911 0.01 81.8);
+  --primary: oklch(0.216 0.006 56.043);
+  --primary-foreground: oklch(0.985 0.001 106.423);
+  --ring: oklch(0.47 0.013 58.071);
+  /* The screen stays dark in both themes, like the show it stands for. */
+  --screen: oklch(0.2 0 0);
+  --screen-foreground: oklch(0.72 0.01 56);
+  --subtitle: #f7d94c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: oklch(0.239 0 0);
+    --foreground: oklch(0.985 0.001 106.423);
+    --card: oklch(0.293 0 0);
+    --muted: oklch(0.321 0 0);
+    --muted-foreground: oklch(0.78 0.01 56.259);
+    --border: oklch(1 0 0 / 12%);
+    --primary: oklch(0.923 0.003 48.717);
+    --primary-foreground: oklch(0.216 0.006 56.043);
+    --ring: oklch(0.78 0.01 56.259);
+    --screen: oklch(0.17 0 0);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-screen: var(--screen);
+  --color-screen-foreground: var(--screen-foreground);
+  --color-subtitle: var(--subtitle);
+  --font-sans: var(--font-instrument);
+  --font-display: var(--font-bricolage);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-bricolage), ui-sans-serif, sans-serif;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}

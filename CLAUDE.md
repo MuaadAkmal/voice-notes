@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `desktop/`: the Windows Electron app. Details and commands: `desktop/CLAUDE.md`. Run its commands from `desktop/`.
 - `android/`: the Android app, native Kotlin, not started yet. Details: `android/CLAUDE.md`.
+- `web/`: the public website, a static Next.js export on Cloudflare Pages. Details and commands: `web/CLAUDE.md`. Run its commands from `web/`.
 - `supabase/`: the backend both apps use: `functions/` (`sync`, `connectors`, `commands`, `asr`) and `migrations/`. Each function's `_shared/` is GENERATED from `desktop/src/shared` by `npm run sync:function` (run in `desktop/`) and checked by `desktop/tests/unit/sync/function-files.test.ts`; never edit it.
 - `docs/`: design notes; `docs/superpowers/` (specs and plans) is local and not published.
 
