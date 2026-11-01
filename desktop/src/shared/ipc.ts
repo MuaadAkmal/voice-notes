@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isSiteHost } from './later-routes';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
@@ -57,6 +58,15 @@ export const SettingsFieldSchemas = {
   transcribeLanguage: z.enum(LANGUAGE_CODES),
   laterPageId: z.uuid().nullable(),
   notesPageId: z.uuid().nullable(),
+  laterSites: z
+    .array(
+      z.object({
+        page: z.string().trim().min(1).max(80),
+        hosts: z.array(z.string().max(253).refine(isSiteHost)).min(1).max(10),
+        enabled: z.boolean(),
+      }),
+    )
+    .max(100),
   dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),

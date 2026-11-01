@@ -77,6 +77,7 @@ export type Settings = {
   transcription: TranscriptionSettings;
   transcribeLanguage: TranscribeLanguage; // last used in the Transcribe menu
   laterPageId: string | null; // the built-in Review later page; created at boot
+  laterSites: LaterSite[]; // what's saved for later from these goes on their own page; the rest to Review later
   notesPageId: string | null; // the built-in Quick notes page, where "Note, …" lands when no page matches; created at boot
   dictationHotkey: number[]; // uiohook keycodes: hold to dictate into the focused app
   dictationHotkeyLabel: string;
@@ -109,7 +110,11 @@ export type OverlayState =
 /** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
 export type DropPayload = { text: string; uriList: string; html: string };
 /** The pill's Save this: label of the window saved to Review later, or nothing worth saving in front. */
-export type CaptureResult = { kind: 'saved'; label: string } | { kind: 'nothing' };
+export type CaptureResult = { kind: 'saved'; label: string; page: string } | { kind: 'nothing' };
+/** A website with its own page for things saved for later. hosts match subdomains too. */
+export type LaterSite = { page: string; hosts: string[]; enabled: boolean };
+/** page = the title of the page it went on. */
+export type DropResult = { kind: 'saved'; page: string } | { kind: 'ignored' };
 /** A dropped item for the Review later page. title null = no usable link text. */
 export type LaterItem = { kind: 'link'; url: string; title: string | null } | { kind: 'text'; text: string };
 
@@ -182,7 +187,7 @@ export const Ch = {
   FilmError: 'film:error', // { message } the buffer's loopback stream failed or ended
   MediaProbe: 'media:probe', // { id } is sound playing?
   MediaProbeResult: 'media:probe-result', // { id, playing }
-  LaterDrop: 'later:drop', // DropPayload → 'saved' | 'ignored' (invoke)
+  LaterDrop: 'later:drop', // DropPayload → DropResult (invoke)
   LaterCapture: 'later:capture', // the pill's Save this: the window in front → CaptureResult (invoke)
   DictationAudio: 'dictation:audio', // DictationAudio
   PomodoroState: 'pomodoro:state', // Pomodoro: the overlay's timer, whenever it changes

@@ -37,7 +37,7 @@ test.afterEach(async () => {
   await t.close();
 });
 
-test('drops a link onto the pill', async () => {
+test("drops a link onto the pill: it goes on its site's page", async () => {
   t = await launch();
   await t.hooks((h) => h.setForeground(() => null));
   const pill = await overlay(t);
@@ -45,9 +45,39 @@ test('drops a link onto the pill', async () => {
   await dragLink(pill, 'enter');
   await expect(pill.getByText('Drop to save for later')).toBeVisible();
   await dragLink(pill, 'drop');
-  await expect(pill.getByText('Saved for later ✓')).toBeVisible();
-  await expect.poll(laterBody).toContain(`- [ ] [The duality of this sub is insame](${REDDIT})`);
+  await expect(pill.getByText('Saved to Reddit ✓')).toBeVisible();
+  await expect
+    .poll(() => t.hooks((h) => h.store.pages.list().find((p) => p.title === 'Reddit')?.body ?? null))
+    .toContain(`- [ ] [The duality of this sub is insame](${REDDIT})`);
+  expect(await laterBody()).toBe('');
   await pill.screenshot({ path: '.superpowers/shots/later-saved.png' });
+  await expect(t.dashboard.getByRole('button', { name: 'Reddit', exact: true }).first()).toBeVisible();
+});
+
+test('Settings choose which sites get a page: off goes to Review later, added ones work', async () => {
+  t = await launch();
+  await t.hooks((h) => h.setForeground(() => null));
+  const page = t.dashboard;
+  await page.getByRole('button', { name: /^Settings/ }).click();
+  await page.getByRole('switch', { name: 'Save reddit.com to its own page' }).click();
+  await expect.poll(() => page.evaluate(async () => (await window.dashboardApi.getSettings()).laterSites.find((s) => s.page === 'Reddit')!.enabled)).toBe(false);
+
+  const pill = await overlay(t);
+  await dragLink(pill, 'enter');
+  await dragLink(pill, 'drop');
+  await expect(pill.getByText('Saved for later ✓')).toBeVisible();
+  await expect.poll(laterBody).toContain(REDDIT);
+
+  await page.getByLabel('Link or site to add').fill('youtube.com');
+  await expect(page.getByText('That site is already listed.')).toBeVisible();
+  await page.getByLabel('Link or site to add').fill('https://github.com/a/b');
+  await page.getByLabel('Page name').fill('GitHub');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  const row = page.getByTestId('later-site').filter({ hasText: 'github.com' });
+  await expect(row.getByRole('switch')).toBeChecked();
+  await row.getByRole('button', { name: 'Remove' }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByTestId('later-site').filter({ hasText: 'youtube.com' }).getByRole('button', { name: 'Remove' })).toHaveCount(0);
 });
 
 test('ignores drops while recording', async () => {

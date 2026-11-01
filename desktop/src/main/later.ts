@@ -1,7 +1,8 @@
-import type { CaptureResult, DropPayload, Settings } from '../shared/channels';
+import type { CaptureResult, DropPayload, DropResult, Settings } from '../shared/channels';
 import { ensureLocked } from '../shared/home-widgets';
 import { captureLine } from '../shared/capture-line';
 import { LATER_PAGE_TITLE, laterEntry, parseDrop } from '../shared/later';
+import { pageFor } from '../shared/later-routes';
 import type { Capture } from './commands/capture';
 import type { Described } from './commands/describe';
 import type { PageStore } from './store/page-store';
@@ -42,28 +43,52 @@ type DropDeps = {
   getSettings(): Settings;
   updateSettings(patch: Partial<Settings>): Settings;
   source(): string | null; // show label of the window the drag came from
+  window(): { title: string; processName: string } | null; // the window in front: where the drag came from
   newId(): string;
 };
 
-/** Appends a drop to the Review later page. Throws if the append fails. */
-export function saveDrop(payload: DropPayload, deps: DropDeps): 'saved' | 'ignored' {
-  const item = parseDrop(payload);
-  if (!item) return 'ignored';
+type PageDeps = Pick<DropDeps, 'pages' | 'getSettings' | 'updateSettings' | 'newId'>;
+
+/**
+ * The page an entry goes on: the site's page, found by title so a page you already call "Reddit" is
+ * used and a deleted one comes back (made here on first use; the oldest if two PCs each made one),
+ * or Review later when no site matched.
+ */
+function targetPage(name: string | null, deps: PageDeps): { id: string; title: string } {
+  if (name) {
+    const key = name.toLowerCase();
+    const [existing] = deps.pages
+      .list()
+      .filter((p) => p.title.trim().toLowerCase() === key)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    if (existing) return { id: existing.id, title: existing.title };
+    const id = deps.pages.create(null).id;
+    deps.pages.rename(id, name);
+    return { id, title: name };
+  }
   const patch = ensureLaterPage(deps.getSettings(), deps.pages, deps.newId);
   const { laterPageId } = patch ? deps.updateSettings(patch) : deps.getSettings();
-  deps.pages.appendEntry(laterPageId!, laterEntry(item, deps.source()));
-  return 'saved';
+  return { id: laterPageId!, title: LATER_PAGE_TITLE };
 }
 
-type CaptureDeps = Omit<DropDeps, 'source'> & {
+/** Appends a drop to its app's page, or Review later. Throws if the append fails. */
+export function saveDrop(payload: DropPayload, deps: DropDeps): DropResult {
+  const item = parseDrop(payload);
+  if (!item) return { kind: 'ignored' };
+  const page = targetPage(pageFor(item.kind === 'link' ? item.url : null, deps.window(), deps.getSettings().laterSites), deps);
+  deps.pages.appendEntry(page.id, laterEntry(item, deps.source()));
+  return { kind: 'saved', page: page.title };
+}
+
+type CaptureDeps = PageDeps & {
   capture(): Capture | null; // the window in front, never our own
   describe(c: Capture): Promise<Described>;
   saveImage(bytes: Uint8Array): Promise<string>; // vn-image:// src
 };
 
 /**
- * The pill's "Save this" button: the window in front (the overlay never takes focus) becomes a
- * Review later entry, as "Pixie, add this to …" would write it. Nothing in front, or only the
+ * The pill's "Save this" button: the window in front (the overlay never takes focus) becomes an
+ * entry on its app's page or Review later, as "Pixie, add this to …" would write it. Nothing in front, or only the
  * desktop, saves nothing. Throws if the append fails.
  */
 export async function saveCapture(deps: CaptureDeps): Promise<CaptureResult> {
@@ -72,8 +97,7 @@ export async function saveCapture(deps: CaptureDeps): Promise<CaptureResult> {
   const d = await deps.describe(c);
   const imageSrc = d.image ? await deps.saveImage(d.image).catch(() => undefined) : undefined;
   const line = captureLine({ label: d.label, app: d.app, url: d.url, path: d.path, imageSrc });
-  const patch = ensureLaterPage(deps.getSettings(), deps.pages, deps.newId);
-  const { laterPageId } = patch ? deps.updateSettings(patch) : deps.getSettings();
-  deps.pages.appendEntry(laterPageId!, `[ ] ${line}`);
-  return { kind: 'saved', label: d.label };
+  const page = targetPage(pageFor(d.url, c, deps.getSettings().laterSites), deps);
+  deps.pages.appendEntry(page.id, `[ ] ${line}`);
+  return { kind: 'saved', label: d.label, page: page.title };
 }

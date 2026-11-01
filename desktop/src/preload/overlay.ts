@@ -3,6 +3,7 @@ import {
   type AudioDevice,
   type AudioPayload,
   type CaptureResult,
+  type DropResult,
   Ch,
   type DictationAudio,
   type DropPayload,
@@ -47,7 +48,7 @@ const overlayApi = {
   onPomodoroCommand: (cb: (p: { action: PomodoroAction }) => void) => on(Ch.PomodoroCommand, cb),
   sendPomodoro: (timer: Pomodoro) => ipcRenderer.send(Ch.PomodoroState, timer),
   pomodoroDone: (focusMs: number) => ipcRenderer.send(Ch.PomodoroDone, { focusMs }),
-  dropLater: (p: DropPayload): Promise<'saved' | 'ignored'> => ipcRenderer.invoke(Ch.LaterDrop, p),
+  dropLater: (p: DropPayload): Promise<DropResult> => ipcRenderer.invoke(Ch.LaterDrop, p),
   captureLater: (): Promise<CaptureResult> => ipcRenderer.invoke(Ch.LaterCapture),
 };
 

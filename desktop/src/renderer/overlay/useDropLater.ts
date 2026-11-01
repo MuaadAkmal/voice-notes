@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { isDroppable, MAX_DROP_FIELD } from '../../shared/later';
 
-export type DropPhase = 'none' | 'over' | 'saved' | 'failed';
+export type DropPhase = 'none' | 'over' | { saved: string } | 'failed';
 const CONFIRM_MS = 1500;
 
 /**
- * Links and text dragged onto the pill go to the Review later page. Only while `accepting`: otherwise
+ * Links and text dragged onto the pill go to their app's page or Review later. Only while `accepting`: otherwise
  * dragover isn't cancelled, so the cursor shows "not allowed" and nothing is taken.
  */
 export function useDropLater(accepting: boolean): DropPhase {
@@ -40,7 +40,7 @@ export function useDropLater(accepting: boolean): DropPhase {
       const get = (type: string) => e.dataTransfer!.getData(type).slice(0, MAX_DROP_FIELD);
       window.overlayApi
         .dropLater({ text: get('text/plain'), uriList: get('text/uri-list'), html: get('text/html') })
-        .then((r) => (r === 'saved' ? show('saved', CONFIRM_MS) : show('none')))
+        .then((r) => (r.kind === 'saved' ? show({ saved: r.page }, CONFIRM_MS) : show('none')))
         .catch(() => show('failed', CONFIRM_MS));
     };
     window.addEventListener('dragenter', onEnter);

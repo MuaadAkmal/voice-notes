@@ -536,9 +536,10 @@ async function boot(): Promise<void> {
           getSettings: () => settings,
           updateSettings,
           source: () => getContext()?.show ?? null, // the browser the drag came from
+          window: captureWindow,
           newId: randomUUID,
         });
-        if (result === 'saved') toDashboard(Ch.PagesChanged);
+        if (result.kind === 'saved') toDashboard(Ch.PagesChanged);
         return result;
       } catch (err) {
         log.error('[later] drop not saved', err);

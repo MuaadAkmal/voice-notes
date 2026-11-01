@@ -3,12 +3,12 @@ import type { SavePhase } from './useSaveLater';
 const SHELL =
   'flex items-center justify-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
 
-/** Round chip beside the pomodoro chip: saves the window in front to Review later. */
+/** Round chip beside the pomodoro chip: saves the window in front for later. */
 export function SaveThisButton({ onSave }: { onSave: () => void }) {
   return (
     <button
-      aria-label="Save this window to Review later"
-      title="Save this window to Review later"
+      aria-label="Save this window for later"
+      title="Save this window for later"
       data-testid="save-this"
       onClick={(e) => {
         e.stopPropagation(); // the bar's own click starts a recording
@@ -75,7 +75,7 @@ export function SaveLaterPill({ phase }: { phase: Exclude<SavePhase, { kind: 'no
         <div key="saved" data-morph data-testid="save-later" className={`lf-glow ${SHELL} h-11 gap-2.5 pl-2.5 pr-4`}>
           <Tray landed />
           <span className="flex min-w-0 flex-col leading-tight">
-            <span className="lf-line-1 text-[13px] font-medium">Saved to Review later</span>
+            <span className="lf-line-1 text-[13px] font-medium">Saved to {phase.page}</span>
             <span className="lf-line-2 max-w-[200px] truncate text-[11px] text-white/55">{phase.label}</span>
           </span>
         </div>

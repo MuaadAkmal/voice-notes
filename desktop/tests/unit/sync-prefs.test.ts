@@ -78,6 +78,21 @@ it('applies remote settings without sending them back, the Review later page fir
   expect(ops().slice(before).map((o) => o.op)).toEqual(['page.update']);
 });
 
+it('takes the sites list from the account, unless this build cannot read it', () => {
+  let current: Settings = { ...DEFAULT_SETTINGS };
+  const deps = {
+    getSettings: () => current,
+    updateSettings: (p: Partial<Settings>) => (current = { ...current, ...p }),
+    pages: store.pages,
+    deviceName: 'PC',
+  };
+  const laterSites = [{ page: 'GitHub', hosts: ['github.com'], enabled: true }];
+  applyRemotePrefs([{ key: 'laterSites', value: laterSites }], deps);
+  expect(current.laterSites).toEqual(laterSites);
+  applyRemotePrefs([{ key: 'laterSites', value: [{ page: 'x', hosts: ['not a host'], enabled: true }] }], deps);
+  expect(current.laterSites).toEqual(laterSites);
+});
+
 it('a remote Review later id equal to ours changes nothing', () => {
   const ours = store.pages.create(null);
   const settings: Settings = { ...DEFAULT_SETTINGS, laterPageId: ours.id };

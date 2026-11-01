@@ -1,4 +1,5 @@
 import type { Settings } from '../../shared/channels';
+import { SettingsFieldSchemas } from '../../shared/ipc';
 import { QUICK_NOTES_TITLE } from '../commands/notes-page';
 import { SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import type { PageStore } from '../store/page-store';
@@ -46,6 +47,10 @@ export function applyRemotePrefs(prefs: { key: SyncedKey; value: unknown }[], d:
       if (typeof value !== 'string' || value === current.notesPageId) continue;
       if (current.notesPageId && d.pages.get(current.notesPageId)) d.pages.rename(current.notesPageId, `${QUICK_NOTES_TITLE} (${d.deviceName})`);
       d.updateSettings({ notesPageId: value }, { record: false });
+    } else if (key === 'laterSites') {
+      // Not hard-typed by the server: a list this build can't read is left out, not saved.
+      const sites = SettingsFieldSchemas.laterSites.safeParse(value);
+      if (sites.success) d.updateSettings({ laterSites: sites.data }, { record: false });
     } else {
       d.updateSettings({ [key]: value } as Partial<Settings>, { record: false });
     }

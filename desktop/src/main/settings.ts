@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
+import { DEFAULT_LATER_SITES } from '../shared/later-routes';
 import { DEFAULT_WAKE_WORDS } from '../shared/note-command';
 import { DEFAULT_POMODORO } from '../shared/pomodoro';
 import { DEFAULT_TRANSCRIPTION, type ModelId } from '../shared/transcription';
@@ -34,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   transcribeLanguage: 'auto',
   laterPageId: null,
   notesPageId: null,
+  laterSites: DEFAULT_LATER_SITES,
   dictationHotkey: [CTRL, META],
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,

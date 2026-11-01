@@ -5,6 +5,7 @@ import { sameCombo } from '../../shared/dictation';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { LaterSitesCard } from './LaterSitesCard';
 import { Kbd } from './NotesPage';
 import { useToast } from './Toast';
 import { readyText, useRestartToUpdate, useUpdates } from './UpdateBanner';
@@ -249,6 +250,8 @@ export function SettingsPage() {
 
         <UpdatesRow />
       </div>
+
+      <LaterSitesCard sites={settings.laterSites} onChange={(laterSites) => update({ laterSites })} />
     </div>
   );
 }

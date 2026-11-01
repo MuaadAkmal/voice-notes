@@ -11,6 +11,7 @@ import {
   DevicesSchema,
   DragSchema,
   type DropPayload,
+  type DropResult,
   type FetchAudioResult,
   DropPayloadSchema,
   OverlayTitleSchema,
@@ -89,7 +90,7 @@ type OverlayDeps = {
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
-  onDrop: (payload: DropPayload) => 'saved' | 'ignored'; // throws when saving fails
+  onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
   onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;

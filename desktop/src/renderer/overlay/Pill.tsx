@@ -4,6 +4,7 @@ import { isSilent, levelFromRms, rmsOf } from '../../shared/audio-level';
 import { progress } from '../../shared/pomodoro';
 import { PHASE_COLOR, PomodoroChip } from './Pomodoro';
 import { SaveThisButton } from './SaveLater';
+import { LATER_PAGE_TITLE } from '../../shared/later';
 import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
 
@@ -252,7 +253,10 @@ export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
         Drop to save for later
       </div>
     );
-  if (phase === 'saved') return <div data-morph className={`${SHELL} h-9 px-4 text-sm`}>Saved for later ✓</div>;
+  if (phase !== 'failed') {
+    const text = phase.saved === LATER_PAGE_TITLE ? 'Saved for later ✓' : `Saved to ${phase.saved} ✓`;
+    return <div data-morph className={`${SHELL} h-9 px-4 text-sm`}>{text}</div>;
+  }
   return <div data-morph className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
 }
 
