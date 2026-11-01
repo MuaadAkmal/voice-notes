@@ -22,6 +22,8 @@ type Bindings = {
   CloseHandle: (h: unknown) => boolean;
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
   GetAsyncKeyState: (vk: number) => number;
+  GetWindowRect: (hwnd: number, rect: Int32Array) => boolean;
+  IsIconic: (hwnd: number) => boolean;
   /** A pointer's numeric value (window handles fit in 32 bits, so the number is exact). */
   address: (p: unknown) => number;
 };
@@ -47,6 +49,8 @@ function bind(): Bindings | null {
       CloseHandle: kernel32.func('bool __stdcall CloseHandle(void* h)'),
       keybd_event: user32.func('void __stdcall keybd_event(uint8_t vk, uint8_t scan, uint32_t flags, uintptr_t extra)'),
       GetAsyncKeyState: user32.func('int16_t __stdcall GetAsyncKeyState(int vKey)'),
+      GetWindowRect: user32.func('bool __stdcall GetWindowRect(uintptr_t hWnd, int32_t* rect)'),
+      IsIconic: user32.func('bool __stdcall IsIconic(uintptr_t hWnd)'),
       address: (p) => Number(koffi.address(p)),
     };
   } catch (err) {
@@ -88,6 +92,21 @@ export function foregroundWindow(): ForegroundWindow | null {
     return { title: buf.toString('utf16le', 0, len * 2), processName: processName(b, pid[0]), pid: pid[0], hwnd: b.address(hwnd) };
   } catch (err) {
     log.warn('[win32] foreground window lookup failed', err);
+    return null;
+  }
+}
+
+/** A window's rectangle in physical pixels; null if it's minimized, empty or gone. */
+export function windowRect(hwnd: number): { x: number; y: number; width: number; height: number } | null {
+  const b = bind();
+  if (!b || !hwnd) return null;
+  try {
+    const r = Int32Array.of(0, 0, 0, 0); // left, top, right, bottom
+    if (b.IsIconic(hwnd) || !b.GetWindowRect(hwnd, r)) return null;
+    const rect = { x: r[0], y: r[1], width: r[2] - r[0], height: r[3] - r[1] };
+    return rect.width > 0 && rect.height > 0 ? rect : null;
+  } catch (err) {
+    log.warn('[win32] window rect lookup failed', err);
     return null;
   }
 }

@@ -68,7 +68,8 @@ export type Settings = {
   hotkeyPaused: boolean;
   theme: Theme;
   recordingSource: RecordingSource;
-  pillPosition: PillPosition | null; // null = bottom-centre of the primary display
+  pillPosition: PillPosition | null; // null = bottom-centre (of the monitor in use, or the primary display)
+  pillFollowsFocus: boolean; // the pill moves to the monitor of the window in front
   filmMode: boolean; // keep a rolling system-audio buffer for rewind; forced off at every launch
   rewindSeconds: RewindSeconds;
   autoPause: boolean; // pause playing media while recording a mic note

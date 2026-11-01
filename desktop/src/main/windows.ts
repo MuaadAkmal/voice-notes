@@ -50,11 +50,24 @@ function isAppUrl(url: string, appUrl: string): boolean {
   }
 }
 
-export function positionOverlay(win: BrowserWindow, saved: PillPosition | null): void {
+export function positionOverlay(win: BrowserWindow, saved: PillPosition | null, activeDisplayId?: number): void {
   const displays = screen.getAllDisplays().map((d) => ({ id: d.id, workArea: d.workArea }));
-  win.setBounds(
-    resolveOverlayBounds(saved, displays, screen.getPrimaryDisplay().id, { width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT }),
+  const bounds = resolveOverlayBounds(
+    saved,
+    displays,
+    screen.getPrimaryDisplay().id,
+    { width: OVERLAY_WIDTH, height: OVERLAY_HEIGHT },
+    activeDisplayId,
   );
+  win.setBounds(bounds);
+  // Crossing to a display with another scale can leave the window the wrong size; a second call lands it.
+  const after = win.getBounds();
+  if (after.width !== bounds.width || after.height !== bounds.height) win.setBounds(bounds);
+}
+
+/** The display a window is mostly on, from its rectangle in physical pixels. */
+export function displayOfRect(rect: { x: number; y: number; width: number; height: number }): number {
+  return screen.getDisplayMatching(screen.screenToDipRect(null, rect)).id;
 }
 
 /** The user dragged the pill here: express it relative to the display it ended up on. */
@@ -65,7 +78,7 @@ export function pillPositionOf(win: BrowserWindow): PillPosition {
 }
 
 /** Transparent, click-through, always-on-top strip that never takes focus (same technique as Wispr Flow). */
-export function createOverlayWindow(getSaved: () => PillPosition | null): BrowserWindow {
+export function createOverlayWindow(getSaved: () => PillPosition | null, getActive: () => number | undefined): BrowserWindow {
   const win = new BrowserWindow({
     width: OVERLAY_WIDTH,
     height: OVERLAY_HEIGHT,
@@ -86,10 +99,10 @@ export function createOverlayWindow(getSaved: () => PillPosition | null): Browse
   });
   win.setAlwaysOnTop(true, 'screen-saver');
   win.setIgnoreMouseEvents(true, { forward: true });
-  positionOverlay(win, getSaved());
+  positionOverlay(win, getSaved(), getActive());
   win.once('ready-to-show', () => win.showInactive());
 
-  const reposition = () => !win.isDestroyed() && positionOverlay(win, getSaved());
+  const reposition = () => !win.isDestroyed() && positionOverlay(win, getSaved(), getActive());
   screen.on('display-metrics-changed', reposition);
   screen.on('display-added', reposition);
   screen.on('display-removed', reposition);

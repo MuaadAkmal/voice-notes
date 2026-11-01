@@ -44,7 +44,8 @@ import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
-import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV } from './win32';
+import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
+import { MonitorFollower } from './overlay-position';
 import { NoteStore } from './store/note-store';
 import { CloudAsrClient } from './transcription/cloud-client';
 import { resolveEndpoint } from './transcription/endpoint';
@@ -62,7 +63,14 @@ import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
 import { ReminderScheduler } from './reminders/scheduler';
 import { fired as firedReminders, showReminder } from './reminders/notify';
-import { applyTitleBarTheme, createDashboardWindow, createOverlayWindow, pillPositionOf, positionOverlay } from './windows';
+import {
+  applyTitleBarTheme,
+  createDashboardWindow,
+  createOverlayWindow,
+  displayOfRect,
+  pillPositionOf,
+  positionOverlay,
+} from './windows';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) app.quit();
@@ -142,7 +150,9 @@ async function boot(): Promise<void> {
   registerNoteProtocol(store, fetcher);
   registerImageProtocol(store, fetcher);
 
-  const overlay = createOverlayWindow(() => settings.pillPosition);
+  // The display the pill is on while it follows focus; undefined until it has moved (or when off).
+  let pillDisplay: number | undefined;
+  const overlay = createOverlayWindow(() => settings.pillPosition, () => pillDisplay);
   // Only the overlay records; the dashboard just plays files through note://.
   const CAPTURE_PERMISSIONS = new Set(['media', 'display-capture']);
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
@@ -228,6 +238,23 @@ async function boot(): Promise<void> {
 
   // Which window the note was recorded over. Replaceable under test (there's no real foreground window).
   let foreground = foregroundWindow;
+  const foregroundDisplay = (): number | null => {
+    const rect = windowRect(foreground()?.hwnd ?? 0);
+    return rect && displayOfRect(rect);
+  };
+  // The pill goes to the monitor in use, except mid-recording or under the user's hand.
+  const follower = new MonitorFollower();
+  const pillBusy = () =>
+    controller.state !== 'idle' || dictation.active || overlayMouse.engaged || overlay.isFocusable();
+  const followFocus = () => {
+    if (!settings.pillFollowsFocus || overlay.isDestroyed()) return;
+    const display = foregroundDisplay();
+    if (display === null) return;
+    const target = follower.tick(display, pillBusy());
+    if (target === null) return;
+    pillDisplay = target;
+    positionOverlay(overlay, settings.pillPosition, target);
+  };
   const captureWindow = (): Capture | null => {
     const fg = foreground();
     // No window, or our own dashboard in front: nothing to attribute the note to.
@@ -423,7 +450,14 @@ async function boot(): Promise<void> {
     dictation,
     dictationGesture,
     onDevices: (d) => (devices = d),
-    onDragEnd: () => updateSettings({ pillPosition: pillPositionOf(overlay) }),
+    onDragEnd: () => {
+      const pillPosition = pillPositionOf(overlay);
+      if (settings.pillFollowsFocus) {
+        pillDisplay = pillPosition.displayId;
+        follower.settle(foregroundDisplay());
+      }
+      updateSettings({ pillPosition });
+    },
     titles: {
       start: () => {
         // Only take keyboard focus if the "Saved" pill is really on screen to type into.
@@ -531,6 +565,8 @@ async function boot(): Promise<void> {
   // Under test the gesture is driven through __voiceNotes; a global hook would also react to whatever
   // the person at the keyboard is doing and scramble the run.
   if (process.env.VOICE_NOTES_TEST !== '1') hotkey.start();
+  // Not under test: the pill's place must not depend on what's in front on the machine running the tests.
+  const followTimer = process.env.VOICE_NOTES_TEST === '1' ? null : setInterval(followFocus, 300);
 
   const tray = createTray({
     openDashboard: showDashboard,
@@ -557,7 +593,13 @@ async function boot(): Promise<void> {
     if (patch.dictationHotkey) hotkey.setDictationCombo(settings.dictationHotkey);
     if (patch.recordingSource) tray.refresh();
     // Reset (null) or a move from elsewhere: put the window where the setting says.
-    if ('pillPosition' in patch) positionOverlay(overlay, settings.pillPosition);
+    if (patch.pillFollowsFocus !== undefined) {
+      pillDisplay = undefined;
+      follower.settle(null); // on: the next tick brings the pill to the window in front
+    }
+    if ('pillPosition' in patch || patch.pillFollowsFocus !== undefined) {
+      positionOverlay(overlay, settings.pillPosition, pillDisplay);
+    }
     if (patch.hotkeyPaused !== undefined) {
       hotkey.setPaused(settings.hotkeyPaused);
       tray.refresh();
@@ -890,6 +932,7 @@ async function boot(): Promise<void> {
     autoPause.end(); // quitting mid-note must not leave the film paused
   });
   app.on('will-quit', () => {
+    if (followTimer) clearInterval(followTimer);
     syncController.stop();
     localWhisper.stop(); // never leave whisper-server.exe running
     hotkey.stop();

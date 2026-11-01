@@ -20,6 +20,11 @@ export class OverlayMouse {
     this.update();
   }
 
+  /** The pointer or a drag is on the pill right now. */
+  get engaged(): boolean {
+    return this.hover || this.drag;
+  }
+
   private update(): void {
     const ignore = !(this.hover || this.drag);
     if (ignore === this.ignoring) return;

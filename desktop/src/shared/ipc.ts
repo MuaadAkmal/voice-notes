@@ -48,6 +48,7 @@ export const SettingsFieldSchemas = {
   theme: z.enum(['system', 'light', 'dark']),
   recordingSource: SourceSchema,
   pillPosition: z.object({ displayId: z.number().int(), x: z.number().int(), y: z.number().int() }).nullable(),
+  pillFollowsFocus: z.boolean(),
   filmMode: z.boolean(),
   rewindSeconds: z.union(REWIND_SECONDS.map((n) => z.literal(n))),
   autoPause: z.boolean(),

@@ -193,6 +193,14 @@ export function SettingsPage() {
           />
         </Row>
 
+        <Row title="Pill follows active monitor" hint="The pill moves to the monitor of the window you're using.">
+          <Switch
+            aria-label="Pill follows active monitor"
+            checked={settings.pillFollowsFocus}
+            onCheckedChange={(v) => update({ pillFollowsFocus: v })}
+          />
+        </Row>
+
         <Row title="Pill position" hint="Drag the pill anywhere on screen; it remembers the spot.">
           <Button variant="outline" size="sm" disabled={!settings.pillPosition} onClick={() => update({ pillPosition: null })}>
             Reset pill position
