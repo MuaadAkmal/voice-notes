@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dictationHotkey: [CTRL, META],
   dictationHotkeyLabel: 'Ctrl+Win',
   dictationSound: true,
+  dictationCleanup: null,
   voiceToCalendar: true,
   voiceReminders: true,
   voiceToLists: true,

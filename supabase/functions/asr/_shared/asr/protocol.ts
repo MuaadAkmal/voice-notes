@@ -7,6 +7,8 @@ export type TranscribeResponse = {
   used: number;
   limit: number;
   resetsAt: string;
+  /** How long each step took, from the start of both; the app logs it. */
+  ms?: { reserve?: number; provider?: number };
 };
 
 export type UsageResponse = { used: number; limit: number; resetsAt: string; plan: string };

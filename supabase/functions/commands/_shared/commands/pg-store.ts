@@ -16,12 +16,12 @@ export class PgUsageStore implements UsageStore {
   }
 }
 
-/** The same function through the project's REST API, with the service role key (server side only). */
+/** The same function through the project's REST API, with the service role key (server side only). `rpc` picks the counter. */
 export class RestUsageStore implements UsageStore {
-  constructor(private readonly o: { url: string; serviceKey: string; fetch: typeof fetch }) {}
+  constructor(private readonly o: { url: string; serviceKey: string; fetch: typeof fetch; rpc?: string }) {}
 
   async increment(userId: string, day: string): Promise<number> {
-    const res = await this.o.fetch(`${this.o.url}/rest/v1/rpc/count_command`, {
+    const res = await this.o.fetch(`${this.o.url}/rest/v1/rpc/${this.o.rpc ?? 'count_command'}`, {
       method: 'POST',
       headers: { apikey: this.o.serviceKey, authorization: `Bearer ${this.o.serviceKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({ p_user: userId, p_day: day }),

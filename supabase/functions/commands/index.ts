@@ -10,6 +10,7 @@ import { CommandsCore } from './_shared/commands/core.ts';
 import { groqChat } from './_shared/commands/groq.ts';
 import { handleCommands } from './_shared/commands/handler.ts';
 import { RestUsageStore } from './_shared/commands/pg-store.ts';
+import { PolishCore } from './_shared/commands/polish.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const apiKey = Deno.env.get('GROQ_API_KEY') ?? '';
@@ -28,6 +29,17 @@ const core = missing.length
       dailyLimit: Number(Deno.env.get('COMMANDS_DAILY_LIMIT')) || 200,
       now: Date.now,
       timing: (steps) => console.log('[commands] ms', JSON.stringify(steps)),
+    });
+
+const polish = missing.length
+  ? null
+  : new PolishCore({
+      // A 5-minute dictation is about 1000 words, plus the model's reasoning. The app gives up sooner than this.
+      chat: groqChat({ apiKey, model: Deno.env.get('GROQ_POLISH_MODEL') || Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-20b', fetch, timeoutMs: 8_000, maxTokens: 5000 }),
+      usage: new RestUsageStore({ url: SUPABASE_URL, serviceKey, fetch, rpc: 'count_polish' }),
+      dailyLimit: Number(Deno.env.get('POLISH_DAILY_LIMIT')) || 1000,
+      now: Date.now,
+      timing: (steps) => console.log('[polish] ms', JSON.stringify(steps)),
     });
 
 // The project's public signing keys, as the platform provides them; null if absent or unreadable.
@@ -63,6 +75,7 @@ Deno.serve((req) =>
       return user;
     },
     core,
+    polish,
     missing,
   }),
 );

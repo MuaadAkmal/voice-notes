@@ -32,7 +32,12 @@ export class CommandsClient {
     return this.post('remind', req);
   }
 
-  private async post<T>(route: 'resolve' | 'remind', req: unknown): Promise<T> {
+  /** Dictated text cleaned up; null means keep the transcript. */
+  polish(text: string, o: { signal: AbortSignal; timeoutMs: number }): Promise<{ text: string | null }> {
+    return this.post('polish', { text }, o);
+  }
+
+  private async post<T>(route: 'resolve' | 'remind' | 'polish', req: unknown, o?: { signal: AbortSignal; timeoutMs: number }): Promise<T> {
     const token = await this.d.getToken();
     if (!token) throw new NotSignedIn();
     let res: Response;
@@ -41,7 +46,7 @@ export class CommandsClient {
         method: 'POST',
         headers: { authorization: `Bearer ${token}`, apikey: this.d.apiKey, 'content-type': 'application/json' },
         body: JSON.stringify(req),
-        signal: AbortSignal.timeout(this.d.timeoutMs ?? 20_000),
+        signal: o ? AbortSignal.any([o.signal, AbortSignal.timeout(o.timeoutMs)]) : AbortSignal.timeout(this.d.timeoutMs ?? 20_000),
       });
     } catch {
       throw new Offline();

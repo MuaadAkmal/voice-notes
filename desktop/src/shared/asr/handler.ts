@@ -64,7 +64,7 @@ export async function handleAsr(req: Request, d: AsrHandlerDeps): Promise<Respon
     const body = await readCapped(req).catch(() => new Uint8Array(0));
     if (!body) return json(413, { error: 'too_large' });
     const language = url.searchParams.get('language') || null;
-    return json(200, await d.core.transcribe(user.userId, body, language));
+    return json(200, await d.core.transcribe(user.userId, body, language, url.searchParams.get('clean') === '1'));
   } catch (err) {
     if (err instanceof BadAudio) return json(400, { error: 'bad_audio' });
     if (err instanceof TooLarge) return json(413, { error: 'too_large' });

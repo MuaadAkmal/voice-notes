@@ -94,6 +94,48 @@ it('hold: records, transcribes, saves, then pastes', async () => {
   expect(ctl.state).toBe('idle');
 });
 
+const polished = () => {
+  ctl = new DictationController({
+    ...ports,
+    polish: async (text) => {
+      log.push(`polish:${text}`);
+      return 'Hello.';
+    },
+  });
+};
+
+it('the tidied text is what gets saved and pasted', async () => {
+  polished();
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log.slice(-4)).toEqual(['polish:hello', 'save:Hello.:Slack', 'paste:Hello.', 'idle']);
+});
+
+it('a command is read as said and never tidied', async () => {
+  polished();
+  listOn = true;
+  transcribe = async () => 'pixie add milk to groceries';
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  await ctl.onAudio(audio(800));
+  expect(log.some((l) => l.startsWith('polish:'))).toBe(false);
+  expect(log.some((l) => l.startsWith('list:'))).toBe(true);
+});
+
+it('cancelling during the cleanup pastes nothing', async () => {
+  let finish = (_: string) => undefined as void;
+  ctl = new DictationController({ ...ports, polish: () => new Promise((r) => (finish = r)) });
+  ctl.handleGesture('start');
+  ctl.handleGesture('stop');
+  const done = ctl.onAudio(audio(800));
+  await flush();
+  ctl.handleGesture('cancel');
+  finish('Hello.');
+  await done;
+  expect(log.some((l) => l.startsWith('paste:') || l.startsWith('save:'))).toBe(false);
+});
+
 it('loads the engine once when listening starts, never when refused', () => {
   blocked = true;
   ctl.handleGesture('start');

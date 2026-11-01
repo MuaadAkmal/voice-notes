@@ -28,7 +28,10 @@ function wav(seconds: number, rate = 16000): Uint8Array {
 function setup(nowIso = '2026-10-15T12:00:00Z') {
   const store = new MemoryAsrStore();
   let now = Date.parse(nowIso);
-  const transcribe = vi.fn(async (_w: Uint8Array, _l: string | null) => ({ text: 'hello', language: 'en' as string | null }));
+  const transcribe = vi.fn(async (_w: Uint8Array, _l: string | null, _o: { clean: boolean; signal: AbortSignal }) => ({
+    text: 'hello',
+    language: 'en' as string | null,
+  }));
   const core = new AsrCore({ store, transcribe, now: () => now });
   return { store, transcribe, core, setNow: (t: number) => (now = t) };
 }
@@ -37,8 +40,9 @@ describe('AsrCore', () => {
   it('transcribes and charges whole seconds', async () => {
     const { core, transcribe } = setup();
     const r = await core.transcribe(U, wav(2.3), 'en');
-    expect(r).toEqual({ text: 'hello', language: 'en', seconds: 3, used: 3, limit: 7200, resetsAt: '2026-11-01T00:00:00.000Z' });
+    expect(r).toMatchObject({ text: 'hello', language: 'en', seconds: 3, used: 3, limit: 7200, resetsAt: '2026-11-01T00:00:00.000Z' });
     expect(transcribe.mock.calls[0][1]).toBe('en');
+    expect(transcribe.mock.calls[0][2].clean).toBe(false);
     expect(await core.usage(U)).toEqual({ used: 3, limit: 7200, resetsAt: '2026-11-01T00:00:00.000Z', plan: 'free' });
   });
 
@@ -86,14 +90,43 @@ describe('AsrCore', () => {
     await expect(core.transcribe(U, new Uint8Array(10 * 1024 * 1024 + 1), null)).rejects.toBeInstanceOf(TooLarge);
   });
 
-  it('quota refused is QuotaExceeded and the transcriber is never called', async () => {
+  it('quota refused is QuotaExceeded, the provider call is cancelled and nothing is charged', async () => {
     const { core, store, transcribe } = setup();
     await store.reserve(U, '2026-10-01', 7199);
     const e = await core.transcribe(U, wav(2), null).catch((x) => x);
     expect(e).toBeInstanceOf(QuotaExceeded);
     expect((e as QuotaExceeded).resetsAt).toBe('2026-11-01T00:00:00.000Z');
-    expect(transcribe).not.toHaveBeenCalled();
+    expect(transcribe.mock.calls[0][2].signal.aborted).toBe(true);
     expect((await core.usage(U)).used).toBe(7199);
+  });
+
+  it('a reservation that fails cancels the provider call too', async () => {
+    const { core, store, transcribe } = setup();
+    vi.spyOn(store, 'reserve').mockRejectedValueOnce(new Error('db down'));
+    await expect(core.transcribe(U, wav(1), null)).rejects.toThrow('db down');
+    expect(transcribe.mock.calls[0][2].signal.aborted).toBe(true);
+  });
+
+  it('runs the provider while the reservation is still out, and passes clean on', async () => {
+    const { core, store, transcribe } = setup();
+    let release = () => undefined as void;
+    const real = store.reserve.bind(store);
+    vi.spyOn(store, 'reserve').mockImplementationOnce(async (...a) => {
+      await new Promise<void>((r) => (release = r));
+      return real(...a);
+    });
+    const done = core.transcribe(U, wav(1), null, true);
+    await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(1));
+    expect(transcribe.mock.calls[0][2].clean).toBe(true);
+    release();
+    expect((await done).text).toBe('hello');
+  });
+
+  it('a provider failing before the reservation answers still refunds, without an unhandled rejection', async () => {
+    const { core, transcribe } = setup();
+    transcribe.mockRejectedValueOnce(new Error('boom'));
+    await expect(core.transcribe(U, wav(5), null)).rejects.toBeInstanceOf(ProviderFailed);
+    expect((await core.usage(U)).used).toBe(0);
   });
 
   it('a provider failure refunds', async () => {

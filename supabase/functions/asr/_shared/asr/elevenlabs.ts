@@ -3,18 +3,32 @@ import type { Transcriber } from './core.ts';
 // ElevenLabs Scribe speech-to-text. The key stays in the Edge Function.
 
 const STT_URL = 'https://api.elevenlabs.io/v1/speech-to-text';
+const HEADER_BYTES = 44; // canonicalWav's header
+const TIMEOUT_MS = 60_000;
+
+/** Dictation clips are 16 kHz mono: sent raw, ElevenLabs skips decoding them, which its docs say is faster. */
+const isPcm16k = (wav: Uint8Array) => {
+  const v = new DataView(wav.buffer, wav.byteOffset, wav.byteLength);
+  return wav.length > HEADER_BYTES && v.getUint32(24, true) === 16000 && v.getUint16(22, true) === 1;
+};
 
 export function elevenLabsTranscriber(apiKey: string, fetchFn: typeof globalThis.fetch): Transcriber {
-  return async (wav, language) => {
+  return async (wav, language, { clean, signal }) => {
     const form = new FormData();
     form.set('model_id', 'scribe_v2');
     if (language) form.set('language_code', language);
-    form.set('file', new Blob([wav as BlobPart], { type: 'audio/wav' }), 'audio.wav');
+    if (clean) form.set('no_verbatim', 'true');
+    if (isPcm16k(wav)) {
+      form.set('file_format', 'pcm_s16le_16');
+      form.set('file', new Blob([wav.subarray(HEADER_BYTES) as BlobPart], { type: 'application/octet-stream' }), 'audio.pcm');
+    } else {
+      form.set('file', new Blob([wav as BlobPart], { type: 'audio/wav' }), 'audio.wav');
+    }
     const res = await fetchFn(STT_URL, {
       method: 'POST',
       headers: { 'xi-api-key': apiKey },
       body: form,
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
     });
     if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
     const j = (await res.json()) as { text?: unknown; language_code?: unknown };

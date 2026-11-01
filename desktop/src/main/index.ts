@@ -46,6 +46,8 @@ import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
+import { polishDictation } from './dictation/polish';
+import { cleanupOn } from '../shared/transcription';
 import { MonitorFollower } from './overlay-position';
 import { loginItem, updateExePath } from './updater/install';
 import { type UpdaterEvents, UpdateService, type UpdaterPort } from './updater/service';
@@ -254,7 +256,7 @@ async function boot(): Promise<void> {
   let cloudClient = makeCloudAsr(`${SUPABASE_URL}/functions/v1/asr`);
   // Through the current client, so a test's useServer() applies to jobs already wired.
   const cloudAsr: Pick<CloudAsrClient, 'transcribe' | 'usage'> = {
-    transcribe: (audio, language, signal) => cloudClient.transcribe(audio, language, signal),
+    transcribe: (audio, language, signal, clean) => cloudClient.transcribe(audio, language, signal, clean),
     usage: () => cloudClient.usage(),
   };
   const endpoint = () => resolveEndpoint({ settings: () => settings, secrets, local: localWhisper });
@@ -400,7 +402,12 @@ async function boot(): Promise<void> {
       const ep = await endpoint();
       try {
         const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
-        if (ep.cloud) return cleanTranscript((await cloudAsr.transcribe(audio, language, signal)).text);
+        if (ep.cloud) {
+          const t0 = Date.now();
+          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings));
+          log.info('[dictation] ms', JSON.stringify({ transcribe: Date.now() - t0, server: r.ms, bytes: audio.length }));
+          return cleanTranscript(r.text);
+        }
         const result = await transcribe({
           baseUrl: ep.baseUrl,
           model: ep.model,
@@ -416,6 +423,15 @@ async function boot(): Promise<void> {
       } finally {
         ep.release();
       }
+    },
+    polish: async (text, signal) => {
+      const t0 = Date.now();
+      const out = await polishDictation(text, signal, {
+        enabled: () => cleanupOn(settings),
+        polish: (t, o) => commandsClient.polish(t, o),
+      });
+      log.info('[dictation] ms', JSON.stringify({ polish: Date.now() - t0, changed: out !== text, chars: text.length }));
+      return out;
     },
     prewarm: () => {
       const { provider, localModel } = settings.transcription;

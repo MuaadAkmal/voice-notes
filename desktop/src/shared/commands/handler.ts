@@ -1,5 +1,6 @@
 import { BadRequest, type CommandsCore, LimitReached } from './core';
 import { LlmFailed } from './groq';
+import type { PolishCore } from './polish';
 
 // The `commands` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
 // The account always comes from the verified token. Errors say what kind, never the internals.
@@ -9,6 +10,7 @@ export type CommandsHandlerDeps = {
   verify(jwt: string): Promise<{ userId: string } | null>;
   /** Null when a secret is missing. */
   core: Pick<CommandsCore, 'resolve' | 'remind'> | null;
+  polish?: Pick<PolishCore, 'polish'> | null;
   missing: string[];
 };
 
@@ -23,7 +25,7 @@ export async function handleCommands(req: Request, d: CommandsHandlerDeps): Prom
     return json(500, { error: 'misconfigured', missing: d.missing });
   }
   const route = new URL(req.url).pathname.split('/').pop();
-  if (req.method !== 'POST' || (route !== 'resolve' && route !== 'remind')) return json(404, { error: 'Not found' });
+  if (req.method !== 'POST' || (route !== 'resolve' && route !== 'remind' && !(route === 'polish' && d.polish))) return json(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
@@ -40,6 +42,7 @@ export async function handleCommands(req: Request, d: CommandsHandlerDeps): Prom
   }
 
   try {
+    if (route === 'polish') return json(200, await d.polish!.polish(user.userId, body));
     return json(200, route === 'remind' ? await d.core.remind(user.userId, body) : await d.core.resolve(user.userId, body));
   } catch (err) {
     if (err instanceof BadRequest) return json(400, { error: 'bad-request' });

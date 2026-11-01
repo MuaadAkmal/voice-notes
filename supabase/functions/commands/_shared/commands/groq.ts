@@ -13,7 +13,7 @@ async function modelIds(o: { apiKey: string; fetch: typeof fetch }): Promise<str
   return (body.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string').sort();
 }
 
-export function groqChat(o: { apiKey: string; model: string; fetch: typeof fetch; timeoutMs?: number }): Chat {
+export function groqChat(o: { apiKey: string; model: string; fetch: typeof fetch; timeoutMs?: number; maxTokens?: number }): Chat {
   return async (system, user) => {
     let res: Response;
     try {
@@ -24,7 +24,7 @@ export function groqChat(o: { apiKey: string; model: string; fetch: typeof fetch
           model: o.model,
           temperature: 0,
           // gpt-oss reasons before it answers, and that counts against max_tokens: keep it short.
-          max_tokens: 1500,
+          max_tokens: o.maxTokens ?? 1500,
           ...(o.model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
           response_format: { type: 'json_object' },
           messages: [

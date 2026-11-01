@@ -21,6 +21,8 @@ export type DictationPorts = {
   getCapture?(): Capture | null;
   /** WAV → text. Throws an Error whose message is fit for the pill. */
   transcribe(wav: Uint8Array, signal: AbortSignal): Promise<string>;
+  /** The text tidied for pasting; never rejects (it falls back to the text it was given). */
+  polish?(text: string, signal: AbortSignal): Promise<string>;
   save(text: string, app: string | null): void;
   paste(text: string): Promise<void>;
   idleState(): OverlayState;
@@ -163,12 +165,18 @@ export class DictationController {
       return;
     }
     if (this.request !== request) return;
-    this.request = null;
     if (!text) {
+      this.request = null;
       this.fail('No speech heard');
       return;
     }
     const command = this.command(text);
+    // Commands keep the words as said: they're read for triggers and items, not pasted as prose.
+    if (!command && this.p.polish) {
+      text = await this.p.polish(text, request.signal);
+      if (this.request !== request) return; // cancelled meanwhile
+    }
+    this.request = null;
     try {
       this.p.save(command ? `${command.mark} ${text}` : text, this.app);
     } catch {

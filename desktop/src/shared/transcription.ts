@@ -74,6 +74,14 @@ export const DEFAULT_TRANSCRIPTION: TranscriptionSettings = {
 };
 
 /** whisper.cpp answers silence with markers like "[BLANK_AUDIO]": text made only of markers means no speech. */
+/**
+ * Whether dictation gets cleaned up. Until the user chooses, only with Cloud: someone on their own
+ * server or the built-in engine picked that to keep their words on hardware they control.
+ */
+export function cleanupOn(s: { dictationCleanup: boolean | null; transcription: { provider: string | null } }): boolean {
+  return s.dictationCleanup ?? s.transcription.provider === 'cloud';
+}
+
 export function cleanTranscript(text: string): string {
   const trimmed = text.trim();
   return trimmed.replace(/\[[^\]]*\]|\([^)]*\)/g, '').trim() === '' ? '' : trimmed;

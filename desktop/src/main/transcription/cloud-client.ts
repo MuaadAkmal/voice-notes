@@ -54,11 +54,17 @@ type Deps = {
 export class CloudAsrClient {
   constructor(private readonly d: Deps) {}
 
-  async transcribe(audio: Uint8Array, language: string | null, signal?: AbortSignal): Promise<{ text: string; language: string | null }> {
+  /** clean: leave out filler words and false starts (dictation; voice notes stay word for word). */
+  async transcribe(
+    audio: Uint8Array,
+    language: string | null,
+    signal?: AbortSignal,
+    clean = false,
+  ): Promise<{ text: string; language: string | null; ms?: TranscribeResponse['ms'] }> {
     const body = trimWav(audio, MAX_SECONDS);
-    const query = language ? `?language=${encodeURIComponent(language)}` : '';
-    const r = await this.call<TranscribeResponse>(`/transcribe${query}`, { method: 'POST', body, contentType: 'audio/wav', signal });
-    return { text: typeof r.text === 'string' ? r.text : '', language: language ?? twoLetter(r.language) };
+    const params = new URLSearchParams({ ...(language ? { language } : {}), ...(clean ? { clean: '1' } : {}) }).toString();
+    const r = await this.call<TranscribeResponse>(`/transcribe${params ? `?${params}` : ''}`, { method: 'POST', body, contentType: 'audio/wav', signal });
+    return { text: typeof r.text === 'string' ? r.text : '', language: language ?? twoLetter(r.language), ms: r.ms };
   }
 
   usage(): Promise<UsageResponse> {

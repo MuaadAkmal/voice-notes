@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { type AudioDevice, type RecordingSource, REWIND_SECONDS, type RewindSeconds, type Settings, type Theme } from '../../shared/channels';
 import { sameCombo } from '../../shared/dictation';
+import { cleanupOn } from '../../shared/transcription';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -125,6 +126,17 @@ export function SettingsPage() {
             aria-label="Start and stop sound"
             checked={settings.dictationSound}
             onCheckedChange={(v) => update({ dictationSound: v })}
+          />
+        </Row>
+
+        <Row
+          title="Clean up dictation"
+          hint="Removes filler words and repeats, and adds lists, quotes and paragraphs. Needs sign-in; your dictated text is sent to Groq to do this."
+        >
+          <Switch
+            aria-label="Clean up dictation"
+            checked={cleanupOn(settings)}
+            onCheckedChange={(v) => update({ dictationCleanup: v })}
           />
         </Row>
 

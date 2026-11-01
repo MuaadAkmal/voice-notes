@@ -81,7 +81,8 @@ export type Settings = {
   notesPageId: string | null; // the built-in Quick notes page, where "Note, …" lands when no page matches; created at boot
   dictationHotkey: number[]; // uiohook keycodes: hold to dictate into the focused app
   dictationHotkeyLabel: string;
-  dictationSound: boolean; // a ping when dictation starts listening
+  dictationSound: boolean;
+  dictationCleanup: boolean | null; // tidy dictated text before pasting it (Groq, through the commands function); null = on with Cloud only // a ping when dictation starts listening
   voiceToCalendar: boolean; // "Calendar, …" dictations become Google Calendar events while connected
   voiceReminders: boolean; // "Remind me to … in 10 min" dictations become reminders on this PC (+ Google Calendar while connected)
   voiceToLists: boolean; // "List, …" dictations add to a page (via the `commands` function) while signed in

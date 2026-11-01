@@ -70,6 +70,7 @@ export const SettingsFieldSchemas = {
   dictationHotkey: z.array(z.number().int().nonnegative()).min(1).max(4),
   dictationHotkeyLabel: z.string().min(1).max(60),
   dictationSound: z.boolean(),
+  dictationCleanup: z.boolean().nullable(),
   voiceToCalendar: z.boolean(),
   voiceReminders: z.boolean(),
   voiceToLists: z.boolean(),

@@ -40,6 +40,7 @@ const FUNCTIONS = {
     'commands/pg-store.ts',
     'commands/groq.ts',
     'commands/core.ts',
+    'commands/polish.ts',
     'commands/handler.ts',
   ],
   asr: [
