@@ -1,6 +1,7 @@
-import { app, type BrowserWindow, desktopCapturer, nativeTheme, net, powerMonitor, screen, session, shell } from 'electron';
+import { app, autoUpdater, type BrowserWindow, desktopCapturer, nativeTheme, net, Notification, powerMonitor, screen, session, shell } from 'electron';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
@@ -46,6 +47,8 @@ import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
 import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
 import { MonitorFollower } from './overlay-position';
+import { loginItem, updateExePath } from './updater/install';
+import { type UpdaterEvents, UpdateService, type UpdaterPort } from './updater/service';
 import { NoteStore } from './store/note-store';
 import { CloudAsrClient } from './transcription/cloud-client';
 import { resolveEndpoint } from './transcription/endpoint';
@@ -89,6 +92,40 @@ let onDashboardFocus: () => void = () => undefined; // set in boot
 
 function showDashboard(): void {
   showDashboardThen();
+}
+
+// Kept referenced: a garbage-collected Notification loses its click handler.
+let updateToast: Notification | null = null;
+
+function electronUpdater(beforeInstall: () => void): UpdaterPort {
+  return {
+    setFeedURL: (url) => autoUpdater.setFeedURL({ url }),
+    check: () => autoUpdater.checkForUpdates(),
+    install: () => {
+      beforeInstall(); // the dashboard's close only hides it otherwise, which would stop the quit
+      autoUpdater.quitAndInstall();
+    },
+    listen: (on) => {
+      autoUpdater.on('checking-for-update', on.checking);
+      autoUpdater.on('update-available', on.available);
+      autoUpdater.on('update-not-available', on.notAvailable);
+      autoUpdater.on('error', on.error);
+      autoUpdater.on('update-downloaded', (_e, _notes, name) => on.downloaded(name || null));
+    },
+  };
+}
+
+/** Under VOICE_NOTES_TEST=1: Playwright plays Squirrel's part, and nothing really installs. */
+function fakeUpdater() {
+  let events: UpdaterEvents | null = null;
+  let installs = 0;
+  const port: UpdaterPort = {
+    setFeedURL: () => undefined,
+    check: () => undefined,
+    install: () => void installs++,
+    listen: (on) => void (events = on),
+  };
+  return { port, downloaded: (version: string) => events?.downloaded(version), installs: () => installs };
 }
 
 /** Shows the dashboard; `then` runs once it can take messages (at once, or after a new window loads). */
@@ -565,6 +602,30 @@ async function boot(): Promise<void> {
   // Under test the gesture is driven through __voiceNotes; a global hook would also react to whatever
   // the person at the keyboard is doing and scramble the run.
   if (process.env.VOICE_NOTES_TEST !== '1') hotkey.start();
+  // Only an installed copy has Squirrel's Update.exe; dev runs and the portable zip don't.
+  const installed = app.isPackaged && fs.existsSync(updateExePath(process.execPath));
+  const applyLoginItem = (openAtLogin: boolean) =>
+    app.setLoginItemSettings({ openAtLogin, ...loginItem(process.execPath, installed, HIDDEN_ARG) });
+  const testUpdates = fakeUpdater();
+  const fakeUpdates = process.env.VOICE_NOTES_TEST === '1';
+  const updates = new UpdateService({
+    port: fakeUpdates ? testUpdates.port : electronUpdater(() => (isQuitting = true)),
+    version: app.getVersion(),
+    supported: installed || fakeUpdates,
+    busy: () => controller.state !== 'idle' || dictation.active,
+    onChange: (status) => {
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.UpdatesChanged, status);
+    },
+    onReady: (status) => {
+      if (fakeUpdates || !Notification.isSupported()) return;
+      updateToast = new Notification({
+        title: status.newVersion ? `Version ${status.newVersion} is ready` : 'A new version is ready',
+        body: 'Open Voice Notes to restart and update.',
+      });
+      updateToast.on('click', showDashboard);
+      updateToast.show();
+    },
+  });
   // Not under test: the pill's place must not depend on what's in front on the machine running the tests.
   const followTimer = process.env.VOICE_NOTES_TEST === '1' ? null : setInterval(followFocus, 300);
 
@@ -605,7 +666,7 @@ async function boot(): Promise<void> {
       tray.refresh();
     }
     if (patch.launchAtLogin !== undefined) {
-      app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin, args: [HIDDEN_ARG] });
+      applyLoginItem(settings.launchAtLogin);
     }
     if (patch.filmMode !== undefined) {
       send(Ch.FilmMode, { on: settings.filmMode });
@@ -916,6 +977,7 @@ async function boot(): Promise<void> {
     connectors,
     reminders,
     files: fileSync,
+    updates,
     pomodoro: {
       get: () => pomodoro,
       command: (action) => send(Ch.PomodoroCommand, { action }),
@@ -931,7 +993,11 @@ async function boot(): Promise<void> {
     isQuitting = true;
     autoPause.end(); // quitting mid-note must not leave the film paused
   });
+  // An earlier version's login item points into its own app-x.y.z folder, which an update leaves behind.
+  if (installed && settings.launchAtLogin) applyLoginItem(true);
+  updates.start();
   app.on('will-quit', () => {
+    updates.stop();
     if (followTimer) clearInterval(followTimer);
     syncController.stop();
     localWhisper.stop(); // never leave whisper-server.exe running
@@ -946,6 +1012,7 @@ async function boot(): Promise<void> {
       store,
       rewind, // what Alt+Win+Shift does
       setForeground: (fn: typeof foregroundWindow) => (foreground = fn),
+      updates: testUpdates, // downloaded(version): as if Squirrel finished; installs(): restarts asked for
       mediaPresses: () => mediaPresses,
       openedExternal, // URLs the dashboard asked to open in the browser
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly

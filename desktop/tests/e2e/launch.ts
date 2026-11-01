@@ -18,6 +18,7 @@ export type Hooks = {
   rewind(): void;
   setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
   mediaPresses(): number;
+  updates: { downloaded(version: string): void; installs(): number };
   pagesChanged(): void;
   openedExternal: string[];
   transcription: { idle(): Promise<void> };

@@ -25,6 +25,7 @@ import {
   type Settings,
   type StatusMap,
   type TestResult,
+  type UpdateStatus,
 } from '../shared/channels';
 import { chunk } from '../shared/format';
 import type { Pomodoro } from '../shared/pomodoro';
@@ -165,6 +166,10 @@ const dashboardApi = {
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),
   onFoldersChanged: (cb: () => void) => subscribe(Ch.FoldersChanged, cb),
   onSettingsChanged: (cb: () => void) => subscribe(Ch.SettingsChanged, cb),
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(Ch.UpdatesGet),
+  checkForUpdates: (): Promise<void> => ipcRenderer.invoke(Ch.UpdatesCheck),
+  restartToUpdate: (): Promise<'restarting' | 'busy' | 'not-ready'> => ipcRenderer.invoke(Ch.UpdatesRestart),
+  onUpdatesChanged: (cb: (status: UpdateStatus) => void) => subscribeWith(Ch.UpdatesChanged, cb),
 };
 
 export type DashboardApi = typeof dashboardApi;

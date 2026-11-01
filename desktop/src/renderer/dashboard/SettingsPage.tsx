@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Kbd } from './NotesPage';
 import { useToast } from './Toast';
+import { readyText, useRestartToUpdate, useUpdates } from './UpdateBanner';
 
 const api = window.dashboardApi;
 const THEMES: { value: Theme; label: string; Icon: typeof Monitor }[] = [
@@ -23,6 +24,39 @@ const SOURCES: { value: RecordingSource; label: string }[] = [
 const REWIND_COMBO = [56, 3675, 42];
 // Radix Select can't hold an empty value; this stands for "System default" (micDeviceId null).
 const DEFAULT_MIC = 'default';
+
+function UpdatesRow() {
+  const status = useUpdates();
+  const restart = useRestartToUpdate();
+  if (!status) return null;
+  const hint = {
+    unsupported: 'Updates install automatically in the installed version. This copy needs a manual download.',
+    idle: 'New versions download in the background.',
+    checking: 'Checking…',
+    downloading: 'Downloading the new version…',
+    'up-to-date': "You're up to date.",
+    ready: `${readyText(status)}.`,
+    error: status.error,
+  }[status.state];
+  return (
+    <Row title={`Version ${status.version}`} hint={hint}>
+      {status.state === 'ready' ? (
+        <Button size="sm" onClick={restart}>
+          Restart now
+        </Button>
+      ) : status.state !== 'unsupported' ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={status.state === 'checking' || status.state === 'downloading'}
+          onClick={() => api.checkForUpdates()}
+        >
+          Check for updates
+        </Button>
+      ) : null}
+    </Row>
+  );
+}
 
 export function SettingsPage() {
   const toast = useToast();
@@ -212,6 +246,8 @@ export function SettingsPage() {
             Open folder
           </Button>
         </Row>
+
+        <UpdatesRow />
       </div>
     </div>
   );

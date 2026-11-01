@@ -263,7 +263,11 @@ export const Ch = {
   PomodoroGet: 'pomodoro:get', // → Pomodoro
   PomodoroSessions: 'pomodoro:sessions', // → PomodoroSession[]
   PomodoroClearSessions: 'pomodoro:clear-sessions',
+  UpdatesGet: 'updates:get', // → UpdateStatus
+  UpdatesCheck: 'updates:check',
+  UpdatesRestart: 'updates:restart', // → 'restarting' | 'busy' | 'not-ready'
   // main → dashboard
+  UpdatesChanged: 'updates:changed', // UpdateStatus
   PagesChanged: 'pages:changed',
   NotesChanged: 'notes:changed',
   SettingsChanged: 'settings:changed',
@@ -280,6 +284,14 @@ export const Ch = {
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
 } as const;
+
+/** The app's own updates. `newVersion` can be null: Windows doesn't always name the release. */
+export type UpdateStatus = {
+  version: string;
+  state: 'unsupported' | 'idle' | 'checking' | 'downloading' | 'up-to-date' | 'ready' | 'error';
+  newVersion?: string | null;
+  error?: string;
+};
 
 /** Cloud minutes used this month, in seconds; or why they are unknown. */
 export type CloudUsageResult =

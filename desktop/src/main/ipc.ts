@@ -1,6 +1,7 @@
 import { BrowserWindow, clipboard, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, shell } from 'electron';
 import log from 'electron-log/main';
 import { z } from 'zod';
+import type { UpdateService } from './updater/service';
 import {
   type CaptureResult,
   AppendEntrySchema,
@@ -218,6 +219,7 @@ type DashboardDeps = {
   files: Pick<FileSync, 'fetchAudio'>;
   /** The timer lives in the overlay; main keeps its last state and passes commands on. */
   pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
+  updates: Pick<UpdateService, 'status' | 'check' | 'restart'>;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -267,6 +269,9 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.PomodoroCommand, PomodoroCommandSchema, ({ action }) => d.pomodoro.command(action));
   handle(Ch.PomodoroSessions, none, () => d.pomodoro.sessions());
   handle(Ch.PomodoroClearSessions, none, () => d.pomodoro.clear());
+  handle(Ch.UpdatesGet, none, () => d.updates.status);
+  handle(Ch.UpdatesCheck, none, () => d.updates.check());
+  handle(Ch.UpdatesRestart, none, () => d.updates.restart());
   handle(Ch.HotkeyCapture, none, () => d.hotkey.captureCombo());
   handle(Ch.DevicesList, none, () => d.getDevices());
   handle(Ch.OpenRecordingsFolder, none, async () => {

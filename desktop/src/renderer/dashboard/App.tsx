@@ -17,6 +17,7 @@ import { TranscriptionPage } from './TranscriptionPage';
 import { AccountPage } from './AccountPage';
 import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
+import { UpdateBanner } from './UpdateBanner';
 
 export type View =
   | { kind: 'home' }
@@ -119,6 +120,7 @@ export function App() {
             <span className="font-display text-[14px] font-semibold tracking-tight">Voice Notes</span>
           </div>
         </div>
+        <UpdateBanner />
         <div className="flex min-h-0 flex-1">
           <Sidebar view={view} onSelect={navigate} folders={folders} pages={pages} counts={counts} onNewPage={newPage} onOpenPage={openPage} />
           <main className="flex-1 overflow-y-auto">
