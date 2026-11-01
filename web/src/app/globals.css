@@ -62,6 +62,17 @@ h3 {
   text-wrap: balance;
 }
 
+/* The page's one moment of motion: the saved seconds light up once, in order. */
+@keyframes bar-saved {
+  from {
+    background-color: color-mix(in oklch, var(--screen-foreground) 35%, transparent);
+  }
+}
+
+.saved-bar {
+  animation: bar-saved 350ms ease-out 1 backwards;
+}
+
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
