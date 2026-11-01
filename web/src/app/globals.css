@@ -73,6 +73,15 @@ h3 {
   animation: bar-saved 350ms ease-out 1 backwards;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
