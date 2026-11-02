@@ -412,6 +412,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
       throw e;
     }
   });
+  handle(Ch.AppMode, none, () => 'profile' as const);
   handle(Ch.AccountGet, none, () => d.account.current());
   handle(Ch.AccountSignIn, none, () => d.account.signIn());
   handle(Ch.AccountCancel, none, () => d.account.cancel());

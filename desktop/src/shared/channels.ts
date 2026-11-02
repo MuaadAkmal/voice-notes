@@ -243,6 +243,7 @@ export const Ch = {
   LocalCancel: 'local:cancel',
   LocalRemove: 'local:remove',
   LocalTest: 'local:test',
+  AppMode: 'app:mode', // 'signin' | 'profile': which screen the dashboard window shows
   AccountGet: 'account:get',
   AccountSignIn: 'account:sign-in',
   AccountCancel: 'account:cancel',

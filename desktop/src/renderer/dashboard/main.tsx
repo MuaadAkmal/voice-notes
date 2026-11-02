@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { SignInScreen } from './SignInScreen';
 import './dashboard.css';
 import { toWav } from '../common/to-wav';
 
@@ -10,13 +11,20 @@ const syncTheme = () => document.documentElement.classList.toggle('dark', media.
 syncTheme();
 media.addEventListener('change', syncTheme);
 
-// Main has no audio decoder: it hands clips here to become WAV for transcription.
 const api = window.dashboardApi;
-api.onNeedWav(({ requestId, bytes }) =>
-  toWav(bytes).then(
-    (wav) => api.sendWav({ requestId, bytes: wav }),
-    () => api.sendWav({ requestId, error: "Couldn't read the audio" }),
-  ),
-);
-
-createRoot(document.getElementById('root')!).render(<App />);
+const root = createRoot(document.getElementById('root')!);
+// Signed out, main wires nothing but sign-in: the window shows only that.
+void api.appMode().then((mode) => {
+  if (mode === 'signin') {
+    root.render(<SignInScreen />);
+    return;
+  }
+  // Main has no audio decoder: it hands clips here to become WAV for transcription.
+  api.onNeedWav(({ requestId, bytes }) =>
+    toWav(bytes).then(
+      (wav) => api.sendWav({ requestId, bytes: wav }),
+      () => api.sendWav({ requestId, error: "Couldn't read the audio" }),
+    ),
+  );
+  root.render(<App />);
+});

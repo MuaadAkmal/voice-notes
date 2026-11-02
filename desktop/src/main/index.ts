@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
-import { type AudioDevice, Ch, type Note, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { type AccountInfo, type AudioDevice, Ch, type Note, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
 import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
@@ -64,6 +64,11 @@ import { AccountService } from './account/account';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
 import { pendingBeforeSignOut } from './profiles/sign-out';
+import { chooseStart } from './profiles/choose';
+import { migrateToProfiles, needsMigration } from './profiles/migrate';
+import { relaunch, relaunches } from './profiles/relaunch';
+import { sessionUserId } from './profiles/session-user';
+import { startSignIn } from './signin-mode';
 import { applyCloudDefault } from './transcription/cloud-default';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -151,10 +156,77 @@ function showDashboardThen(then?: () => void): void {
   else then();
 }
 
-async function boot(): Promise<void> {
-  const userData = app.getPath('userData');
-  // Task 6 moves profile.json into the account's profile folder.
-  const settingsFiles: SettingsFiles = { pc: path.join(userData, 'pc.json'), profile: path.join(userData, 'profile.json') };
+/** Under test the browser is never opened: URLs are recorded here instead (the dashboard's links and sign-in). */
+const openedExternal: string[] = [];
+const testing = process.env.VOICE_NOTES_TEST === '1';
+
+type Auth = ReturnType<typeof makeAuth>;
+
+/** Google sign-in through Supabase; the session stays in main (root session.json, shared by every profile). */
+function makeAuth(root: string) {
+  const sessionStore = new SessionStore(path.join(root, 'session.json'), safeStorageCipher);
+  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      flowType: 'pkce',
+      storage: sessionStore,
+      persistSession: true,
+      autoRefreshToken: !testing, // tests never talk to Supabase
+      detectSessionInUrl: false,
+    },
+    // Electron's network stack, so the system proxy applies (as for the built-in model downloads).
+    global: { fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string | Request), init) },
+  });
+  return { sessionStore, supabase };
+}
+
+/** The window only ever sees AccountInfo, never tokens. */
+function makeAccount({ sessionStore, supabase }: Auth, onChange: (info: AccountInfo) => void): AccountService {
+  return new AccountService({
+    auth: supabase.auth,
+    store: sessionStore,
+    openExternal: async (url) => {
+      if (testing) openedExternal.push(url);
+      else await shell.openExternal(url);
+    },
+    fetchImage: fetchAvatar,
+    focusApp: showDashboard,
+    onChange,
+  });
+}
+
+/**
+ * Signed out: the sign-in screen only. Signed in: that account's profile (profiles/<user id>/), after moving a
+ * library from before profiles into it. Reads the stored session without the network, so a PC that starts
+ * offline with an expired token still opens its profile.
+ */
+async function start(): Promise<void> {
+  const root = app.getPath('userData');
+  const auth = makeAuth(root);
+  const user = testing ? process.env.VOICE_NOTES_TEST_SESSION || null : sessionUserId(auth.sessionStore, SUPABASE_URL);
+  if (needsMigration(root)) log.info('[profiles] migrated into', migrateToProfiles(root, user));
+  const choice = chooseStart(root, user);
+  if (choice.mode === 'profile') return boot(root, choice, auth);
+
+  const account = makeAccount(auth, (info) => {
+    if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
+    if (info.state === 'signed-in') relaunch(info.userId);
+  });
+  startSignIn({
+    account,
+    getDashboard: () => dashboard,
+    showDashboard,
+    quit: () => {
+      isQuitting = true;
+      app.quit();
+    },
+  });
+  if (testing) (globalThis as Record<string, unknown>).__voiceNotes = { account, relaunches, openedExternal };
+  else account.init().catch((err) => log.warn('[account] init failed', err));
+}
+
+async function boot(root: string, profile: { userId: string; dir: string }, auth: Auth): Promise<void> {
+  const userData = profile.dir; // this account's notes, pages, recordings and images
+  const settingsFiles: SettingsFiles = { pc: path.join(root, 'pc.json'), profile: path.join(userData, 'profile.json') };
   const settings: Settings = loadSettings(settingsFiles);
   // Film mode never survives a restart: the app must not start listening to system audio on its own.
   if (settings.filmMode) Object.assign(settings, saveSettings(settingsFiles, { filmMode: false }));
@@ -229,7 +301,7 @@ async function boot(): Promise<void> {
 
   // Built-in transcription: engine and models are downloaded on demand into whisper/.
   const localWhisper: LocalWhisper = new LocalWhisper({
-    root: path.join(userData, 'whisper'),
+    root: path.join(root, 'whisper'), // models are shared by every profile
     arch: process.arch,
     cores: os.cpus().length,
     totalMem: os.totalmem(),
@@ -699,44 +771,28 @@ async function boot(): Promise<void> {
     return { ...settings };
   }
 
-  const secrets = new Secrets(path.join(userData, 'secrets.json'), safeStorageCipher);
+  const secrets = new Secrets(path.join(root, 'secrets.json'), safeStorageCipher);
 
   const syncHolder: { controller?: SyncController } = {}; // set below; the account callback needs it
   const connectorsHolder: { service?: ConnectorsService } = {};
-  // Google sign-in through Supabase; the session stays in main, the window only sees AccountInfo.
-  const sessionStore = new SessionStore(path.join(userData, 'session.json'), safeStorageCipher);
-  const testing = process.env.VOICE_NOTES_TEST === '1';
-  const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-    auth: {
-      flowType: 'pkce',
-      storage: sessionStore,
-      persistSession: true,
-      autoRefreshToken: !testing, // tests never talk to Supabase
-      detectSessionInUrl: false,
-    },
-    // Electron's network stack, so the system proxy applies (as for the built-in model downloads).
-    global: { fetch: (input, init) => net.fetch(input instanceof URL ? input.href : (input as string | Request), init) },
+  const { sessionStore, supabase } = auth;
+  const account = makeAccount(auth, (info) => {
+    if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
+    // Signed out (or the session was revoked): back to the sign-in screen. Only once the stored session is
+    // really gone: init reports signed-out when an offline start can't refresh an expired token, but supabase-js
+    // keeps that session, and start-up would open this profile again, round and round.
+    if (info.state === 'signed-out' && (testing || !sessionUserId(sessionStore, SUPABASE_URL))) {
+      relaunch(null);
+      return;
+    }
+    syncHolder.controller?.onAccountChanged();
+    connectorsHolder.service?.onAccountChanged();
+    // Boot (session restored) and every sign-in: Cloud becomes the provider if none is set up.
+    const patch = applyCloudDefault(settings, info.state === 'signed-in');
+    if (patch) updateSettings(patch, { record: false });
   });
-  const account = new AccountService({
-    auth: supabase.auth,
-    store: sessionStore,
-    // Under test the browser is never opened: the URL is recorded like every other external link.
-    openExternal: async (url) => {
-      if (testing) openedExternal.push(url);
-      else await shell.openExternal(url);
-    },
-    fetchImage: fetchAvatar,
-    focusApp: showDashboard,
-    onChange: (info) => {
-      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
-      syncHolder.controller?.onAccountChanged();
-      connectorsHolder.service?.onAccountChanged();
-      // Boot (session restored) and every sign-in: Cloud becomes the provider if none is set up.
-      const patch = applyCloudDefault(settings, info.state === 'signed-in');
-      if (patch) updateSettings(patch, { record: false });
-    },
-  });
-  if (!testing) account.init().catch((err) => log.warn('[account] init failed', err));
+  if (testing) account.setTestSession({ state: 'signed-in', userId: profile.userId, email: 'test@example.com', name: 'Test User', avatar: null });
+  else account.init().catch((err) => log.warn('[account] init failed', err));
 
   // Two-PC sync through the `sync` Edge Function: rows, then audio and images.
   let testToken: (() => Promise<string | null>) | null = null;
@@ -822,6 +878,8 @@ async function boot(): Promise<void> {
   store.sync.files.onRecord = () => syncController.onLocalChange();
   powerMonitor.on('resume', () => syncController.onResume());
   syncController.start();
+  // This profile's account, always synced; a database bound to another account never is (not expected).
+  if (!syncController.bind(profile.userId)) log.error('[sync] profile/account mismatch', profile.userId, store.sync.state.accountId());
 
   // Google Calendar through the `connectors` Edge Function: it keeps the refresh token, main gets
   // short-lived access tokens and calls Google itself.
@@ -973,7 +1031,6 @@ async function boot(): Promise<void> {
     }
   };
 
-  const openedExternal: string[] = [];
   registerDashboardIpc({
     getDashboard: () => dashboard,
     store,
@@ -1046,6 +1103,7 @@ async function boot(): Promise<void> {
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine
       account, // setTestSession(info): signed in or out without Google
+      relaunches, // where the app would have restarted into: a user id, or null for the sign-in screen
       sync: {
         useServer: (url: string) => void (syncServer = makeSyncServer(url)), // a local test server
         useToken: (fn: () => Promise<string | null>) => void (testToken = fn),
@@ -1086,7 +1144,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showDashboard);
   // The overlay window always exists, so this only fires during quit; never auto-quit on window close.
   app.on('window-all-closed', () => undefined);
-  app.whenReady().then(boot).catch((err) => {
+  app.whenReady().then(start).catch((err) => {
     log.error('[boot] failed', err);
     app.quit();
   });

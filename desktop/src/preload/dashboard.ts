@@ -128,6 +128,7 @@ const dashboardApi = {
     ipcRenderer.invoke(Ch.LocalRemove, { modelId, engineToo }),
   testLocal: (): Promise<TestResult> => ipcRenderer.invoke(Ch.LocalTest),
   onLocalChanged: (cb: (status: LocalStatus) => void) => subscribeWith(Ch.LocalChanged, cb),
+  appMode: (): Promise<'signin' | 'profile'> => ipcRenderer.invoke(Ch.AppMode),
   getAccount: (): Promise<AccountInfo> => ipcRenderer.invoke(Ch.AccountGet),
   signIn: (): Promise<void> => ipcRenderer.invoke(Ch.AccountSignIn),
   cancelSignIn: (): Promise<void> => ipcRenderer.invoke(Ch.AccountCancel),

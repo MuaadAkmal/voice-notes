@@ -32,7 +32,7 @@ export function registerNoteProtocol(store: NoteStore, files: Fetcher): void {
   });
 }
 
-/** vn-image://<uuid>.<ext> serves a page image from <userData>/images; any other name is a 404. */
+/** vn-image://<uuid>.<ext> serves a page image from the profile's images/; any other name is a 404. */
 export function registerImageProtocol(store: NoteStore, files: Fetcher): void {
   protocol.handle('vn-image', async (req) => {
     const file = new URL(req.url).hostname;
