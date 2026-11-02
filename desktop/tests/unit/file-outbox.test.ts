@@ -69,15 +69,6 @@ it('enable queues never-synced ok notes and images of never-synced pages, not re
   expect(names().sort()).toEqual([`audio:${fresh.id}.webm`, `image:${img}`].sort());
 });
 
-it('startFresh clears the queue and requeues only version-0 files', async () => {
-  store.sync.state.setEnabled(true);
-  const a = await store.create(audio());
-  const b = await store.create(audio());
-  store.sync.outbox.setRowVersion('note', a.id, 5); // synced to the old account
-  engine().startFresh(settings);
-  expect(names()).toEqual([`audio:${b.id}.webm`]);
-});
-
 it('due skips entries scheduled later; later() bumps attempts', async () => {
   store.sync.state.setEnabled(true);
   const a = await store.create(audio());

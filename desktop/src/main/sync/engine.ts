@@ -17,13 +17,6 @@ export type SettingsPort = {
   applyRemote(prefs: PullResponse['prefs']): void;
 };
 
-/** The account changed while a request was in flight: its answer belongs to the old account and is dropped. */
-export class AccountChanged extends Error {
-  constructor() {
-    super('The account changed during sync');
-  }
-}
-
 const PUSH_BATCH = 100;
 const MAX_ROUNDS = 3; // push → pull → push again at most this often per run, so a bad merge can't spin
 
@@ -32,8 +25,6 @@ export class SyncEngine {
   private running: Promise<PullChanges> | null = null;
   private again = false;
   private changes: PullChanges = noChanges();
-  /** Bumped by startFresh: an answer to a request made before it is not applied. */
-  private epoch = 0;
 
   constructor(
     private readonly store: NoteStore,
@@ -85,24 +76,6 @@ export class SyncEngine {
     })();
   }
 
-  /**
-   * Syncing with a different account than before: forget the old account's queue and cursor, then
-   * enable. Rows the old account already has (version > 0) stay on this PC only.
-   */
-  startFresh(settings: Settings): void {
-    const { state } = this.store.sync;
-    const { sqlite } = this.store.syncAccess();
-    this.epoch += 1;
-    sqlite.transaction(() => {
-      sqlite.prepare('DELETE FROM outbox').run();
-      this.store.sync.files.clear();
-      state.setCursor(0);
-      state.setPendingPrefs(null);
-      state.setEnabled(false);
-    })();
-    this.enable(settings);
-  }
-
   /** A call while a run is going returns that run, and one more run follows it. Resolves to what pulls changed. */
   sync(): Promise<PullChanges> {
     if (this.running) {
@@ -132,14 +105,12 @@ export class SyncEngine {
   private async push(): Promise<void> {
     const { state, outbox } = this.store.sync;
     for (let batch = outbox.takeBatch(PUSH_BATCH); batch.length; batch = outbox.takeBatch(PUSH_BATCH)) {
-      const epoch = this.epoch;
       try {
         const res = await this.server.push({
           clientId: state.deviceId(),
           deviceName: state.deviceName(),
           mutations: batch.map((e) => ({ id: e.mutationId, op: e.op, baseVersion: e.baseVersion })),
         });
-        if (epoch !== this.epoch) throw new AccountChanged(); // its outbox is gone; don't ack into the new account's rows
         outbox.ack(res.acked);
       } catch (err) {
         outbox.release(); // all of it goes again next time; the server applies each change once
@@ -152,9 +123,7 @@ export class SyncEngine {
     const { state } = this.store.sync;
     let res: PullResponse;
     do {
-      const epoch = this.epoch;
       res = await this.server.pull({ clientId: state.deviceId(), cursor: state.cursor() });
-      if (epoch !== this.epoch) throw new AccountChanged(); // the old account's rows and cursor
       const changed = applyPull(this.store, res, (prefs) => {
         for (const p of prefs) seen?.add(p.key);
         this.settings.applyRemote(prefs);

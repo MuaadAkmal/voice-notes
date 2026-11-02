@@ -1,6 +1,5 @@
 import type { Settings, SyncStatus, SyncView } from '../../shared/channels';
 import type { PullChanges } from './apply';
-import { AccountChanged } from './engine';
 import { AuthExpired, NotSignedIn, Offline, Rejected, ServerError } from './http-server';
 
 // When this PC syncs, and what the Account page says about it. The engine does the syncing; this
@@ -12,15 +11,11 @@ export type { SyncView } from '../../shared/channels';
 type StateLike = {
   accountId(): string | null;
   setAccountId(id: string | null): void;
-  network(): boolean;
-  setNetwork(on: boolean): void;
   enabled(): boolean;
-  promptDismissedFor(): string | null;
-  setPromptDismissedFor(id: string | null): void;
 };
 
 type Deps = {
-  engine: { sync(): Promise<PullChanges>; enable(s: Settings): void; startFresh(s: Settings): void };
+  engine: { sync(): Promise<PullChanges>; enable(s: Settings): void };
   state: StateLike;
   settings(): Settings;
   /** The signed-in user's id, or null. */
@@ -68,43 +63,32 @@ export class SyncController {
   }
 
   view(): SyncView {
-    return { status: this.status, needsPrompt: this.needsPrompt(), filesWaiting: this.d.files.waiting(), storageFull: this.storageFull };
+    return { status: this.status, filesWaiting: this.d.files.waiting(), storageFull: this.storageFull };
   }
 
-  /** "Turn on" / the switch. A different account than before starts fresh; the same one resumes. */
-  turnOn(userId: string): void {
+  /**
+   * The open profile's account: this PC always syncs it. The first time, everything never sent is queued.
+   * False (and nothing syncs) when the profile's database already belongs to another account.
+   */
+  bind(profileId: string): boolean {
     const { state, engine, settings } = this.d;
-    if (state.accountId() !== userId) {
-      engine.startFresh(settings());
-      state.setAccountId(userId);
-    } else if (!state.enabled()) {
-      engine.enable(settings());
+    if (state.accountId() === null) state.setAccountId(profileId);
+    if (state.accountId() !== profileId) {
+      this.refresh();
+      return false;
     }
-    state.setNetwork(true);
+    if (!state.enabled()) engine.enable(settings());
     this.failures = 0;
     this.refresh();
     this.trigger();
     this.syncPings();
-  }
-
-  /** The switch off: no more syncing, but changes keep queueing for when it's back on. */
-  turnOff(): void {
-    this.d.state.setNetwork(false);
-    this.clearTimers();
-    this.refresh();
-    this.syncPings();
+    return true;
   }
 
   syncNow(): void {
     this.failures = 0;
     this.clearTimers();
     this.trigger();
-  }
-
-  dismissPrompt(): void {
-    const user = this.d.currentUser();
-    if (user) this.d.state.setPromptDismissedFor(user);
-    this.emit();
   }
 
   /** Something was recorded in the outbox: sync once the edits settle. */
@@ -145,20 +129,15 @@ export class SyncController {
 
   private canSync(): boolean {
     const user = this.d.currentUser();
-    return !!user && this.d.state.network() && this.d.state.accountId() === user;
+    return !!user && this.d.state.accountId() === user;
   }
 
-  private needsPrompt(): boolean {
-    const user = this.d.currentUser();
-    return !!user && this.d.state.accountId() !== user && this.d.state.promptDismissedFor() !== user;
-  }
-
-  /** The mode that follows from sign-in and the switch (between syncs). */
+  /** The mode that follows from sign-in (between syncs). */
   private refresh(): void {
     const user = this.d.currentUser();
     const { state } = this.d;
-    if (!user) this.status = state.network() && state.accountId() ? { mode: 'paused', reason: 'signed-out' } : { mode: 'off' };
-    else if (state.accountId() !== user || !state.network()) this.status = { mode: 'off' };
+    if (!user) this.status = state.accountId() ? { mode: 'paused', reason: 'signed-out' } : { mode: 'off' };
+    else if (state.accountId() !== user) this.status = { mode: 'off' };
     else if (this.status.mode !== 'offline' && this.status.mode !== 'error' && this.status.mode !== 'syncing')
       this.status = { mode: 'idle', lastSyncedAt: this.lastSyncedAt };
     this.emit();
@@ -194,11 +173,6 @@ export class SyncController {
       else this.refresh();
       await this.drainFiles();
     } catch (err) {
-      if (err instanceof AccountChanged) {
-        this.status = { mode: 'idle', lastSyncedAt: this.lastSyncedAt };
-        this.refresh(); // the next run (already asked for by Turn on) syncs the new account
-        return;
-      }
       if (err instanceof AuthExpired && !retriedAuth) {
         await this.d.refreshSession().catch(() => undefined);
         return this.run(true);

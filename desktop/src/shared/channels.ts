@@ -248,10 +248,7 @@ export const Ch = {
   AccountCancel: 'account:cancel',
   AccountSignOut: 'account:sign-out',
   SyncGet: 'sync:get',
-  SyncTurnOn: 'sync:turn-on',
-  SyncTurnOff: 'sync:turn-off',
   SyncNow: 'sync:now',
-  SyncDismissPrompt: 'sync:dismiss-prompt',
   ConnectorsGet: 'connectors:get',
   ConnectorsConnect: 'connectors:connect',
   ConnectorsCancel: 'connectors:cancel',
@@ -314,7 +311,7 @@ export type KeyInfo = { saved: boolean; last4: string };
 export type FetchAudioResult = { ok: true } | { ok: false; reason: 'not-uploaded' | 'offline' | 'sync-off' | 'error' };
 
 /** filesWaiting: audio and images not uploaded yet; storageFull: the account refused the last upload for space. */
-export type SyncView = { status: SyncStatus; needsPrompt: boolean; filesWaiting: number; storageFull: boolean };
+export type SyncView = { status: SyncStatus; filesWaiting: number; storageFull: boolean };
 
 /** This PC's sync, as the Account page shows it. */
 export type SyncStatus =

@@ -779,7 +779,7 @@ async function boot(): Promise<void> {
     },
     canSync: () => {
       const info = account.current();
-      return info.state === 'signed-in' && info.userId === store.sync.state.accountId() && store.sync.state.network();
+      return info.state === 'signed-in' && info.userId === store.sync.state.accountId();
     },
     onNotesChanged: () => toDashboard(Ch.NotesChanged),
   });

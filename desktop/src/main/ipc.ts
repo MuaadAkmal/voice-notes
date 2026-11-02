@@ -415,14 +415,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.AccountCancel, none, () => d.account.cancel());
   handle(Ch.AccountSignOut, none, () => d.account.signOut());
   handle(Ch.SyncGet, none, () => d.sync.view());
-  handle(Ch.SyncTurnOn, none, () => {
-    const info = d.account.current();
-    if (info.state !== 'signed-in') throw new Error('Sign in first');
-    d.sync.turnOn(info.userId);
-  });
-  handle(Ch.SyncTurnOff, none, () => d.sync.turnOff());
   handle(Ch.SyncNow, none, () => d.sync.syncNow());
-  handle(Ch.SyncDismissPrompt, none, () => d.sync.dismissPrompt());
   handle(Ch.ConnectorsGet, none, () => d.connectors.current());
   handle(Ch.ConnectorsConnect, none, () => d.connectors.connect());
   handle(Ch.ConnectorsCancel, none, () => d.connectors.cancel());

@@ -2,22 +2,15 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../src/main/settings';
 import { SyncController, type SyncView } from '../../src/main/sync/controller';
 import { AuthExpired, NotSignedIn, Offline, Rejected } from '../../src/main/sync/http-server';
-import { AccountChanged } from '../../src/main/sync/engine';
 
 const NONE = { notes: false, pages: false, folders: false, prefs: false };
 
 class FakeState {
   account: string | null = null;
-  net = false;
   rec = false;
-  dismissed: string | null = null;
   accountId = () => this.account;
   setAccountId = (id: string | null) => void (this.account = id);
-  network = () => this.net;
-  setNetwork = (on: boolean) => void (this.net = on);
   enabled = () => this.rec;
-  promptDismissedFor = () => this.dismissed;
-  setPromptDismissedFor = (id: string | null) => void (this.dismissed = id);
 }
 
 let state: FakeState;
@@ -28,7 +21,6 @@ let script: (() => Promise<typeof NONE>)[];
 let engine: {
   sync: ReturnType<typeof vi.fn<() => Promise<typeof NONE>>>;
   enable: ReturnType<typeof vi.fn<() => void>>;
-  startFresh: ReturnType<typeof vi.fn<() => void>>;
 };
 let refreshed: number;
 let files: { drain: ReturnType<typeof vi.fn<(shouldYield?: () => boolean) => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
@@ -50,7 +42,6 @@ beforeEach(() => {
   engine = {
     sync: vi.fn<() => Promise<typeof NONE>>(async () => (script.shift() ?? (async () => NONE))()),
     enable: vi.fn<() => void>(() => void (state.rec = true)),
-    startFresh: vi.fn<() => void>(() => void (state.rec = true)),
   };
   pings = { update: vi.fn<(userId: string | null) => void>() };
   ctl = new SyncController({
@@ -73,23 +64,48 @@ afterEach(() => {
 
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
-it('is off until turned on, and asks once signed in', () => {
-  expect(ctl.view()).toEqual({ status: { mode: 'off' }, needsPrompt: true, filesWaiting: 0, storageFull: false });
+it('is off until bound to the profile', () => {
+  expect(ctl.view()).toEqual({ status: { mode: 'off' }, filesWaiting: 0, storageFull: false });
   expect(engine.sync).not.toHaveBeenCalled();
 });
 
-it('turning on binds the account, snapshots and syncs', async () => {
-  ctl.turnOn('u1');
+it('bind sets the account, enables once and syncs', async () => {
+  ctl.bind('u1');
   await flush();
   expect(state.account).toBe('u1');
-  expect(state.net).toBe(true);
-  expect(engine.startFresh).toHaveBeenCalledTimes(1);
+  expect(engine.enable).toHaveBeenCalledTimes(1);
   expect(engine.sync).toHaveBeenCalledTimes(1);
-  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, needsPrompt: false, filesWaiting: 0, storageFull: false });
+  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, filesWaiting: 0, storageFull: false });
+  ctl.bind('u1');
+  await flush();
+  expect(engine.enable).toHaveBeenCalledTimes(1);
+});
+
+it('bind refuses a different account', async () => {
+  state.account = 'u1';
+  state.rec = true;
+  user = 'u2';
+  ctl.bind('u2');
+  await flush();
+  expect(engine.sync).not.toHaveBeenCalled();
+  expect(state.account).toBe('u1');
+  expect(ctl.view().status).toEqual({ mode: 'off' });
+});
+
+it('signed in as another user does not sync', async () => {
+  ctl.bind('u1');
+  await flush();
+  engine.sync.mockClear();
+  user = 'u2';
+  ctl.onAccountChanged();
+  ctl.syncNow();
+  await flush();
+  expect(engine.sync).not.toHaveBeenCalled();
+  expect(ctl.view().status).toEqual({ mode: 'off' });
 });
 
 it('a burst of edits syncs once, 3 s after the last', async () => {
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   engine.sync.mockClear();
   for (let i = 0; i < 5; i++) {
@@ -103,7 +119,7 @@ it('a burst of edits syncs once, 3 s after the last', async () => {
 });
 
 it('also syncs every 5 minutes and when the PC wakes', async () => {
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   engine.sync.mockClear();
   await vi.advanceTimersByTimeAsync(300_000);
@@ -115,7 +131,7 @@ it('also syncs every 5 minutes and when the PC wakes', async () => {
 
 it('offline: retries at 30 s, 1, 2, 4, 8 then 10 min, and a success resets it', async () => {
   script = Array.from({ length: 6 }, () => async () => Promise.reject(new Offline()));
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(last().status).toEqual({ mode: 'offline', retryAt: 1_000_000 + 30_000 });
   const gaps = [30_000, 60_000, 120_000, 240_000, 480_000, 600_000, 600_000];
@@ -136,7 +152,7 @@ it('offline: retries at 30 s, 1, 2, 4, 8 then 10 min, and a success resets it', 
 
 it('while waiting to retry, the 5-minute timer and new edits do not cut the wait short', async () => {
   script = Array.from({ length: 4 }, () => async () => Promise.reject(new Offline()));
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush(); // attempt 1 fails → retry in 30 s
   await vi.advanceTimersByTimeAsync(30_000 + 60_000 + 120_000); // attempts 2–4 fail → next retry in 240 s
   const calls = engine.sync.mock.calls.length;
@@ -149,7 +165,7 @@ it('while waiting to retry, the 5-minute timer and new edits do not cut the wait
 
 it('waking the PC, or Sync now, retries straight away', async () => {
   script = [async () => Promise.reject(new Offline())];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   const calls = engine.sync.mock.calls.length;
   ctl.onResume();
@@ -159,7 +175,7 @@ it('waking the PC, or Sync now, retries straight away', async () => {
 
 it('an expired session is refreshed once; if that fails, it asks to sign in again', async () => {
   script = [async () => Promise.reject(new AuthExpired()), async () => NONE];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(refreshed).toBe(1);
   expect(engine.sync).toHaveBeenCalledTimes(2);
@@ -173,7 +189,7 @@ it('an expired session is refreshed once; if that fails, it asks to sign in agai
 
 it('a change the server rejects is shown, not retried in a loop', async () => {
   script = [async () => Promise.reject(new Rejected('Invalid change'))];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(last().status).toEqual({ mode: 'error', message: 'Invalid change' });
   const calls = engine.sync.mock.calls.length;
@@ -182,7 +198,7 @@ it('a change the server rejects is shown, not retried in a loop', async () => {
 });
 
 it('signing out pauses; signing back in with the same account resumes', async () => {
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   user = null;
   ctl.onAccountChanged();
@@ -199,57 +215,13 @@ it('signing out pauses; signing back in with the same account resumes', async ()
   expect(last().status.mode).toBe('idle');
 });
 
-it('a different account is asked first, and starts fresh when turned on', async () => {
-  ctl.turnOn('u1');
-  await flush();
-  user = 'u2';
-  ctl.onAccountChanged();
-  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: true, filesWaiting: 0, storageFull: false });
-  engine.startFresh.mockClear();
-  ctl.turnOn('u2');
-  await flush();
-  expect(engine.startFresh).toHaveBeenCalledTimes(1);
-  expect(state.account).toBe('u2');
-});
-
-it('the same account turned on again just resumes, without starting fresh', async () => {
-  ctl.turnOn('u1');
-  await flush();
-  ctl.turnOff();
-  engine.startFresh.mockClear();
-  ctl.turnOn('u1');
-  await flush();
-  expect(engine.startFresh).not.toHaveBeenCalled();
-  expect(engine.sync).toHaveBeenCalledTimes(2);
-});
-
-it('switching off stops syncing but keeps recording', async () => {
-  ctl.turnOn('u1');
-  await flush();
-  ctl.turnOff();
-  expect(last()).toEqual({ status: { mode: 'off' }, needsPrompt: false, filesWaiting: 0, storageFull: false });
-  engine.sync.mockClear();
-  ctl.onLocalChange();
-  await vi.advanceTimersByTimeAsync(600_000);
-  expect(engine.sync).not.toHaveBeenCalled();
-  expect(state.rec).toBe(true);
-});
-
-it('Not now is remembered for that account only', () => {
-  ctl.dismissPrompt();
-  expect(ctl.view().needsPrompt).toBe(false);
-  user = 'u2';
-  ctl.onAccountChanged();
-  expect(ctl.view().needsPrompt).toBe(true);
-});
-
 it('a sync asked for while one is running happens right after it', async () => {
   let finish!: () => void;
   script = [() => new Promise((r) => (finish = () => r(NONE)))];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(engine.sync).toHaveBeenCalledTimes(1);
-  ctl.syncNow(); // e.g. Turn on for a new account, or an edit saved during the run
+  ctl.syncNow(); // e.g. Sync now, or an edit saved during the run
   await flush();
   expect(engine.sync).toHaveBeenCalledTimes(1);
   finish();
@@ -257,23 +229,16 @@ it('a sync asked for while one is running happens right after it', async () => {
   expect(engine.sync).toHaveBeenCalledTimes(2);
 });
 
-it('a run cut short by an account change is not an error', async () => {
-  script = [async () => Promise.reject(new AccountChanged())];
-  ctl.turnOn('u1');
-  await flush();
-  expect(last().status.mode).toBe('idle');
-});
-
 it('what a pull changed is passed on', async () => {
   script = [async () => ({ ...NONE, pages: true })];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(changes).toEqual([{ ...NONE, pages: true }]);
 });
 
 it('no session at sync time pauses instead of erroring', async () => {
   script = [async () => Promise.reject(new NotSignedIn())];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(last().status).toEqual({ mode: 'paused', reason: 'signed-out' });
 });
@@ -284,7 +249,7 @@ it('after a successful sync the file queue drains and the view shows filesWaitin
     files.left = 1;
     return { storageFull: true };
   });
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(files.drain).toHaveBeenCalledTimes(1);
   expect(engine.sync.mock.invocationCallOrder[0]).toBeLessThan(files.drain.mock.invocationCallOrder[0]);
@@ -293,7 +258,7 @@ it('after a successful sync the file queue drains and the view shows filesWaitin
 
 it('a file failure after the rows synced keeps sync idle, with no backoff for the rows', async () => {
   files.drain.mockImplementationOnce(async () => Promise.reject(new Offline()));
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(last().status).toEqual({ mode: 'idle', lastSyncedAt: 1_000_000 });
   engine.sync.mockClear();
@@ -311,7 +276,7 @@ it('an edit during a long upload asks the drain to make way', async () => {
     yielded = !!shouldYield?.();
     return { storageFull: false };
   });
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   await flush();
   expect(yielded).toBe(true);
@@ -320,20 +285,15 @@ it('an edit during a long upload asks the drain to make way', async () => {
 
 it('a failed sync does not drain files', async () => {
   script.push(async () => Promise.reject(new Offline()));
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(files.drain).not.toHaveBeenCalled();
 });
 const lastPing = () => pings.update.mock.calls.at(-1)?.[0];
 
-it('pings follow sign-in and the switch', async () => {
+it('pings follow sign-in', async () => {
   expect(lastPing()).toBe(null); // started, not bound to this account yet
-  ctl.turnOn('u1');
-  await flush();
-  expect(lastPing()).toBe('u1');
-  ctl.turnOff();
-  expect(lastPing()).toBe(null);
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   expect(lastPing()).toBe('u1');
   user = null;
@@ -347,7 +307,7 @@ it('pings follow sign-in and the switch', async () => {
 });
 
 it('onRemoteChange syncs now', async () => {
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   engine.sync.mockClear();
   ctl.onRemoteChange();
@@ -357,7 +317,7 @@ it('onRemoteChange syncs now', async () => {
 
 it('a ping waits for a pending retry', async () => {
   script = [async () => Promise.reject(new Offline())];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush(); // fails → retry in 30 s
   const calls = engine.sync.mock.calls.length;
   ctl.onRemoteChange();
@@ -370,7 +330,7 @@ it('a ping waits for a pending retry', async () => {
 it('pings during a run cost one rerun', async () => {
   let release!: () => void;
   script = [() => new Promise((r) => (release = () => r(NONE)))];
-  ctl.turnOn('u1');
+  ctl.bind('u1');
   await flush();
   ctl.onRemoteChange();
   ctl.onRemoteChange();

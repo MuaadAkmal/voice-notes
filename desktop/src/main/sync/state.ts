@@ -67,25 +67,6 @@ export class SyncState {
     else this.sqlite.prepare("DELETE FROM sync_state WHERE key = 'account_id'").run();
   }
 
-  /** The "Sync this PC" switch: off stops the network; changes keep being recorded. */
-  network(): boolean {
-    return this.get('network') === '1';
-  }
-
-  setNetwork(on: boolean): void {
-    this.set('network', on ? '1' : '0');
-  }
-
-  /** "Not now" was answered for this account. */
-  promptDismissedFor(): string | null {
-    return this.get('prompt_dismissed_for') ?? null;
-  }
-
-  setPromptDismissedFor(id: string | null): void {
-    if (id) this.set('prompt_dismissed_for', id);
-    else this.sqlite.prepare("DELETE FROM sync_state WHERE key = 'prompt_dismissed_for'").run();
-  }
-
   /** Existing audio and images were queued (by enable, or the catch-up for PCs that turned sync on before files synced). */
   filesQueued(): boolean {
     return this.get('files_queued') === '1';
