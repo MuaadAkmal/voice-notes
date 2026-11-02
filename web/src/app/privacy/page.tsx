@@ -9,19 +9,20 @@ export const metadata: Metadata = {
 
 export default function Privacy() {
   return (
-    <Prose title="Privacy" updated="1 November 2026">
+    <Prose title="Privacy" updated="2 November 2026">
       <p>
-        Without an account, Voice Notes keeps your recordings, pages and settings on your PC. Signing in turns on some features automatically, and
-        this page says which.
+        Voice Notes needs a Google account. It keeps your recordings, pages and settings on your PC and syncs them to your account. This page says
+        what goes where.
       </p>
 
       <h2>This website</h2>
       <p>This site sets no cookies and has no analytics. It&apos;s hosted on Cloudflare, which handles requests to it, including the installer download.</p>
 
-      <h2>Without an account</h2>
+      <h2>On your PC</h2>
       <ul>
-        <li>The app doesn&apos;t need an account. Notes, audio, pages and film mode&apos;s audio buffer stay on your PC. Film mode&apos;s buffer is held in memory and is saved only when you press the shortcut.</li>
-        <li>Each note stores the title of the window in front when you recorded it. This stays on your PC unless you turn on sync.</li>
+        <li>Each account that signs in on a PC has its own library there. Signing out keeps it on the PC for the next time you sign in, and other accounts can&apos;t see it in the app.</li>
+        <li>Film mode&apos;s audio buffer is held in memory and is saved only when you press the shortcut.</li>
+        <li>Each note stores the title of the window in front when you recorded it. It syncs with the note.</li>
         <li>The app contains no analytics. It checks our update server for new versions.</li>
         <li>If you use the built-in transcription, the engine and model download from GitHub and Hugging Face, and clips are transcribed on your PC.</li>
         <li>If you use your own Whisper server, clips go to that server. We don&apos;t see them.</li>
@@ -29,14 +30,14 @@ export default function Privacy() {
 
       <h2>Signing in</h2>
       <p>
-        Sign-in uses your Google account through Supabase, our backend provider. We receive your account details from Google, such as your name,
-        email address and photo.
+        You sign in with your Google account through Supabase, our backend provider. We receive your account details from Google, such as your
+        name, email address and photo.
       </p>
 
       <h2>Sync</h2>
       <p>
-        Sync is optional. If you turn it on, your notes, transcripts, pages, folders, audio, page images and some settings are stored in your
-        account on Supabase, so that your other PCs can get them. This includes the window title saved with each note and your PC&apos;s name.
+        Your notes, transcripts, pages, folders, audio, page images and some settings are stored in your account on Supabase, so that your other
+        PCs can get them. This includes the window title saved with each note and your PC&apos;s name.
       </p>
       <p>
         When you delete a note or page, its audio and images are removed from the server. Its text, such as a note&apos;s title and transcript or a
@@ -45,7 +46,7 @@ export default function Privacy() {
 
       <h2>Voice Notes Cloud transcription</h2>
       <p>
-        If you&apos;re signed in and haven&apos;t set up another transcription provider, Cloud is used automatically. You can choose another provider
+        If you haven&apos;t set up another transcription provider, Cloud is used automatically. You can choose another provider
         on the Transcription page.
       </p>
       <p>
@@ -67,7 +68,7 @@ export default function Privacy() {
       </p>
       <p>
         When you say &ldquo;add this to&rdquo; a page, what the window in front is showing isn&apos;t sent. The app writes its own line for that
-        window on your PC, which can include its address, file path or a screenshot. That line then syncs like the rest of the page if sync is on.
+        window on your PC, which can include its address, file path or a screenshot. That line then syncs like the rest of the page.
       </p>
 
       <h2>Google Calendar</h2>
@@ -80,7 +81,7 @@ export default function Privacy() {
 
       <h2>Deleting your data</h2>
       <p>
-        Deleting the app&apos;s data folder removes what&apos;s on your PC. To have your account and everything stored with it deleted, email{" "}
+        Deleting the app&apos;s data folder removes what&apos;s on your PC, for every account that signed in on it. To have your account and everything stored with it deleted, email{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
 
