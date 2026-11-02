@@ -3,6 +3,7 @@ import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
 import { DEFAULT_LATER_SITES } from '../shared/later-routes';
 import { DEFAULT_WAKE_WORDS } from '../shared/note-command';
 import { DEFAULT_POMODORO } from '../shared/pomodoro';
+import { SYNCED_KEYS } from '../shared/sync-ops';
 import { DEFAULT_TRANSCRIPTION, type ModelId } from '../shared/transcription';
 
 // uiohook keycodes for Alt + Meta (Win). Literal so this module never loads the native hook.
@@ -57,11 +58,26 @@ function readRaw(file: string): Record<string, unknown> {
   }
 }
 
-/** Defaults, overridden field-by-field by whatever in the file is valid. Never throws. */
-export function loadSettings(file: string): Settings {
-  const raw = readRaw(file);
+/** Settings live in two files: this PC's (pc.json, at the root) and the account's synced ones (profile.json, in the profile). */
+export type SettingsFiles = { pc: string; profile: string };
+
+const isSynced = (key: string) => (SYNCED_KEYS as readonly string[]).includes(key);
+
+/** Divides settings by `SYNCED_KEYS`: the synced ones belong to the profile, everything else to the PC. */
+export function splitSettings(s: Record<string, unknown>): { pc: Record<string, unknown>; profile: Record<string, unknown> } {
+  const pc: Record<string, unknown> = {};
+  const profile: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(s)) (isSynced(key) ? profile : pc)[key] = value;
+  return { pc, profile };
+}
+
+/** Defaults, overridden field-by-field by whatever valid value the key's own file has. Never throws. */
+export function loadSettings(files: SettingsFiles): Settings {
+  const pc = readRaw(files.pc);
+  const profile = readRaw(files.profile);
   const result: Record<string, unknown> = { ...DEFAULT_SETTINGS };
   for (const [key, schema] of Object.entries(SettingsFieldSchemas)) {
+    const raw = isSynced(key) ? profile : pc;
     const parsed = schema.safeParse(raw[key]);
     if (key in raw && parsed.success) result[key] = parsed.data;
   }
@@ -75,9 +91,15 @@ export function normaliseLocal(s: Settings, modelInstalled: (id: ModelId) => boo
   return { ...s, transcription: { ...t, provider: null } };
 }
 
-export function saveSettings(file: string, patch: Partial<Settings>): Settings {
-  const next = { ...loadSettings(file), ...patch };
-  fs.writeFileSync(`${file}.tmp`, JSON.stringify(next, null, 2));
-  fs.renameSync(`${file}.tmp`, file);
+export function saveSettings(files: SettingsFiles, patch: Partial<Settings>): Settings {
+  const next = { ...loadSettings(files), ...patch };
+  const { pc, profile } = splitSettings(next);
+  writeJson(files.pc, pc);
+  writeJson(files.profile, profile);
   return next;
+}
+
+function writeJson(file: string, value: unknown): void {
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify(value, null, 2));
+  fs.renameSync(`${file}.tmp`, file);
 }

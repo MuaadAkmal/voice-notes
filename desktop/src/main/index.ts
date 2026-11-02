@@ -26,7 +26,7 @@ import { OverlayMouse } from './overlay-mouse';
 import { AutoPause } from './media/auto-pause';
 import { registerImageProtocol, registerNoteProtocol, registerNoteScheme } from './protocol';
 import { RecorderController } from './recorder/controller';
-import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings } from './settings';
+import { loadSettings, normaliseLocal, REWIND_HOTKEY, saveSettings, type SettingsFiles } from './settings';
 import { applyRemotePrefs, recordPrefs } from './sync/prefs';
 import { SyncController } from './sync/controller';
 import { SyncPings, supabasePings } from './sync/pings';
@@ -152,10 +152,11 @@ function showDashboardThen(then?: () => void): void {
 
 async function boot(): Promise<void> {
   const userData = app.getPath('userData');
-  const settingsFile = path.join(userData, 'settings.json');
-  const settings: Settings = loadSettings(settingsFile);
+  // Task 6 moves profile.json into the account's profile folder.
+  const settingsFiles: SettingsFiles = { pc: path.join(userData, 'pc.json'), profile: path.join(userData, 'profile.json') };
+  const settings: Settings = loadSettings(settingsFiles);
   // Film mode never survives a restart: the app must not start listening to system audio on its own.
-  if (settings.filmMode) Object.assign(settings, saveSettings(settingsFile, { filmMode: false }));
+  if (settings.filmMode) Object.assign(settings, saveSettings(settingsFiles, { filmMode: false }));
   // themeSource drives prefers-color-scheme in every renderer; the dashboard maps that to html.dark.
   nativeTheme.themeSource = settings.theme;
   nativeTheme.on('updated', () => applyTitleBarTheme(dashboard));
@@ -168,14 +169,14 @@ async function boot(): Promise<void> {
     store.pages.list().map((p) => p.id),
   );
   if (liveWidgets.length !== settings.homeWidgets.length)
-    Object.assign(settings, saveSettings(settingsFile, { homeWidgets: liveWidgets }));
+    Object.assign(settings, saveSettings(settingsFiles, { homeWidgets: liveWidgets }));
   // The built-in Review later page and its locked Home card always exist.
   const laterPatch = ensureLaterPage(settings, store.pages, randomUUID);
-  if (laterPatch) Object.assign(settings, saveSettings(settingsFile, laterPatch));
+  if (laterPatch) Object.assign(settings, saveSettings(settingsFiles, laterPatch));
   // And the built-in Quick notes page, where a "Note, …" that matches no page lands.
   const notesPatch = ensureNotesPage(settings, store.pages);
   if (notesPatch) {
-    Object.assign(settings, saveSettings(settingsFile, notesPatch));
+    Object.assign(settings, saveSettings(settingsFiles, notesPatch));
     recordPrefs(notesPatch, store.sync.outbox); // nothing is recorded while sync is off
   }
   store.dictations.pruneOlderThan(DICTATION_TTL_MS);
@@ -239,7 +240,7 @@ async function boot(): Promise<void> {
   });
   localWhisper.boot();
   const checked = normaliseLocal(settings, (id) => localWhisper.status().models[id]);
-  if (checked !== settings) Object.assign(settings, saveSettings(settingsFile, { transcription: checked.transcription }));
+  if (checked !== settings) Object.assign(settings, saveSettings(settingsFiles, { transcription: checked.transcription }));
   // Cloud transcription through the `asr` Edge Function, with the app's own sign-in.
   // `supabase` is read lazily: it is set up further down, before any transcription can run.
   let testAsrToken: (() => Promise<string | null>) | null = null;
@@ -665,7 +666,7 @@ async function boot(): Promise<void> {
   function updateSettings(patch: Partial<Settings>, opts: { record?: boolean } = {}): Settings {
     // A widget list from the dashboard (possibly stale) never loses the locked Review later card.
     patch = guardWidgets(patch, settings, randomUUID);
-    Object.assign(settings, saveSettings(settingsFile, patch));
+    Object.assign(settings, saveSettings(settingsFiles, patch));
     if (opts.record !== false) recordPrefs(patch, store.sync.outbox);
     if (patch.hotkey) hotkey.setCombo(settings.hotkey);
     if (patch.dictationHotkey) hotkey.setDictationCombo(settings.dictationHotkey);
