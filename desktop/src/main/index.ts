@@ -63,6 +63,7 @@ import { createTray } from './tray';
 import { AccountService } from './account/account';
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
+import { pendingBeforeSignOut } from './profiles/sign-out';
 import { applyCloudDefault } from './transcription/cloud-default';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -991,6 +992,11 @@ async function boot(): Promise<void> {
     wavBridge,
     localWhisper,
     account,
+    pendingBeforeSignOut: () =>
+      pendingBeforeSignOut({
+        flush: () => syncController.flush(),
+        pending: () => store.sync.outbox.pending().length + store.sync.files.count(),
+      }),
     sync: syncController,
     connectors,
     reminders,

@@ -247,6 +247,7 @@ export const Ch = {
   AccountSignIn: 'account:sign-in',
   AccountCancel: 'account:cancel',
   AccountSignOut: 'account:sign-out',
+  AccountPending: 'account:pending', // number: changes still waiting to upload after a last sync (≤ 10 s)
   SyncGet: 'sync:get',
   SyncNow: 'sync:now',
   ConnectorsGet: 'connectors:get',

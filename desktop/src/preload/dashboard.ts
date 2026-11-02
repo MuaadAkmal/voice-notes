@@ -132,6 +132,7 @@ const dashboardApi = {
   signIn: (): Promise<void> => ipcRenderer.invoke(Ch.AccountSignIn),
   cancelSignIn: (): Promise<void> => ipcRenderer.invoke(Ch.AccountCancel),
   signOut: (): Promise<void> => ipcRenderer.invoke(Ch.AccountSignOut),
+  pendingBeforeSignOut: (): Promise<number> => ipcRenderer.invoke(Ch.AccountPending),
   onAccountChanged: (cb: (info: AccountInfo) => void) => subscribeWith(Ch.AccountChanged, cb),
   getSync: (): Promise<SyncView> => ipcRenderer.invoke(Ch.SyncGet),
   syncNow: (): Promise<void> => ipcRenderer.invoke(Ch.SyncNow),

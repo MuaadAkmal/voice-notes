@@ -214,6 +214,8 @@ type DashboardDeps = {
   wavBridge: WavBridge;
   localWhisper: LocalWhisper;
   account: AccountService;
+  /** Before signing out: sync once more (≤ 10 s), then count rows and files still waiting. */
+  pendingBeforeSignOut(): Promise<number>;
   sync: SyncController;
   connectors: ConnectorsService;
   reminders: RemindersService;
@@ -414,6 +416,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.AccountSignIn, none, () => d.account.signIn());
   handle(Ch.AccountCancel, none, () => d.account.cancel());
   handle(Ch.AccountSignOut, none, () => d.account.signOut());
+  handle(Ch.AccountPending, none, () => d.pendingBeforeSignOut());
   handle(Ch.SyncGet, none, () => d.sync.view());
   handle(Ch.SyncNow, none, () => d.sync.syncNow());
   handle(Ch.ConnectorsGet, none, () => d.connectors.current());

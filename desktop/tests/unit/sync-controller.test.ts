@@ -340,3 +340,24 @@ it('pings during a run cost one rerun', async () => {
   await flush();
   expect(engine.sync).toHaveBeenCalledTimes(2);
 });
+it('flush waits for a sync that was already running and the one after it', async () => {
+  const releases: (() => void)[] = [];
+  script = [() => new Promise((r) => releases.push(() => r(NONE))), () => new Promise((r) => releases.push(() => r(NONE)))];
+  ctl.bind('u1');
+  await flush();
+  let done = false;
+  void ctl.flush().then(() => (done = true));
+  await flush();
+  releases[0]();
+  await flush();
+  expect(done).toBe(false); // the flush's own run is going now
+  releases[1]();
+  await flush();
+  expect(done).toBe(true);
+  expect(engine.sync).toHaveBeenCalledTimes(2);
+});
+
+it('flush when it cannot sync returns at once', async () => {
+  await expect(ctl.flush()).resolves.toBeUndefined();
+  expect(engine.sync).not.toHaveBeenCalled();
+});

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
 import { Avatar } from './Avatar';
@@ -14,6 +14,7 @@ export function AccountPage({ onSignedOut }: { onSignedOut: () => void }) {
   const toast = useToast();
   const confirm = useConfirm();
   const info = useAccount();
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (info && info.state !== 'signed-in') onSignedOut();
@@ -22,7 +23,14 @@ export function AccountPage({ onSignedOut }: { onSignedOut: () => void }) {
   if (info?.state !== 'signed-in') return null;
 
   const signOut = async () => {
-    if (!(await confirm({ title: 'Sign out? Your notes stay on this PC.', confirmLabel: 'Sign out' }))) return;
+    setChecking(true); // a last sync first, up to 10 s
+    const pending = await api.pendingBeforeSignOut().catch(() => 0);
+    setChecking(false);
+    const description =
+      pending > 0
+        ? `${pending} ${pending === 1 ? "change hasn't" : "changes haven't"} uploaded yet. They stay on this PC and upload the next time you sign in.`
+        : 'Your notes stay on this PC for the next time you sign in.';
+    if (!(await confirm({ title: 'Sign out?', description, confirmLabel: 'Sign out' }))) return;
     api.signOut().catch((e) => toast(cleanIpcError(e)));
   };
 
@@ -36,8 +44,8 @@ export function AccountPage({ onSignedOut }: { onSignedOut: () => void }) {
           <div className="truncate text-sm text-muted-foreground">{info.email}</div>
           <div className="mt-1 text-xs text-muted-foreground">Signed in with Google</div>
         </div>
-        <Button variant="outline" size="sm" onClick={signOut}>
-          Sign out
+        <Button variant="outline" size="sm" disabled={checking} onClick={signOut}>
+          {checking ? 'Syncing…' : 'Sign out'}
         </Button>
       </div>
       <SyncCard />

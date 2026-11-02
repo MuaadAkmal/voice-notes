@@ -91,6 +91,12 @@ export class SyncController {
     this.trigger();
   }
 
+  /** Before signing out: one more sync (after any that is running) with its uploads. Resolves when done, or at once if it can't sync. */
+  async flush(): Promise<void> {
+    this.syncNow();
+    while (this.running) await this.running;
+  }
+
   /** Something was recorded in the outbox: sync once the edits settle. */
   onLocalChange(): void {
     if (!this.canSync()) return;
