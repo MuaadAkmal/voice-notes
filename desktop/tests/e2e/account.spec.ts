@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { launch, type TestApp } from './launch';
+import { launch, TEST_USER, type TestApp } from './launch';
 
 let t: TestApp;
 let page: Page;
@@ -7,7 +7,7 @@ let page: Page;
 const signInAs = () =>
   t.app.evaluate((_e, info) => (globalThis as unknown as { __voiceNotes: { account: { setTestSession(i: unknown): void } } }).__voiceNotes.account.setTestSession(info), {
     state: 'signed-in',
-    userId: 'u1',
+    userId: TEST_USER,
     email: 'muaad@example.com',
     name: 'Muaad Akmal',
     avatar: null,
@@ -30,20 +30,6 @@ test.afterEach(async () => {
   await t.close();
 });
 
-test('signed out, the sidebar offers Sign in', async () => {
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
-});
-
-test('Sign in under test never opens a real browser, and Cancel stops it', async () => {
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByText('Waiting for browser…')).toBeVisible();
-  await expect
-    .poll(() => t.hooks((h) => h.openedExternal))
-    .toEqual([expect.stringMatching(/^https:\/\/tpadlhyraittxehfvshc\.supabase\.co\/auth\/v1\/authorize\?/)]);
-  await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
-});
-
 test('signed in, the chip shows who; the Account page signs out', async () => {
   await signInAs();
   const chip = page.getByRole('button', { name: /^Account: Muaad Akmal/ });
@@ -53,14 +39,13 @@ test('signed in, the chip shows who; the Account page signs out', async () => {
   await chip.click();
   await expect(page.getByText('muaad@example.com')).toBeVisible();
   await expect(page.getByText('Signed in with Google')).toBeVisible();
-  await expect(page.getByText('Sync this PC with your account?')).toBeVisible();
+  await expect(page.getByText('Sync', { exact: true })).toBeVisible();
   for (const theme of ['light', 'dark'] as const) {
     await setTheme(theme);
     await page.screenshot({ path: `.superpowers/shots/account-${theme}.png` });
   }
   await page.getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByText('Sign out? Your notes stay on this PC.')).toBeVisible();
+  await expect(page.getByRole('alertdialog').getByText('Sign out?')).toBeVisible();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out' }).click();
-  await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
-  await expect(page.getByText('muaad@example.com')).toBeHidden();
+  await expect.poll(() => t.hooks((h) => h.relaunches)).toEqual([null]); // back to the sign-in screen
 });

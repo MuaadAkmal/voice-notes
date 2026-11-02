@@ -88,6 +88,8 @@ test('when the free minutes are used up, the pill says so', async () => {
 
 test('signed out, the Cloud card asks to sign in', async () => {
   t = await launch();
+  // As after an offline start with an expired token: the profile stays open, signed out.
+  await t.hooks((h) => h.account.setTestSession({ state: 'signed-out' }));
   const page = t.dashboard;
   await page.getByRole('button', { name: 'Transcription' }).click();
   await page.getByRole('tab', { name: /Voice Notes Cloud/ }).click();

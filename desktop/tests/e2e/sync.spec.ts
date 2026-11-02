@@ -8,7 +8,7 @@ let server: Awaited<ReturnType<typeof startSyncServer>>;
 let a: TestApp;
 let b: TestApp;
 
-/** Points the app at the local sync server, signs it in as USER, and turns sync on from the prompt. */
+/** Points the app at the local sync server and signs it in as USER (its profile, always synced). */
 async function connect(t: TestApp) {
   await t.app.evaluate(
     (_e, { url, user }) => {
@@ -21,8 +21,6 @@ async function connect(t: TestApp) {
   );
   const page = t.dashboard;
   await page.getByRole('button', { name: /^Account: Test User/ }).click();
-  await expect(page.getByText('Sync this PC with your account?')).toBeVisible();
-  await page.getByRole('button', { name: 'Turn on' }).click();
   await expect(page.getByText(/^Synced/)).toBeVisible({ timeout: 15_000 });
 }
 
@@ -57,7 +55,7 @@ test.afterEach(async () => {
   await b.close();
 });
 
-test('two PCs stay in step: notes, an open page, and the switch', async () => {
+test('two PCs stay in step: notes and an open page', async () => {
   await a.record(1500);
   const noteId = await a.hooks((h) => h.store.list()[0].id);
   await connect(a);
@@ -104,17 +102,6 @@ test('two PCs stay in step: notes, an open page, and the switch', async () => {
     return all.includes('rewritten on B') && all.includes('typed on A');
   });
 
-  // Switched off on A: an edit waits; switched back on, it goes across.
-  await a.dashboard.getByRole('button', { name: /^Account: Test User/ }).click();
-  await a.dashboard.getByRole('switch', { name: 'Sync this PC' }).click();
-  await expect(a.dashboard.getByRole('switch', { name: 'Sync this PC' })).toHaveAttribute('aria-checked', 'false');
-  await a.app.evaluate((_e, id) => (globalThis as unknown as { __voiceNotes: any }).__voiceNotes.store.rename(id, 'Made while off'), noteId); // eslint-disable-line @typescript-eslint/no-explicit-any
-  await syncNow(a);
-  await syncNow(b);
-  await b.dashboard.waitForTimeout(1000);
-  expect(await b.hooks((h) => h.store.list().map((n) => n.title))).not.toContain('Made while off');
-  await a.dashboard.getByRole('switch', { name: 'Sync this PC' }).click();
-  await until(b.dashboard, async () => (await b.hooks((h) => h.store.list().map((n) => n.title))).includes('Made while off'));
 });
 
 /** Like `hooks`, with one argument passed through. */

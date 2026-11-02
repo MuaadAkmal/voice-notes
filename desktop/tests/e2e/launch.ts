@@ -25,6 +25,7 @@ export type Hooks = {
   dictationGesture: { toggle(): void };
   pasted: string[];
   account: { setTestSession(info: unknown): void };
+  relaunches: (string | null)[];
   reminders: {
     fired: { id: string; text: string; missed: boolean }[];
     check(): void;
@@ -37,16 +38,26 @@ export type TestApp = {
   app: ElectronApplication;
   dashboard: Page;
   userData: string;
+  /** The open profile's folder (recordings/, images/, the database), or null on the sign-in screen. */
+  profileDir: string | null;
   hooks: <T>(fn: (h: Hooks) => T) => Promise<T>;
   record: (ms?: number) => Promise<void>;
   close: () => Promise<void>;
 };
 
+/** The account a launched app is signed in as, unless `profile` says otherwise (the sync, cloud and connectors fixtures use it too). */
+export const TEST_USER = '11111111-1111-4111-8111-111111111111';
+
 /**
  * fakeAudioFile: the WAV Chromium's fake mic plays. The default is a steady tone: its own beeps are too sparse for a
- * short clip to count as heard. userData: reuse a data dir (relaunch).
+ * short clip to count as heard. userData: reuse a data dir (relaunch). profile: the signed-in account whose profile
+ * opens (default TEST_USER); null starts signed out, on the sign-in screen.
  */
-export async function launch({ fakeAudioFile = 'tests/e2e/fixtures/tone.wav', userData: reuseData }: { fakeAudioFile?: string; userData?: string } = {}): Promise<TestApp> {
+export async function launch({
+  fakeAudioFile = 'tests/e2e/fixtures/tone.wav',
+  userData: reuseData,
+  profile = TEST_USER,
+}: { fakeAudioFile?: string; userData?: string; profile?: string | null } = {}): Promise<TestApp> {
   const userData = reuseData ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vn-e2e-'));
   const app = await electron.launch({
     args: [
@@ -57,7 +68,7 @@ export async function launch({ fakeAudioFile = 'tests/e2e/fixtures/tone.wav', us
     ],
     // Playwright emulates prefers-color-scheme: light by default; let nativeTheme decide, as in the real app.
     colorScheme: null,
-    env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData },
+    env: { ...process.env, VOICE_NOTES_TEST: '1', VOICE_NOTES_USER_DATA: userData, VOICE_NOTES_TEST_SESSION: profile ?? '' },
   });
   // The inspector can run a call in the middle of a query in main ("database connection is busy"): wait for the event loop.
   const evaluate = app.evaluate.bind(app) as (fn: unknown, arg: unknown) => Promise<unknown>;
@@ -96,5 +107,6 @@ export async function launch({ fakeAudioFile = 'tests/e2e/fixtures/tone.wav', us
   };
 
   const close = () => app.evaluate(({ app }) => app.exit(0)).catch(() => undefined);
-  return { app, dashboard, userData, hooks, record, close };
+  const profileDir = profile ? path.join(userData, 'profiles', profile) : null;
+  return { app, dashboard, userData, profileDir, hooks, record, close };
 }

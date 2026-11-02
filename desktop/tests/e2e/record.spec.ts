@@ -85,5 +85,5 @@ test('cancel does not create a note', async () => {
   await hooks((h) => h.gesture.escape());
   await dashboard.waitForTimeout(1000);
   expect(await hooks((h) => h.store.list().length)).toBe(0);
-  expect(fs.readdirSync(path.join(t.userData, 'recordings'))).toEqual([]);
+  expect(fs.readdirSync(path.join(t.profileDir!, 'recordings'))).toEqual([]);
 });

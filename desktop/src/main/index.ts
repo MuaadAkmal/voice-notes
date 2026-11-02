@@ -788,11 +788,15 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     syncHolder.controller?.onAccountChanged();
     connectorsHolder.service?.onAccountChanged();
     // Boot (session restored) and every sign-in: Cloud becomes the provider if none is set up.
-    const patch = applyCloudDefault(settings, info.state === 'signed-in');
+    const patch = bootTestSession ? null : applyCloudDefault(settings, info.state === 'signed-in');
     if (patch) updateSettings(patch, { record: false });
   });
+  // e2e: launched signed in as the profile's account, with the provider left unset as the specs expect; a spec's
+  // own setTestSession then applies the Cloud default like a real sign-in.
+  let bootTestSession = testing;
   if (testing) account.setTestSession({ state: 'signed-in', userId: profile.userId, email: 'test@example.com', name: 'Test User', avatar: null });
   else account.init().catch((err) => log.warn('[account] init failed', err));
+  bootTestSession = false;
 
   // Two-PC sync through the `sync` Edge Function: rows, then audio and images.
   let testToken: (() => Promise<string | null>) | null = null;
@@ -1113,7 +1117,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       connectors: {
         // A local stand-in for the function, which also serves the Calendar API under /calendar/v3.
         useServer: (url: string) => void (connectorsApi = makeConnectors(url, `${url}/calendar/v3`)),
-        useToken: (fn: () => Promise<string | null>) => void (testConnectorsToken = fn),
+        // A new token: look at the connection again (at boot it was checked against the real server, as signed out).
+        useToken: (fn: () => Promise<string | null>) => {
+          testConnectorsToken = fn;
+          void connectors.refresh();
+        },
         service: connectors,
       },
       reminders: {

@@ -207,7 +207,7 @@ test('pages: paste an image', async () => {
   await expect
     .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth))
     .toBe(4);
-  const dir = join(t.userData, 'images');
+  const dir = join(t.profileDir!, 'images');
   expect(readdirSync(dir)).toHaveLength(1);
 
   const id = await t.hooks((h) => h.store.pages.list()[0].id);
