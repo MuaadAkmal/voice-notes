@@ -95,6 +95,8 @@ const HIDDEN_ARG = '--hidden'; // passed by the login item so startup stays sile
 const PROBE_TIMEOUT_MS = 2000;
 const DICTATION_PRUNE_MS = 60 * 60_000;
 let isQuitting = false;
+// Any quit (tray, update, a relaunch into another profile) lets the dashboard close instead of hiding, in both modes.
+app.on('before-quit', () => (isQuitting = true));
 let dashboard: BrowserWindow | null = null;
 let onDashboardFocus: () => void = () => undefined; // set in boot
 
@@ -783,6 +785,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     // keeps that session, and start-up would open this profile again, round and round.
     if (info.state === 'signed-out' && (testing || !sessionUserId(sessionStore, SUPABASE_URL))) {
       relaunch(null);
+      return;
+    }
+    // Signed in as someone else (e.g. from the Sign in a signed-out chip offers): that account's profile.
+    if (info.state === 'signed-in' && info.userId !== profile.userId) {
+      relaunch(info.userId);
       return;
     }
     syncHolder.controller?.onAccountChanged();

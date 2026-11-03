@@ -106,3 +106,21 @@ test('upgrade: a root-level library opens as its owner’s profile', async () =>
   expect(fs.existsSync(path.join(userData, 'profiles', 'old', 'voice-notes.sqlite'))).toBe(true);
   expect(fs.existsSync(path.join(userData, 'settings.json'))).toBe(false);
 });
+
+test('the sign-in screen can quit (a sign-in restarts through quit)', async () => {
+  t = await launch({ profile: null });
+  const proc = t.app.process();
+  const exited = new Promise<boolean>((resolve) => {
+    proc.once('exit', () => resolve(true));
+    setTimeout(() => resolve(false), 10_000);
+  });
+  await t.app.evaluate(({ app }) => app.quit()).catch(() => undefined);
+  expect(await exited).toBe(true);
+  t = null;
+});
+
+test('signing in as another account while a profile is open restarts into it', async () => {
+  t = await launch({ profile: 'a' });
+  await signIn(t, 'b');
+  await expect.poll(() => t!.hooks((h) => h.relaunches)).toEqual(['b']);
+});
