@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useRoute } from "@/hooks/useRoute";
 import { CommandPalette } from "./CommandPalette";
+import { PeekSidebar } from "./PeekSidebar";
 import { RestoreUnsaved } from "./RestoreUnsaved";
 import { Sidebar } from "./Sidebar";
 
@@ -24,7 +25,7 @@ function Loading() {
   );
 }
 
-/** Sidebar (a sheet on phones) beside a calm centred column with the open page, note or list. */
+/** A calm centred column with the open page, note or list; the sidebar pops out when wanted (a sheet on phones). */
 export function AppShell() {
   const snap = useStore();
   const { route } = useRoute();
@@ -55,9 +56,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-dvh">
-      <aside className="hidden w-[280px] shrink-0 border-r border-sidebar-border md:flex">
-        <Sidebar onSearch={openSearch} onOpen={() => {}} />
-      </aside>
+      <PeekSidebar onSearch={openSearch} />
       <div className="min-w-0 flex-1 overflow-y-auto">
         <header className="sticky top-0 z-10 flex h-12 items-center border-b bg-background/90 px-2 backdrop-blur md:hidden">
           <Button variant="ghost" size="icon" aria-label="Open menu" onClick={() => setSheet(true)}>
