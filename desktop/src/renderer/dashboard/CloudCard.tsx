@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CloudUsageResult, Settings } from '../../shared/channels';
-import { usageText } from '../../shared/cloud-usage';
+import { planName, usageText } from '../../shared/cloud-usage';
 import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
+import { PlanButton } from './PlanCard';
 import { useAccount } from './useAccount';
 import { useToast } from './Toast';
 
@@ -76,7 +77,12 @@ export function CloudCard({ settings, onSaved }: { settings: Settings; onSaved: 
               </p>
             ) : usage ? (
               <div>
-                <div className="text-sm">{usageText(usage)}</div>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm">
+                    {planName(usage.plan)} · {usageText(usage)}
+                  </div>
+                  <PlanButton plan={usage.plan} />
+                </div>
                 <div
                   role="progressbar"
                   aria-label="Cloud usage"

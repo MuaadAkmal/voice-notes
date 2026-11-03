@@ -89,7 +89,7 @@ it('reads usage', async () => {
 });
 
 it('says what to do in its messages', () => {
-  expect(new QuotaExceeded(new Date(2026, 10, 1, 9).toISOString()).message).toBe('Free minutes used · resets 1 Nov');
+  expect(new QuotaExceeded(new Date(2026, 10, 1, 9).toISOString()).message).toBe('Cloud minutes used · resets 1 Nov');
 });
 
 it.each([

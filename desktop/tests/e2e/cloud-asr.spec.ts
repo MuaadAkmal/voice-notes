@@ -73,7 +73,23 @@ test('the Cloud card shows the month so far', async () => {
   await expect(page.getByText('Voice Notes Cloud', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/38 \/ 120 min this month · resets/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'In use' })).toBeDisabled();
+  await expect(page.getByText(/^Free · 38/)).toBeVisible();
   await page.screenshot({ path: '.superpowers/shots/cloud-card.png' });
+  await page.getByRole('button', { name: 'See plans' }).click();
+  await expect.poll(() => t.hooks((h) => h.openedExternal)).toContain('https://app.voicenote.cloud/account/');
+});
+
+test('the Account page shows the plan and opens the plan page', async () => {
+  const page = await signedIn();
+  await server.setUsed(10 * 60);
+  await page.getByRole('button', { name: /^Account: Test User/ }).click();
+  await expect(page.getByRole('heading', { name: 'Account' })).toBeVisible();
+  await expect(page.getByText(/Cloud transcription: 10 \/ 120 min this month/)).toBeVisible();
+  await expect(page.getByText('More Cloud time and storage')).toBeVisible();
+  await expect(page.getByText('₹129/month')).toBeVisible();
+  await page.screenshot({ path: '.superpowers/shots/account-plan.png' });
+  await page.getByRole('button', { name: 'See plans' }).click();
+  await expect.poll(() => t.hooks((h) => h.openedExternal)).toContain('https://app.voicenote.cloud/account/');
 });
 
 test('when the free minutes are used up, the pill says so', async () => {
@@ -82,7 +98,7 @@ test('when the free minutes are used up, the pill says so', async () => {
   await server.setUsed(7200);
   const pill = await overlay(t);
   await dictate(page);
-  await expect(pill.getByTestId('pill')).toContainText('Free minutes used · resets', { timeout: 15_000 });
+  await expect(pill.getByTestId('pill')).toContainText('Cloud minutes used · resets', { timeout: 15_000 });
   expect(await t.hooks((h) => h.pasted)).toEqual([]);
 });
 

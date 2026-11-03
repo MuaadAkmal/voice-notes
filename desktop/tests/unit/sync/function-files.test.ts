@@ -49,6 +49,13 @@ const FUNCTIONS: Record<string, string[]> = {
     'asr/elevenlabs.ts',
     'asr/handler.ts',
   ],
+  billing: [
+    'billing/protocol.ts',
+    'billing/razorpay.ts',
+    'billing/store.ts',
+    'billing/core.ts',
+    'billing/handler.ts',
+  ],
 };
 const stripExt = (code: string) => code.replace(/(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1$2');
 

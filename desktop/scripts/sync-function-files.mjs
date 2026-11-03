@@ -1,5 +1,5 @@
 // Copies the shared code into the Edge Functions (supabase/functions/<name>/_shared), so `sync`,
-// `connectors`, `commands` and `asr` run exactly the app's rules. Only relative import paths change: Deno needs the `.ts`.
+// `connectors`, `commands`, `asr` and `billing` run exactly the app's rules. Only relative import paths change: Deno needs the `.ts`.
 // Run: npm run sync:function   (tests/unit/sync/function-files.test.ts checks the copies)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,6 +51,13 @@ const FUNCTIONS = {
     'asr/core.ts',
     'asr/elevenlabs.ts',
     'asr/handler.ts',
+  ],
+  billing: [
+    'billing/protocol.ts',
+    'billing/razorpay.ts',
+    'billing/store.ts',
+    'billing/core.ts',
+    'billing/handler.ts',
   ],
 };
 

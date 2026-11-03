@@ -3,6 +3,7 @@ import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
 import { Avatar } from './Avatar';
 import { useConfirm } from './ConfirmDialog';
+import { PlanCard } from './PlanCard';
 import { SyncCard } from './SyncCard';
 import { useToast } from './Toast';
 import { useAccount } from './useAccount';
@@ -48,6 +49,7 @@ export function AccountPage({ onSignedOut }: { onSignedOut: () => void }) {
           {checking ? 'Syncing…' : 'Sign out'}
         </Button>
       </div>
+      <PlanCard />
       <SyncCard />
     </div>
   );

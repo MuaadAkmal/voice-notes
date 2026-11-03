@@ -48,8 +48,8 @@ export function transcriptionError(f: TranscriptionFailure): string {
     case 'quota': {
       const d = new Date(f.resetsAt);
       return Number.isNaN(d.getTime())
-        ? 'Free minutes used'
-        : `Free minutes used · resets ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+        ? 'Cloud minutes used'
+        : `Cloud minutes used · resets ${d.getDate()} ${MONTHS[d.getMonth()]}`;
     }
     case 'too-large':
       return 'Recording too long for Cloud';
