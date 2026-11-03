@@ -38,4 +38,7 @@ async function notify(userId: string, from: string): Promise<void> {
   await sql`select realtime.send(${JSON.stringify({ from })}::jsonb, 'changed', ${`sync:${userId}`}, true)`;
 }
 
-Deno.serve((req) => handle(req, { verify, core, files, notify }));
+// The web app's origins (CORS); the PCs send no Origin and are unaffected.
+const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://app.voicenote.cloud,http://localhost:3000').split(',');
+
+Deno.serve((req) => handle(req, { verify, core, files, notify, origins }));

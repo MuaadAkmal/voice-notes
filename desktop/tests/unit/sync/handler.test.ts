@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { MemoryBucket } from '../../../src/shared/sync/file-bucket';
 import { FileRules } from '../../../src/shared/sync/file-rules';
 import { handle } from '../../../src/shared/sync/handler';
@@ -168,4 +168,52 @@ it('a ping that fails still answers the push', async () => {
   const res = await call('push', push([{ id: 'm1', op: { op: 'folder.create', id: 'f', row: folder }, baseVersion: 0 }]));
   expect(res.status).toBe(200);
   expect((await res.json()).acked).toHaveLength(1);
+});
+describe('CORS for the web app', () => {
+  const APP = 'https://app.voicenote.cloud';
+  const deps = () => ({
+    verify: async (jwt: string) => (jwt === 'good' ? USER : null),
+    core: new SyncCore(new MemoryStore()),
+    origins: [APP],
+  });
+  const req = (method: string, origin: string | null, token: string | null = 'good') =>
+    new Request(`${BASE}/pull`, {
+      method,
+      headers: {
+        ...(origin ? { origin } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        'content-type': 'application/json',
+      },
+      ...(method === 'POST' ? { body: JSON.stringify({ clientId: 'W', cursor: 0 }) } : {}),
+    });
+
+  it('a preflight from the web app is 204 with CORS headers', async () => {
+    const res = await handle(req('OPTIONS', APP, null), deps());
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe(APP);
+    expect(res.headers.get('access-control-allow-headers')).toContain('apikey');
+    expect(res.headers.get('access-control-allow-methods')).toBe('POST, OPTIONS');
+    expect(res.headers.get('vary')).toBe('Origin');
+  });
+
+  it('a preflight from another origin is 404 without CORS headers', async () => {
+    const res = await handle(req('OPTIONS', 'https://evil.example', null), deps());
+    expect(res.status).toBe(404);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('responses to the web app carry the origin, errors too', async () => {
+    const ok = await handle(req('POST', APP), deps());
+    expect(ok.status).toBe(200);
+    expect(ok.headers.get('access-control-allow-origin')).toBe(APP);
+    const denied = await handle(req('POST', APP, null), deps());
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get('access-control-allow-origin')).toBe(APP);
+  });
+
+  it('a request without an Origin has no CORS headers', async () => {
+    const res = await handle(req('POST', null), deps());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
 });

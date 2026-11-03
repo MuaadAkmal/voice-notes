@@ -15,30 +15,52 @@ export type HandlerDeps = {
   files?: Pick<FileRules, 'upload' | 'download' | 'afterPush'>;
   /** Tells the account's other PCs to sync now (a Realtime broadcast); `from` is the pushing PC. */
   notify?(userId: string, from: string): Promise<void>;
+  /** Browser origins allowed to call (the web app); a request without an Origin is unaffected. */
+  origins?: readonly string[];
 };
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_ID = 200;
 
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+type Headers = Record<string, string>;
+
+const json = (status: number, body: unknown, extra: Headers = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...extra } });
+
+/** CORS headers for an allowed browser origin, else none. */
+function corsFor(req: Request, origins: readonly string[] | undefined): Headers {
+  const origin = req.headers.get('origin');
+  return origin && origins?.includes(origin) ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
+}
 
 class BadRequest extends Error {}
 
 export async function handle(req: Request, deps: HandlerDeps): Promise<Response> {
+  const cors = corsFor(req, deps.origins);
+  if (req.method === 'OPTIONS' && cors['access-control-allow-origin'])
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...cors,
+        'access-control-allow-methods': 'POST, OPTIONS',
+        'access-control-allow-headers': 'authorization, apikey, content-type',
+        'access-control-max-age': '86400',
+      },
+    });
+  const reply = (status: number, body: unknown) => json(status, body, cors);
   const parts = new URL(req.url).pathname.split('/');
   const last = parts[parts.length - 1];
   const route = parts[parts.length - 2] === 'files' ? `files/${last}` : last;
   const routes = deps.files ? ['push', 'pull', 'files/upload', 'files/download'] : ['push', 'pull'];
-  if (req.method !== 'POST' || !routes.includes(route)) return json(404, { error: 'Not found' });
+  if (req.method !== 'POST' || !routes.includes(route)) return reply(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
   const jwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   const userId = jwt ? await deps.verify(jwt).catch(() => null) : null;
-  if (!userId) return json(401, { error: 'Sign in again' });
+  if (!userId) return reply(401, { error: 'Sign in again' });
 
   const text = await req.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return json(413, { error: 'Too large' });
+  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return reply(413, { error: 'Too large' });
 
   try {
     let body: unknown;
@@ -55,18 +77,18 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
       await deps.files?.afterPush(userId, push).catch((err) => console.error('[sync] files', err));
       // A missed ping only means the other PCs sync on their timer.
       if (push.mutations.length) await deps.notify?.(userId, push.clientId).catch((err) => console.error('[sync] ping', err));
-      return json(200, res);
+      return reply(200, res);
     }
-    if (route === 'files/upload') return json(200, await deps.files!.upload(userId, readUpload(body)));
-    if (route === 'files/download') return json(200, await deps.files!.download(userId, readDownload(body)));
-    return json(200, await deps.core.pull(userId, readPull(body)));
+    if (route === 'files/upload') return reply(200, await deps.files!.upload(userId, readUpload(body)));
+    if (route === 'files/download') return reply(200, await deps.files!.download(userId, readDownload(body)));
+    return reply(200, await deps.core.pull(userId, readPull(body)));
   } catch (err) {
-    if (err instanceof BadRequest) return json(400, { error: err.message });
+    if (err instanceof BadRequest) return reply(400, { error: err.message });
     // A value Postgres can't store (SQLSTATE class 22): this batch will never succeed, so say so.
     if (typeof (err as { code?: unknown })?.code === 'string' && (err as { code: string }).code.startsWith('22'))
-      return json(400, { error: 'A change could not be stored' });
+      return reply(400, { error: 'A change could not be stored' });
     console.error('[sync] failed', err); // the function's own log; the client only learns that it failed
-    return json(500, { error: 'Server error' });
+    return reply(500, { error: 'Server error' });
   }
 }
 
