@@ -9,6 +9,9 @@ import type { SyncStore } from './server-core';
 const SWEEP_EVERY_MS = 3_600_000;
 const IMAGE_GRACE_MS = 24 * 3_600_000; // an image can arrive before the page body that references it
 
+/** Bytes the account's files take and its plan allows (`storage_usage_for`); null: no cap. */
+export type StorageQuota = (userId: string) => Promise<{ used: number; limit: number } | null>;
+
 export class FileRules {
   private readonly lastSweep = new Map<string, number>();
 
@@ -16,6 +19,7 @@ export class FileRules {
     private readonly store: Pick<SyncStore, 'fileOwner' | 'liveFiles'>,
     private readonly bucket: FileBucket,
     private readonly now: () => number = Date.now,
+    private readonly quota: StorageQuota = async () => null,
   ) {}
 
   async upload(userId: string, req: UploadRequest): Promise<UploadResponse> {
@@ -23,6 +27,9 @@ export class FileRules {
     const owner = await this.store.fileOwner(userId, req.kind, req.name);
     if (owner === 'none') return { status: 'not-yet' };
     if (owner === 'deleted') return { status: 'gone' };
+    const q = await this.quota(userId);
+    // Over the plan: the file waits on the PC. An app too old to know `storage-full` keeps it queued on `not-yet`.
+    if (q && q.used + req.size > q.limit) return { status: req.full ? 'storage-full' : 'not-yet' };
     return { status: 'ok', url: await this.bucket.signUpload(req.kind, `${userId}/${req.name}`) };
   }
 

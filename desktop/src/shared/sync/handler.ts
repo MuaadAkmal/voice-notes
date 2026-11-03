@@ -93,7 +93,7 @@ function readDownload(b: unknown): DownloadRequest {
 
 function readUpload(b: unknown): UploadRequest {
   need(isObject(b) && fileName(b.kind, b.name) && count(b.size), 'file');
-  return { kind: b.kind as UploadRequest['kind'], name: b.name as string, size: b.size as number };
+  return { kind: b.kind as UploadRequest['kind'], name: b.name as string, size: b.size as number, full: b.full === true };
 }
 
 function readPush(b: unknown): PushRequest {

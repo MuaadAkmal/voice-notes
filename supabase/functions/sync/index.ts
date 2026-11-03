@@ -24,7 +24,12 @@ const core = new SyncCore(store);
 const storage = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
-const files = new FileRules(store, new SupabaseBucket(storage));
+// The plan's storage cap (public.storage_usage_for, *_plan_limits.sql), checked before each upload URL.
+async function quota(userId: string): Promise<{ used: number; limit: number }> {
+  const [r] = await sql`select used, lim from public.storage_usage_for(${userId}::uuid)`;
+  return { used: Number(r.used), limit: Number(r.lim) };
+}
+const files = new FileRules(store, new SupabaseBucket(storage), Date.now, quota);
 
 /** The signed-in user's id from a verified access token; anything else is no one. */
 async function verify(jwt: string): Promise<string | null> {

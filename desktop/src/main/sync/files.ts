@@ -80,8 +80,14 @@ export class FileSync {
         files.remove(entry.kind, entry.name);
         continue;
       }
-      const answer = await this.d.server.uploadUrl({ kind: entry.kind, name: entry.name, size: bytes.length });
+      const answer = await this.d.server.uploadUrl({ kind: entry.kind, name: entry.name, size: bytes.length, full: true });
       if (answer.status === 'not-yet') continue; // its row reaches the server with a later push
+      if (answer.status === 'storage-full') {
+        // The plan has no room: the file stays on this PC and is tried again later (or after an upgrade).
+        storageFull = true;
+        files.later(entry.kind, entry.name, this.now() + STORAGE_FULL_RETRY_MS);
+        continue;
+      }
       if (answer.status !== 'ok') {
         if (answer.status === 'too-large') console.warn('[sync] too large to upload', entry.kind, entry.name);
         files.remove(entry.kind, entry.name);

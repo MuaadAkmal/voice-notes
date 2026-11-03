@@ -32,8 +32,10 @@ export type SyncServer = {
 
 // Files (audio, page images): the function hands out short-lived signed URLs; bytes go straight to Storage.
 export type FileKind = 'audio' | 'image';
-export type UploadRequest = { kind: FileKind; name: string; size: number };
-export type UploadResponse = { status: 'ok'; url: string } | { status: 'not-yet' | 'gone' | 'too-large' };
+/** `full`: this app understands `storage-full`. Older apps drop a file on any status they don't know, so they're told `not-yet` instead. */
+export type UploadRequest = { kind: FileKind; name: string; size: number; full?: boolean };
+/** `storage-full`: the account's plan has no room for this file; try again later. */
+export type UploadResponse = { status: 'ok'; url: string } | { status: 'not-yet' | 'gone' | 'too-large' | 'storage-full' };
 export type DownloadRequest = { kind: FileKind; name: string };
 export type DownloadResponse = { status: 'ok'; url: string } | { status: 'not-uploaded' };
 export const FILE_LIMITS: Record<FileKind, number> = { audio: 50 * 1024 * 1024, image: 20 * 1024 * 1024 };

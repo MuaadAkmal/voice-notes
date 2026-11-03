@@ -119,6 +119,24 @@ it('storage full keeps the entry for an hour and reports storageFull', async () 
   expect(files.waiting()).toBe(0);
 });
 
+it('a plan with no room keeps the entry for an hour, says it understands storage-full, and reports storageFull', async () => {
+  await store.create(audio());
+  const asked: unknown[] = [];
+  const answer = server.uploadUrl;
+  server.uploadUrl = async (req) => {
+    asked.push(req);
+    return answer(req);
+  };
+  server.uploadAnswer = { status: 'storage-full' };
+  expect(await files.drain()).toEqual({ storageFull: true });
+  expect(asked).toEqual([expect.objectContaining({ full: true })]);
+  expect(files.waiting()).toBe(1);
+  server.uploadAnswer = null; // upgraded
+  clock += 61 * MIN;
+  expect(await files.drain()).toEqual({ storageFull: false });
+  expect(files.waiting()).toBe(0);
+});
+
 it('an offline drain throws and keeps the queue', async () => {
   await store.create(audio());
   server.offline = true;

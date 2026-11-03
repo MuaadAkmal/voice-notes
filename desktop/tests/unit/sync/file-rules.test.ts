@@ -142,3 +142,23 @@ it('cleanup never removes audio uploaded for a note pushed while it ran', async 
   await rules.afterPush(USER, { clientId: 'A', deviceName: 'PC-A', mutations: [] });
   expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeDefined();
 });
+
+it("over the plan's storage, upload is storage-full for apps that know it, not-yet for older ones", async () => {
+  const { store, bucket, push } = setup();
+  let used = 90;
+  const rules = new FileRules(store, bucket, Date.now, async () => ({ used, limit: 100 }));
+  await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
+  const ask = (size: number, full?: boolean) => rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size, full });
+  expect((await ask(10, true)).status).toBe('ok'); // exactly at the limit
+  expect(await ask(11, true)).toEqual({ status: 'storage-full' });
+  expect(await ask(11)).toEqual({ status: 'not-yet' });
+  used = 0; // upgraded, or files deleted
+  expect((await ask(11, true)).status).toBe('ok');
+});
+
+it('with no cap, any size within the file limit is ok', async () => {
+  const { store, bucket, push } = setup();
+  const rules = new FileRules(store, bucket, Date.now, async () => null);
+  await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
+  expect((await rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size: 1000, full: true })).status).toBe('ok');
+});
