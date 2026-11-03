@@ -3,6 +3,7 @@
 import { FolderPlusIcon, InboxIcon, AudioLinesIcon, PlusIcon, SearchIcon, StarIcon } from "lucide-react";
 import { useState } from "react";
 import { useEngine, useSync } from "@/app/providers";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useRoute } from "@/hooks/useRoute";
 import { newFolder, newPage } from "@/lib/actions";
@@ -69,7 +70,10 @@ export function Sidebar({ onSearch, onOpen }: { onSearch(): void; onOpen(): void
         </nav>
       </ScrollArea>
       <div className="space-y-1 border-t border-sidebar-border px-5 py-4">
-        <p className="truncate text-xs text-sidebar-foreground/80">{email}</p>
+        <div className="flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-xs text-sidebar-foreground/80">{email}</p>
+          <ThemeToggle className="-mr-2 text-muted-foreground" />
+        </div>
         <StatusLine />
         <button
           type="button"

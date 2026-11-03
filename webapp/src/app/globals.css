@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/* Light by default; the sidebar toggle sets data-theme="dark" on <html> (saved as vn.theme). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
   --color-background: var(--background);
@@ -83,8 +84,9 @@
   --sidebar-ring: #5b5ff0;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Dark: chosen with the toggle. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0b0c12;
   --foreground: #f3f3f6;
   --card: #12131a;
@@ -116,7 +118,6 @@
   --sidebar-accent-foreground: #f3f3f6;
   --sidebar-border: rgb(255 255 255 / 8%);
   --sidebar-ring: #a5a8ff;
-  }
 }
 
 @layer base {
