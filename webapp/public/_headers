@@ -1,4 +1,4 @@
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' {{SCRIPT_HASHES}}; style-src 'self' 'unsafe-inline'; connect-src 'self' https://tpadlhyraittxehfvshc.supabase.co wss://tpadlhyraittxehfvshc.supabase.co; img-src 'self' data: blob: https://tpadlhyraittxehfvshc.supabase.co https://*.googleusercontent.com; media-src 'self' blob: https://tpadlhyraittxehfvshc.supabase.co; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' {{SCRIPT_HASHES}} https://checkout.razorpay.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://tpadlhyraittxehfvshc.supabase.co wss://tpadlhyraittxehfvshc.supabase.co https://*.razorpay.com; img-src 'self' data: blob: https://tpadlhyraittxehfvshc.supabase.co https://*.googleusercontent.com https://*.razorpay.com; media-src 'self' blob: https://tpadlhyraittxehfvshc.supabase.co; font-src 'self'; frame-src https://api.razorpay.com https://checkout.razorpay.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin

@@ -3,3 +3,4 @@
 export const SUPABASE_URL = "https://tpadlhyraittxehfvshc.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_-A-HowQg4wveAcixZbOklg_M1v36Xa9";
 export const SYNC_URL = `${SUPABASE_URL}/functions/v1/sync`;
+export const BILLING_URL = `${SUPABASE_URL}/functions/v1/billing`;

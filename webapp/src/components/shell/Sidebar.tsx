@@ -86,6 +86,9 @@ export function Sidebar({ onSearch, onOpen }: { onSearch(): void; onOpen(): void
           <ThemeToggle className="-mr-2 text-muted-foreground" />
         </div>
         <StatusLine />
+        <a href="/account/" className="block pt-1 text-xs text-muted-foreground hover:text-foreground">
+          Plan and billing
+        </a>
         <button
           type="button"
           className="pt-1 text-xs text-muted-foreground hover:text-foreground"
