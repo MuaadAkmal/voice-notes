@@ -21,8 +21,7 @@ export function Header() {
             </Link>
           </nav>
           <a href={WEB_APP_URL} className="mr-1 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-            <span className="sm:hidden">Web app</span>
-            <span className="hidden sm:inline">Open web app</span>
+            Sign in
           </a>
           <ThemeToggle />
           <a href={DOWNLOAD_URL} className="btn-primary rounded-full px-4 py-2 text-sm font-medium">
