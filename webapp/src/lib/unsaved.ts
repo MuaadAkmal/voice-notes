@@ -11,9 +11,23 @@ export function saveUnsaved(bodies: Record<string, string>): void {
 
 /** The saved bodies (page id → text), once; null when there are none. */
 export function takeUnsaved(): Record<string, string> | null {
+  const bodies = peekUnsaved();
+  clearUnsaved();
+  return bodies;
+}
+
+export function clearUnsaved(): void {
+  try {
+    sessionStorage.removeItem(KEY);
+  } catch {
+    // Storage blocked: nothing was kept.
+  }
+}
+
+/** The saved bodies without clearing them; null when there are none. */
+export function peekUnsaved(): Record<string, string> | null {
   try {
     const raw = sessionStorage.getItem(KEY);
-    sessionStorage.removeItem(KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : null;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
     const entries = Object.entries(parsed);

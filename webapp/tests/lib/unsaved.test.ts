@@ -25,3 +25,12 @@ it("nothing saved, an empty map, or garbage is null", () => {
   mem.set("vn.unsaved", '{"p": 3}');
   expect(takeUnsaved()).toBeNull();
 });
+
+it("peek keeps the bodies until cleared", async () => {
+  const { peekUnsaved, clearUnsaved } = await import("@/lib/unsaved");
+  saveUnsaved({ p: "draft" });
+  expect(peekUnsaved()).toEqual({ p: "draft" });
+  expect(peekUnsaved()).toEqual({ p: "draft" });
+  clearUnsaved();
+  expect(peekUnsaved()).toBeNull();
+});

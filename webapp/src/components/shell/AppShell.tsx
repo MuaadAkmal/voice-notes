@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useRoute } from "@/hooks/useRoute";
 import { CommandPalette } from "./CommandPalette";
+import { RestoreUnsaved } from "./RestoreUnsaved";
 import { Sidebar } from "./Sidebar";
 
 function Loading() {
@@ -73,6 +74,7 @@ export function AppShell() {
         </SheetContent>
       </Sheet>
       <CommandPalette open={palette} onOpenChange={setPalette} />
+      <RestoreUnsaved />
     </div>
   );
 }
