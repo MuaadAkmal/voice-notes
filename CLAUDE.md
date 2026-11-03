@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `desktop/`: the Windows Electron app. Details and commands: `desktop/CLAUDE.md`. Run its commands from `desktop/`.
 - `android/`: the Android app, native Kotlin, not started yet. Details: `android/CLAUDE.md`.
 - `web/`: the public website, a static Next.js export on Cloudflare Pages. Details and commands: `web/CLAUDE.md`. Run its commands from `web/`.
+- `webapp/`: the web app at `app.voicenote.cloud` (read and quick edits), a static Next.js export on Cloudflare Pages that talks only to the `sync` function. Details and commands: `webapp/CLAUDE.md`. Run its commands from `webapp/`.
 - `supabase/`: the backend both apps use: `functions/` (`sync`, `connectors`, `commands`, `asr`) and `migrations/`. Each function's `_shared/` is GENERATED from `desktop/src/shared` by `npm run sync:function` (run in `desktop/`) and checked by `desktop/tests/unit/sync/function-files.test.ts`; never edit it.
 - `docs/`: design notes; `docs/superpowers/` (specs and plans) is local and not published.
 
@@ -19,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - The apps share no code: Kotlin can't import the TypeScript. They share the backend's HTTP contracts, whose wire types live in `desktop/src/shared/<function>/protocol.ts` and `desktop/src/shared/sync/protocol.ts`.
 - A backend change affects both apps, and installed copies of each keep running old versions, so keep function changes backward compatible.
 - A new synced setting needs the `sync` function redeployed first, because it refuses unknown keys.
-- Tag releases per app: `desktop-v3.0.1`, `android-v0.1.0`.
+- Tag releases per app: `desktop-v3.0.1`, `android-v0.1.0`, `webapp-v0.1.0`.
 
 ## Contents
 
