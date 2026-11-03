@@ -1,3 +1,23 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { SyncProvider } from "@/app/providers";
+import { AppShell } from "@/components/shell/AppShell";
+import { useSession } from "@/hooks/useSession";
+
 export default function AppPage() {
-  return <main className="grid min-h-screen place-items-center text-muted-foreground">Loading…</main>;
+  const session = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (session.state === "signed-out") router.replace("/");
+  }, [session.state, router]);
+  if (session.state !== "signed-in" || !session.userId) return null;
+  return (
+    <SyncProvider key={session.userId} userId={session.userId} email={session.email}>
+      <Suspense>
+        <AppShell />
+      </Suspense>
+    </SyncProvider>
+  );
 }
