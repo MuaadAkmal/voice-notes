@@ -17,7 +17,7 @@ function world() {
   const fetch = (async (url: string, init: RequestInit) => handle(new Request(url, init), deps)) as unknown as typeof globalThis.fetch;
   const client = () => new SyncClient({ base: BASE, apikey: "k", token: async () => "tok", fetch });
   const store = new WebStore();
-  const web = new SyncEngine({ client: client(), store, outbox: new Outbox(), clientId: "W", deviceName: "Web · Chrome", refresh: async () => true, onSignedOut: () => {} });
+  const web = new SyncEngine({ client: client(), store, outbox: new Outbox(), clientId: "W", deviceName: "Web · Chrome", refresh: async () => "ok" as const, onSignedOut: () => {} });
   const pc = client();
   let seq = 0;
   const pcPush = (op: object, baseVersion: number) =>
@@ -78,5 +78,33 @@ it("a delete wins over a later web edit", async () => {
   await web.syncNow();
   expect(await pcPages()).toEqual([]);
   expect(store.snapshot().pages.has("p")).toBe(false);
+  web.stop();
+});
+
+it("an append made while the web editor is open survives the editor's save", async () => {
+  const { web, store, pcPush, pcPages } = world();
+  await pcPush({ op: "page.create", id: "p", row: row("") }, 0);
+  await web.syncNow();
+  const seededAt = store.version("page", "p"); // the editor opens here
+  await pcPush({ op: "page.append", id: "p", text: "from pc", day: "2026-11-03" }, 0);
+  await web.syncNow(); // a ping brings the append into the store, not into the editor
+  web.edit({ op: "page.setBody", id: "p", body: "web text" }, { baseVersion: seededAt });
+  await web.syncNow();
+  const body = (await pcPages()).find((p) => p.id === "p")!.body;
+  expect(body.startsWith("web text")).toBe(true);
+  expect(body).toContain("from pc");
+  web.stop();
+});
+
+it("a new page typed into before its create is acked makes no conflict copy", async () => {
+  const { web, pcPages } = world();
+  web.edit({ op: "page.create", id: "n", row: { ...row(""), id: "n", title: "New" } });
+  const sent = web.syncNow(); // the create is in flight
+  web.edit({ op: "page.setBody", id: "n", body: "hello" });
+  await sent;
+  await web.syncNow();
+  const pages = await pcPages();
+  expect(pages.map((p) => p.title)).toEqual(["New"]);
+  expect(pages[0].body).toBe("hello");
   web.stop();
 });

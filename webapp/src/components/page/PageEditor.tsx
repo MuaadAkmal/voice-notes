@@ -25,7 +25,16 @@ const extensions = [markdown({ base: markdownLanguage, codeLanguages: languages 
  * replaces yours; the server merges it when this edit is saved. Saves 1 s after typing stops, and at once
  * on Done, on leaving the page, and before the tab closes.
  */
-export function PageEditor({ initial, onSave }: { initial: string; onSave(body: string): void }) {
+export function PageEditor({
+  initial,
+  onSave,
+  registerDraft,
+}: {
+  initial: string;
+  onSave(body: string): void;
+  /** Lets the engine read text still waiting for the save delay (kept if the session ends). */
+  registerDraft?(read: () => string | null): () => void;
+}) {
   const [seed] = useState(initial);
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,6 +49,8 @@ export function PageEditor({ initial, onSave }: { initial: string; onSave(body: 
     if (pending.current !== null) save.current(pending.current);
     pending.current = null;
   };
+
+  useEffect(() => registerDraft?.(() => pending.current), [registerDraft]);
 
   useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {

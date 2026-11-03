@@ -1,6 +1,6 @@
 import type { WebOp } from "@/lib/apply-op";
 import { AuthExpired, NotSignedIn, Offline, Rejected, type SyncClient } from "./client";
-import type { Outbox } from "./outbox";
+import type { Outbox, Unsaved } from "./outbox";
 import type { Entity, WebStore } from "./store";
 
 export type SyncStatus = "saved" | "saving" | "offline" | "error";
@@ -11,10 +11,10 @@ type Deps = {
   outbox: Outbox;
   clientId: string;
   deviceName: string;
-  /** Refreshes the session; false when the user has to sign in again. */
-  refresh: () => Promise<boolean>;
+  /** Refreshes the session: 'signed-out' when the user has to sign in again, 'offline' when it couldn't ask. */
+  refresh: () => Promise<"ok" | "signed-out" | "offline">;
   /** The session is gone: the unsaved page bodies, for restoring after the next sign-in. */
-  onSignedOut: (unsaved: Record<string, string>) => void;
+  onSignedOut: (unsaved: Unsaved) => void;
   onRejected?: (message: string) => void;
   now?: () => number;
 };
@@ -39,6 +39,7 @@ export class SyncEngine {
   private failures = 0;
   private stopped = false;
   private listeners = new Set<(s: SyncStatus) => void>();
+  private drafts = new Map<string, () => { body: string; base: number } | null>();
   private readonly now: () => number;
   private readonly onFocus = () => this.poke();
 
@@ -68,13 +69,39 @@ export class SyncEngine {
     if (typeof window !== "undefined") window.removeEventListener("focus", this.onFocus);
   }
 
-  /** Applies a change here at once and sends it shortly. */
-  edit(op: WebOp): void {
-    const base = this.d.store.version(entityOf(op), op.id);
+  /**
+   * Applies a change here at once and sends it shortly. `baseVersion`: the version the change was made
+   * on, when that isn't the row's current one (an open editor's text predates later pulls).
+   */
+  edit(op: WebOp, opts: { baseVersion?: number } = {}): void {
+    const base = opts.baseVersion ?? this.d.store.version(entityOf(op), op.id);
     this.d.store.applyLocal(op);
     this.d.outbox.add(op, base);
     this.setStatus(this.status === "saved" ? "saving" : this.status);
     this.schedule(EDIT_DELAY_MS);
+  }
+
+  /** Where an editor opening on a page starts: an unacked body's base, else the page's version. */
+  baseFor(pageId: string): number {
+    return this.d.outbox.baseOf(pageId) ?? this.d.store.version("page", pageId);
+  }
+
+  /** Text an editor hasn't handed over yet, so it survives a lost session. */
+  registerDraft(pageId: string, read: () => { body: string; base: number } | null): () => void {
+    this.drafts.set(pageId, read);
+    return () => {
+      if (this.drafts.get(pageId) === read) this.drafts.delete(pageId);
+    };
+  }
+
+  /** Everything not saved yet: queued bodies, then editors' newer text. */
+  unsaved(): Unsaved {
+    const out = this.d.outbox.unsaved();
+    for (const [id, read] of this.drafts) {
+      const draft = read();
+      if (draft) out[id] = { body: draft.body, base: out[id]?.base ?? draft.base };
+    }
+    return out;
   }
 
   /** Another device pushed; our own pushes come back as pings too and are ignored. */
@@ -123,7 +150,11 @@ export class SyncEngine {
         try {
           const res = await this.authed(() => client.push({ clientId: this.d.clientId, deviceName: this.d.deviceName, mutations: batch }));
           const versions = new Map(res.acked.map((a) => [a.id, a.version]));
-          for (const m of outbox.ack(res.acked)) store.setVersion(entityOf(m.op), m.op.id, versions.get(m.id)!);
+          for (const m of outbox.ack(res.acked)) {
+            const version = versions.get(m.id)!;
+            store.setVersion(entityOf(m.op), m.op.id, version);
+            if (m.op.op.endsWith(".create")) outbox.rebase(m.op.id, version);
+          }
         } catch (err) {
           if (!(err instanceof Rejected)) throw err;
           // This batch can never succeed; the pull below restores the server's rows.
@@ -145,7 +176,7 @@ export class SyncEngine {
       outbox.release();
       if (err instanceof SignedOut || err instanceof NotSignedIn) {
         this.stop();
-        this.d.onSignedOut(outbox.bodies());
+        this.d.onSignedOut(this.unsaved());
         return;
       }
       this.failures++;
@@ -164,7 +195,9 @@ export class SyncEngine {
       return await call();
     } catch (err) {
       if (!(err instanceof AuthExpired)) throw err;
-      if (!(await this.d.refresh().catch(() => false))) throw new SignedOut();
+      const refreshed = await this.d.refresh().catch(() => "offline" as const);
+      if (refreshed === "offline") throw new Offline();
+      if (refreshed === "signed-out") throw new SignedOut();
       try {
         return await call();
       } catch (again) {

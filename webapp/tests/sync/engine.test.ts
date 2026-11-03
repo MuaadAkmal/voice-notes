@@ -13,7 +13,7 @@ const empty = (cursor = 0): PullResponse => ({ cursor, hasMore: false, rows: [],
 
 type FakeClient = { pull: ReturnType<typeof vi.fn>; push: ReturnType<typeof vi.fn> };
 
-function setup(client: FakeClient, refresh = async () => true) {
+function setup(client: FakeClient, refresh: () => Promise<"ok" | "signed-out" | "offline"> = async () => "ok") {
   const store = new WebStore();
   const outbox = new Outbox();
   const onSignedOut = vi.fn();
@@ -55,13 +55,35 @@ it("offline: says so and retries after 30 s, then 60 s", async () => {
 
 it("refreshes once on 401; a second 401 hands back the unsaved bodies", async () => {
   const push = vi.fn().mockRejectedValue(new AuthExpired());
-  const refresh = vi.fn(async () => true);
+  const refresh = vi.fn(async () => "ok" as const);
   const { engine, onSignedOut } = setup({ pull: vi.fn(), push }, refresh);
   engine.edit({ op: "page.setBody", id: "p", body: "draft" });
+  engine.registerDraft("q", () => ({ body: "still typing", base: 4 }));
   await engine.syncNow();
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(push).toHaveBeenCalledTimes(2);
-  expect(onSignedOut).toHaveBeenCalledWith({ p: "draft" });
+  expect(onSignedOut).toHaveBeenCalledWith({ p: { body: "draft", base: 0 }, q: { body: "still typing", base: 4 } });
+});
+
+it("a refresh that fails for network reasons backs off instead of signing out", async () => {
+  const pull = vi.fn().mockRejectedValue(new AuthExpired());
+  const { engine, onSignedOut } = setup({ pull, push: vi.fn() }, async () => "offline");
+  await engine.syncNow();
+  expect(onSignedOut).not.toHaveBeenCalled();
+  expect(engine.status).toBe("offline");
+});
+
+it("a body saved from an open editor keeps the base it started from", async () => {
+  const push = vi.fn(async (req: PushRequest) => ({ acked: req.mutations.map((m) => ({ id: m.id, version: 9 })) }));
+  const pull = vi
+    .fn()
+    .mockResolvedValueOnce({ cursor: 6, hasMore: false, rows: [{ entity: "page", id: "p", version: 6, deleted: false, data: page("p") }], prefs: [] })
+    .mockResolvedValue(empty(9));
+  const { engine } = setup({ pull, push });
+  await engine.syncNow();
+  engine.edit({ op: "page.setBody", id: "p", body: "typed" }, { baseVersion: 5 });
+  await engine.syncNow();
+  expect(push.mock.calls[0][0].mutations[0].baseVersion).toBe(5);
 });
 
 it("a 401 that refreshes fine carries on", async () => {

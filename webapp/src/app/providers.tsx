@@ -1,5 +1,6 @@
 "use client";
 
+import { isAuthApiError } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { toast } from "sonner";
 import { SUPABASE_PUBLISHABLE_KEY, SYNC_URL } from "@/lib/config";
@@ -15,14 +16,20 @@ type Sync = { store: WebStore; engine: SyncEngine; outbox: Outbox; client: SyncC
 
 const SyncContext = createContext<Sync | null>(null);
 
-/** This browser's sync id, made once. */
-function clientId(): string {
+/**
+ * This tab's sync id, new on every load. The server tells devices apart by it: two tabs sharing one
+ * would overwrite each other's page edits without a conflict copy, and ignore each other's pings.
+ */
+const clientId = () => crypto.randomUUID();
+
+/** 'signed-out' only when the auth server says the session is over; a network or server failure is 'offline'. */
+async function refresh(): Promise<"ok" | "signed-out" | "offline"> {
   try {
-    let id = localStorage.getItem("vn.clientId");
-    if (!id) localStorage.setItem("vn.clientId", (id = crypto.randomUUID()));
-    return id;
+    const { error } = await supabase().auth.refreshSession();
+    if (!error) return "ok";
+    return isAuthApiError(error) && error.status !== undefined && error.status >= 400 && error.status < 500 && error.status !== 429 ? "signed-out" : "offline";
   } catch {
-    return crypto.randomUUID();
+    return "offline";
   }
 }
 
@@ -41,7 +48,7 @@ function makeSync(email: string | null): Sync {
     outbox,
     clientId: clientId(),
     deviceName: deviceName(navigator.userAgent),
-    refresh: async () => !(await auth.refreshSession()).error,
+    refresh,
     onSignedOut: (unsaved) => {
       saveUnsaved(unsaved);
       void signOut();
@@ -56,7 +63,7 @@ export function SyncProvider({ userId, email, children }: { userId: string; emai
   const [sync] = useState(() => makeSync(email));
 
   useEffect(() => {
-    const { engine, outbox } = sync;
+    const { engine } = sync;
     engine.start();
     const sb = supabase();
     let channel: ReturnType<typeof sb.channel> | null = null;
@@ -68,10 +75,13 @@ export function SyncProvider({ userId, email, children }: { userId: string; emai
         .subscribe();
     });
     const beforeUnload = (e: BeforeUnloadEvent) => {
-      if (outbox.size > 0) e.preventDefault();
+      if (Object.keys(engine.unsaved()).length || sync.outbox.size > 0) e.preventDefault();
     };
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
+      // Torn down with text unsaved (signed out in another tab): keep it for the next sign-in.
+      const unsaved = engine.unsaved();
+      if (Object.keys(unsaved).length) saveUnsaved(unsaved);
       engine.stop();
       if (channel) void sb.removeChannel(channel);
       window.removeEventListener("beforeunload", beforeUnload);

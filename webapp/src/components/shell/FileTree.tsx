@@ -9,7 +9,7 @@ import { buildTree, type FolderNode, type ItemKind } from "@/lib/tree";
 import { cn } from "@/lib/utils";
 import { ItemMenu } from "./ItemMenu";
 
-const DRAG_TYPE = "application/x-vn-item";
+import { DRAG_TYPE, dropOnto, isOurs } from "@/lib/drop";
 
 export function dragProps(kind: ItemKind, id: string) {
   return {
@@ -30,20 +30,15 @@ export function useDropInto(folderId: string | null) {
     over,
     props: {
       onDragOver: (e: DragEvent) => {
-        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        if (!isOurs(e)) return;
         e.preventDefault();
+        e.stopPropagation(); // only the innermost target lights up
         setOver(true);
       },
       onDragLeave: () => setOver(false),
       onDrop: (e: DragEvent) => {
         setOver(false);
-        try {
-          const { kind, id } = JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as { kind: ItemKind; id: string };
-          e.preventDefault();
-          if (!(kind === "folder" && id === folderId)) moveItem(engine, snap, kind, id, folderId);
-        } catch {
-          // Not one of ours.
-        }
+        dropOnto(e, folderId, (kind, id, to) => moveItem(engine, snap, kind, id, to));
       },
     },
   };

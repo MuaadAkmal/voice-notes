@@ -33,7 +33,8 @@ export function RestoreUnsaved() {
           </Button>
           <Button
             onClick={() => {
-              for (const id of pages) engine.edit({ op: "page.setBody", id, body: bodies[id], at: Date.now() });
+              // On the base the lost edit started from, so what other devices added since is kept.
+              for (const id of pages) engine.edit({ op: "page.setBody", id, body: bodies[id].body, at: Date.now() }, { baseVersion: bodies[id].base });
               done();
             }}
           >

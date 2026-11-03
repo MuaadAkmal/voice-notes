@@ -1,32 +1,52 @@
 import type { PushResponse } from "@wire/sync/protocol";
-import type { WebOp } from "@/lib/apply-op";
+import { applyWebOp, type WebOp } from "@/lib/apply-op";
 
 export type Mutation = { id: string; op: WebOp; baseVersion: number };
+export type Unsaved = Record<string, { body: string; base: number }>;
 
 const MAX_BATCH = 100; // PUSH_MAX_MUTATIONS
+const MAX_BATCH_CHARS = 800_000; // the server refuses a request over 1 MB
+
+type Entry = Mutation & { inFlight: boolean };
 
 /**
- * Changes waiting for the server, in order. While a page body waits, a newer one replaces it (one
- * pending body per page, keeping the base it started from); a body already sent is never touched.
+ * Changes waiting for the server, in order. A row created here and not sent yet takes later edits
+ * into its create (a delete cancels it), as the desktop's outbox does. While a page body waits, a newer
+ * one replaces it, keeping the base it started from. Nothing already sent is ever changed.
  */
 export class Outbox {
-  private queue: (Mutation & { inFlight: boolean })[] = [];
+  private queue: Entry[] = [];
 
   get size(): number {
     return this.queue.length;
   }
 
   add(op: WebOp, baseVersion: number): void {
+    const waiting = (pred: (m: Entry) => boolean) => this.queue.find((m) => !m.inFlight && m.op.id === op.id && pred(m));
+    const create = waiting((m) => m.op.op.endsWith(".create") && m.op.op.split(".")[0] === op.op.split(".")[0]);
+    if (create && create.op.op.endsWith(".create")) {
+      if (op.op.endsWith(".delete")) return void (this.queue = this.queue.filter((m) => m !== create));
+      const row = applyWebOp((create.op as Extract<WebOp, { row: unknown }>).row, op);
+      if (row) return void (create.op = { ...create.op, row } as WebOp);
+    }
     if (op.op === "page.setBody") {
-      const waiting = this.queue.find((m) => !m.inFlight && m.op.op === "page.setBody" && m.op.id === op.id);
-      if (waiting) return void (waiting.op = op);
+      const body = waiting((m) => m.op.op === "page.setBody");
+      if (body) return void (body.op = op);
     }
     this.queue.push({ id: crypto.randomUUID(), op, baseVersion, inFlight: false });
   }
 
-  /** The next batch to push; it stays in flight until acked or released. */
+  /** The next batch to push, under the server's size limit; it stays in flight until acked or released. */
   take(max = MAX_BATCH): Mutation[] {
-    const batch = this.queue.filter((m) => !m.inFlight).slice(0, max);
+    const batch: Entry[] = [];
+    let chars = 0;
+    for (const m of this.queue) {
+      if (m.inFlight) continue;
+      const size = JSON.stringify(m.op).length;
+      if (batch.length >= max || (batch.length && chars + size > MAX_BATCH_CHARS)) break;
+      batch.push(m);
+      chars += size;
+    }
     for (const m of batch) m.inFlight = true;
     return batch.map(({ id, op, baseVersion }) => ({ id, op, baseVersion }));
   }
@@ -37,6 +57,11 @@ export class Outbox {
     const done = this.queue.filter((m) => ids.has(m.id));
     this.queue = this.queue.filter((m) => !ids.has(m.id));
     return done.map(({ id, op, baseVersion }) => ({ id, op, baseVersion }));
+  }
+
+  /** A row's create was acked at `version`: changes queued behind it were based on that create. */
+  rebase(id: string, version: number): void {
+    for (const m of this.queue) if (m.op.id === id && m.baseVersion === 0) m.baseVersion = version;
   }
 
   /** A push failed: what was in flight goes out again next time. */
@@ -54,10 +79,18 @@ export class Outbox {
     return this.queue.map((m) => m.op);
   }
 
-  /** The latest unsaved body of each page. */
-  bodies(): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const m of this.queue) if (m.op.op === "page.setBody") out[m.op.id] = m.op.body;
+  /** The base of the oldest unacked body of a page: an editor reopened before it is acked starts there. */
+  baseOf(pageId: string): number | undefined {
+    return this.queue.find((m) => m.op.op === "page.setBody" && m.op.id === pageId)?.baseVersion;
+  }
+
+  /** The latest unsaved body of each page, with the base its edit started from. */
+  unsaved(): Unsaved {
+    const out: Unsaved = {};
+    for (const m of this.queue) {
+      if (m.op.op !== "page.setBody") continue;
+      out[m.op.id] = { body: m.op.body, base: out[m.op.id]?.base ?? m.baseVersion };
+    }
     return out;
   }
 }

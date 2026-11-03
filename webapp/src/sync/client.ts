@@ -38,6 +38,8 @@ export class SyncClient {
       throw new Offline();
     }
     if (res.status === 401) throw new AuthExpired();
+    // Over the server's 1 MB: the same request can never succeed (batches are kept under it).
+    if (res.status === 413) throw new Rejected("Too large to save");
     if (res.status === 400) {
       const msg = await res.json().then((b: { error?: string }) => b.error, () => undefined);
       throw new Rejected(msg ?? "Rejected");

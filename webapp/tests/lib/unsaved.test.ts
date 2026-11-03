@@ -12,8 +12,8 @@ beforeEach(() => {
 });
 
 it("hands the saved bodies back once", () => {
-  saveUnsaved({ p: "draft" });
-  expect(takeUnsaved()).toEqual({ p: "draft" });
+  saveUnsaved({ p: { body: "draft", base: 3 } });
+  expect(takeUnsaved()).toEqual({ p: { body: "draft", base: 3 } });
   expect(takeUnsaved()).toBeNull();
 });
 
@@ -22,15 +22,15 @@ it("nothing saved, an empty map, or garbage is null", () => {
   expect(takeUnsaved()).toBeNull();
   mem.set("vn.unsaved", "{not json");
   expect(takeUnsaved()).toBeNull();
-  mem.set("vn.unsaved", '{"p": 3}');
+  mem.set("vn.unsaved", '{"p": "old format"}');
   expect(takeUnsaved()).toBeNull();
 });
 
 it("peek keeps the bodies until cleared", async () => {
   const { peekUnsaved, clearUnsaved } = await import("@/lib/unsaved");
-  saveUnsaved({ p: "draft" });
-  expect(peekUnsaved()).toEqual({ p: "draft" });
-  expect(peekUnsaved()).toEqual({ p: "draft" });
+  saveUnsaved({ p: { body: "draft", base: 3 } });
+  expect(peekUnsaved()).toEqual({ p: { body: "draft", base: 3 } });
+  expect(peekUnsaved()).toEqual({ p: { body: "draft", base: 3 } });
   clearUnsaved();
   expect(peekUnsaved()).toBeNull();
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { StarIcon } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useEngine, useStore } from "@/app/providers";
 import { ItemMenu } from "@/components/shell/ItemMenu";
 import { Button } from "@/components/ui/button";
@@ -32,8 +32,19 @@ export function PageView({ id }: { id: string }) {
   const snap = useStore();
   const engine = useEngine();
   const { go } = useRoute();
-  const [editing, setEditing] = useState(false);
+  // The version the editor's text was seeded from, while editing. Every save from this editor is based
+  // on it: the text never sees later pulls, so the server must replay what other devices added since.
+  const [base, setBase] = useState<number | null>(null);
+  const editing = base !== null;
   const page = snap.pages.get(id)?.data;
+  const registerDraft = useCallback(
+    (read: () => string | null) =>
+      engine.registerDraft(id, () => {
+        const body = read();
+        return body === null || base === null ? null : { body, base };
+      }),
+    [engine, id, base],
+  );
 
   if (!page) return <p className="text-muted-foreground">This page was deleted, or isn&apos;t on this account.</p>;
   const path = folderPath(snap, page.folderId);
@@ -52,7 +63,7 @@ export function PageView({ id }: { id: string }) {
           ))}
         </nav>
         {page.starred && <StarIcon className="size-4 fill-current text-amber-500" aria-label="Starred" />}
-        <Button variant={editing ? "default" : "ghost"} size="sm" onClick={() => setEditing(!editing)}>
+        <Button variant={editing ? "default" : "ghost"} size="sm" onClick={() => setBase(editing ? null : engine.baseFor(id))}>
           {editing ? "Done" : "Edit"}
         </Button>
         <ItemMenu kind="page" id={id} />
@@ -60,7 +71,11 @@ export function PageView({ id }: { id: string }) {
       <TitleField value={page.title} onSave={(title) => renameItem(engine, "page", id, title)} />
       <div className="mt-6">
         {editing ? (
-          <PageEditor initial={page.body} onSave={(body) => engine.edit({ op: "page.setBody", id, body, at: Date.now() })} />
+          <PageEditor
+            initial={page.body}
+            registerDraft={registerDraft}
+            onSave={(body) => engine.edit({ op: "page.setBody", id, body, at: Date.now() }, { baseVersion: base })}
+          />
         ) : page.body.trim() ? (
           <Markdown
             body={page.body}
@@ -71,7 +86,7 @@ export function PageView({ id }: { id: string }) {
             imageFor={(name, alt) => <PageImage name={name} alt={alt} />}
           />
         ) : (
-          <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setEditing(true)}>
+          <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setBase(engine.baseFor(id))}>
             Empty page. Click to write.
           </button>
         )}
