@@ -14,6 +14,8 @@ const cases: [string, unknown, WebOp][] = [
   ["page.setTask", page, { op: "page.setTask", id: "p", line: 2, lineText: "- [ ] b", checked: false, at: 9 }],
   ["page.setTask shifted", page, { op: "page.setTask", id: "p", line: 0, lineText: "- [ ] b", checked: false }],
   ["page.setTask ambiguous", page, { op: "page.setTask", id: "p", line: 0, lineText: "- [ ] a", checked: true }],
+  ["page.append", page, { op: "page.append", id: "p", text: "learned", day: "2026-11-03", at: 9 }],
+  ["page.append new day", { ...page, body: "" }, { op: "page.append", id: "p", text: "x", day: "2026-01-31" }],
   ["page.delete", page, { op: "page.delete", id: "p" }],
   ["note.update", note, { op: "note.update", id: "n", fields: { transcript: "hi", folderId: "f", updatedAt: 3 } }],
   ["note.delete", note, { op: "note.delete", id: "n" }],

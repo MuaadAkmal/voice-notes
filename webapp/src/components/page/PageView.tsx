@@ -14,7 +14,7 @@ import { Markdown } from "./Markdown";
 import { PageEditor } from "./PageEditor";
 import { TitleField } from "./TitleField";
 
-function PageImage({ name, alt }: { name: string; alt: string }) {
+export function PageImage({ name, alt }: { name: string; alt: string }) {
   const { url, missing, failed } = useSignedUrl("image", name);
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element -- signed Storage URL in a static export

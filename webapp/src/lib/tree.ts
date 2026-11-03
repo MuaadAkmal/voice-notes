@@ -5,6 +5,7 @@ export type Route =
   | { kind: "page"; id: string }
   | { kind: "note"; id: string }
   | { kind: "folder"; id: string }
+  | { kind: "home" }
   | { kind: "view"; view: "inbox" | "starred" | "all" };
 export type ItemKind = "note" | "page" | "folder";
 

@@ -8,9 +8,10 @@ const pull = (rows: PullResponse["rows"], prefs: PullResponse["prefs"] = [], cur
 
 it("writes pulled rows, removes deleted ones, takes prefs and the cursor", () => {
   const s = new WebStore();
-  s.applyPull(pull([{ entity: "page", id: "a", version: 2, deleted: false, data: page("a", "A") }], [{ key: "laterPageId", value: "a", version: 3 }]), []);
+  s.applyPull(pull([{ entity: "page", id: "a", version: 2, deleted: false, data: page("a", "A") }], [{ key: "laterPageId", value: "a", version: 3 }, { key: "homeWidgets", value: [{ id: "w", type: "page", pageId: "a" }], version: 3 }]), []);
   expect(s.snapshot().pages.get("a")).toEqual({ data: page("a", "A"), version: 2 });
   expect(s.snapshot().laterPageId).toBe("a");
+  expect(s.snapshot().homeWidgets).toEqual([{ id: "w", type: "page", pageId: "a" }]);
   expect(s.snapshot().cursor).toBe(9);
   s.applyPull(pull([{ entity: "page", id: "a", version: 4, deleted: true, data: null }]), []);
   expect(s.snapshot().pages.has("a")).toBe(false);

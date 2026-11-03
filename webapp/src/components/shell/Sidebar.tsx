@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderPlusIcon, InboxIcon, AudioLinesIcon, PlusIcon, SearchIcon, StarIcon } from "lucide-react";
+import { AudioLinesIcon, FolderPlusIcon, HomeIcon, InboxIcon, PlusIcon, SearchIcon, StarIcon } from "lucide-react";
 import { useState } from "react";
 import { useEngine, useSync } from "@/app/providers";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -48,6 +48,17 @@ export function Sidebar({ onSearch, onOpen }: { onSearch(): void; onOpen(): void
       </div>
       <ScrollArea className="min-h-0 flex-1">
         <nav className="space-y-0.5 px-3 pb-3">
+          <button
+            type="button"
+            className={rowClass(route.kind === "home")}
+            onClick={() => {
+              go({ kind: "home" });
+              onOpen();
+            }}
+          >
+            <HomeIcon className="size-4 opacity-60" />
+            Home
+          </button>
           {VIEWS.map(({ view, label, icon: Icon }) => (
             <button
               key={view}

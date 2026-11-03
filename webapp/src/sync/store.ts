@@ -11,6 +11,8 @@ export type Snapshot = {
   folders: ReadonlyMap<string, Versioned<FolderRow>>;
   laterPageId: string | null;
   notesPageId: string | null;
+  /** The PCs' Home layout (the synced `homeWidgets` setting), as stored; read through lib/home. */
+  homeWidgets: unknown;
   cursor: number;
   loaded: boolean;
 };
@@ -22,7 +24,7 @@ const entityOf = (op: WebOp) => op.op.split(".")[0] as Entity;
 /** The account's rows as this browser knows them: the server's, with unacked local edits on top. */
 export class WebStore {
   private tables: Tables = { note: new Map(), page: new Map(), folder: new Map() };
-  private meta = { laterPageId: null as string | null, notesPageId: null as string | null, cursor: 0, loaded: false };
+  private meta = { laterPageId: null as string | null, notesPageId: null as string | null, homeWidgets: null as unknown, cursor: 0, loaded: false };
   private snap: Snapshot | null = null;
   private listeners = new Set<() => void>();
 
@@ -67,6 +69,7 @@ export class WebStore {
     }
     for (const pref of res.prefs) {
       if (pref.key === "laterPageId" || pref.key === "notesPageId") this.meta[pref.key] = typeof pref.value === "string" ? pref.value : null;
+      if (pref.key === "homeWidgets") this.meta.homeWidgets = pref.value;
     }
     // Rows this pull didn't touch already carry the local edits.
     for (const op of pending) if (touched.has(`${entityOf(op)}:${op.id}`)) this.apply(op);

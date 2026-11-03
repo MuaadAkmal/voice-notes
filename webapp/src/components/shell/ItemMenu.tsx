@@ -75,7 +75,7 @@ export function ItemMenu({ kind, id, className }: { kind: ItemKind; id: string; 
           action="Delete"
           onClose={close}
           onConfirm={() => {
-            if (deleteItem(engine, snap, kind, id) && route.kind === kind && route.id === id) go({ kind: "view", view: "inbox" });
+            if (deleteItem(engine, snap, kind, id) && route.kind === kind && route.id === id) go({ kind: "home" });
           }}
         />
       )}

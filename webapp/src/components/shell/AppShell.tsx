@@ -3,12 +3,14 @@
 import { MenuIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "@/app/providers";
+import { HomeView } from "@/components/home/HomeView";
 import { ItemList } from "@/components/ItemList";
 import { NoteView } from "@/components/note/NoteView";
 import { PageView } from "@/components/page/PageView";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useRoute } from "@/hooks/useRoute";
+import { cn } from "@/lib/utils";
 import { CommandPalette } from "./CommandPalette";
 import { PeekSidebar } from "./PeekSidebar";
 import { RestoreUnsaved } from "./RestoreUnsaved";
@@ -52,6 +54,7 @@ export function AppShell() {
   if (!snap.loaded) content = <Loading />;
   else if (route.kind === "page") content = <PageView key={route.id} id={route.id} />;
   else if (route.kind === "note") content = <NoteView key={route.id} id={route.id} />;
+  else if (route.kind === "home") content = <HomeView />;
   else content = <ItemList key={route.kind === "folder" ? route.id : route.view} route={route} />;
 
   return (
@@ -64,7 +67,9 @@ export function AppShell() {
           </Button>
           <span className="ml-1 text-sm font-medium">Voice Notes</span>
         </header>
-        <main className="mx-auto w-full max-w-[680px] px-4 py-8 md:px-6 md:py-16">{content}</main>
+        <main className={cn("mx-auto w-full px-4 py-8 md:px-6 md:py-16", route.kind === "home" && snap.loaded ? "max-w-6xl md:px-16" : "max-w-[680px]")}>
+          {content}
+        </main>
       </div>
       <Sheet open={sheet} onOpenChange={setSheet}>
         <SheetContent side="left" className="w-[85vw] max-w-[300px] p-0" showCloseButton={false}>

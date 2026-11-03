@@ -1,7 +1,8 @@
 import type { PageRow, RowOp } from "@wire/sync-ops";
+import { appendEntry } from "./learn-log";
 import { setTaskByText } from "./task-lines";
 
-/** The changes the web sends. Never appends: those come from the PCs' quick-add and voice commands. */
+/** The changes the web sends (no `page.appendLine`: that is the PCs' voice-to-lists). */
 export type WebOp = Extract<
   RowOp,
   {
@@ -12,6 +13,7 @@ export type WebOp = Extract<
       | "page.update"
       | "page.setBody"
       | "page.setTask"
+      | "page.append"
       | "page.delete"
       | "folder.create"
       | "folder.update"
@@ -37,6 +39,11 @@ export function applyWebOp<T>(row: T | undefined, op: WebOp): T | undefined {
       return row && { ...row, ...op.fields };
     case "page.setBody":
       return row && ({ ...row, body: op.body, ...stamp(op.at) } as T);
+    case "page.append": {
+      const page = row as PageRow | undefined;
+      const [y, m, d] = op.day.split("-").map(Number);
+      return page && ({ ...page, body: appendEntry(page.body, op.text, new Date(y, m - 1, d)), ...stamp(op.at) } as T);
+    }
     case "page.setTask": {
       const page = row as PageRow | undefined;
       return page && ({ ...page, body: setTaskByText(page.body, op.line, op.lineText, op.checked), ...stamp(op.at) } as T);

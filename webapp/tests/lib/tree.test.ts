@@ -15,6 +15,7 @@ function snap(folders: FolderRow[], pages: PageRow[], notes: NoteRow[] = []): Sn
     notes: new Map(notes.map((n) => [n.id, v(n)])),
     laterPageId: null,
     notesPageId: null,
+    homeWidgets: null,
     cursor: 0,
     loaded: true,
   };

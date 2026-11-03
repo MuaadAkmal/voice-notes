@@ -108,3 +108,16 @@ it("a new page typed into before its create is acked makes no conflict copy", as
   expect(pages[0].body).toBe("hello");
   web.stop();
 });
+
+it("a web quick-add and a later PC body edit on an older base both survive", async () => {
+  const { web, pcPush, pcPages } = world();
+  const { acked } = await pcPush({ op: "page.create", id: "p", row: row("pc start") }, 0);
+  await web.syncNow();
+  web.edit({ op: "page.append", id: "p", text: "from web", day: "2026-11-03", at: 5 });
+  await web.syncNow();
+  await pcPush({ op: "page.setBody", id: "p", body: "pc edited" }, acked[0].version);
+  const body = (await pcPages()).find((p) => p.id === "p")!.body;
+  expect(body.startsWith("pc edited")).toBe(true);
+  expect(body).toContain("- from web");
+  web.stop();
+});
