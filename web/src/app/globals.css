@@ -1,76 +1,279 @@
 @import "tailwindcss";
 
-/* The app's stone tokens (desktop dashboard.css), plus the site's own subtitle yellow. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 :root {
-  --background: oklch(0.971 0.005 78.3);
-  --foreground: oklch(0.147 0.004 49.25);
-  --card: oklch(1 0 0);
-  --muted: oklch(0.947 0.007 80.7);
-  --muted-foreground: oklch(0.47 0.013 58.071);
-  --border: oklch(0.911 0.01 81.8);
-  --primary: oklch(0.216 0.006 56.043);
-  --primary-foreground: oklch(0.985 0.001 106.423);
-  --ring: oklch(0.47 0.013 58.071);
-  /* The screen stays dark in both themes, like the show it stands for. */
-  --screen: oklch(0.2 0 0);
-  --screen-foreground: oklch(0.72 0.01 56);
-  --subtitle: #f7d94c;
+  color-scheme: light;
+  --background: #fafaf8;
+  --foreground: #14151a;
+  --muted-foreground: #5c5f6b;
+  --border: rgb(20 21 26 / 8%);
+  --primary: #14151a;
+  --primary-foreground: #ffffff;
+  --ring: #5b5ff0;
+  --accent: #5b5ff0;
+  --accent-2: #b46cf2;
+  --shadow-soft: 0 1px 2px rgb(20 21 40 / 4%), 0 8px 24px -10px rgb(20 21 40 / 10%), 0 28px 56px -28px rgb(20 21 40 / 14%);
+  --shadow-lift: 0 2px 4px rgb(20 21 40 / 4%), 0 16px 36px -12px rgb(20 21 40 / 14%), 0 44px 80px -32px rgb(20 21 40 / 22%);
+  --ray: 255 216 125;
+  --ray-strength: 1;
+  --glow: radial-gradient(ellipse at 100% 0%, rgb(255 226 150 / 62%), rgb(255 232 180 / 22%) 38%, transparent 70%);
+  --ambient-1: rgb(160 170 255 / 30%);
+  --ambient-2: rgb(232 180 255 / 26%);
+  --ambient-3: rgb(255 205 180 / 22%);
+  --ambient-4: rgb(160 225 240 / 22%);
+  --glass-bg: rgb(255 255 255 / 58%);
+  --glass-border: rgb(255 255 255 / 85%);
+  --glass-highlight: rgb(255 255 255 / 90%);
+  --keycap-bg: #fff;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --background: oklch(0.239 0 0);
-    --foreground: oklch(0.985 0.001 106.423);
-    --card: oklch(0.293 0 0);
-    --muted: oklch(0.321 0 0);
-    --muted-foreground: oklch(0.78 0.01 56.259);
-    --border: oklch(1 0 0 / 12%);
-    --primary: oklch(0.923 0.003 48.717);
-    --primary-foreground: oklch(0.216 0.006 56.043);
-    --ring: oklch(0.78 0.01 56.259);
-    --screen: oklch(0.17 0 0);
-  }
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #0b0c12;
+  --foreground: #f3f3f6;
+  --muted-foreground: #a6a9b6;
+  --border: rgb(255 255 255 / 10%);
+  --primary: #f3f3f6;
+  --primary-foreground: #14151a;
+  --ring: #a5a8ff;
+  --accent: #8d90ff;
+  --accent-2: #d09bff;
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 30%), 0 10px 28px -10px rgb(0 0 0 / 50%), 0 30px 60px -28px rgb(0 0 0 / 60%);
+  --shadow-lift: 0 2px 4px rgb(0 0 0 / 30%), 0 18px 40px -12px rgb(0 0 0 / 60%), 0 46px 84px -30px rgb(0 0 0 / 75%);
+  --ray: 176 190 255;
+  --ray-strength: 0.62;
+  --glow: radial-gradient(ellipse at 100% 0%, rgb(178 190 255 / 40%), rgb(140 150 255 / 14%) 38%, transparent 70%);
+  --ambient-1: rgb(82 88 220 / 22%);
+  --ambient-2: rgb(150 80 220 / 16%);
+  --ambient-3: rgb(70 80 180 / 14%);
+  --ambient-4: rgb(40 130 170 / 12%);
+  --glass-bg: rgb(255 255 255 / 6%);
+  --glass-border: rgb(255 255 255 / 12%);
+  --glass-highlight: rgb(255 255 255 / 10%);
+  --keycap-bg: rgb(255 255 255 / 10%);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-screen: var(--screen);
-  --color-screen-foreground: var(--screen-foreground);
-  --color-subtitle: var(--subtitle);
-  --font-sans: var(--font-instrument);
-  --font-display: var(--font-bricolage);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist);
+  --font-display: var(--font-geist);
+  --shadow-soft: var(--shadow-soft);
+  --shadow-lift: var(--shadow-lift);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 }
 
 h1,
 h2,
 h3 {
-  font-family: var(--font-bricolage), ui-sans-serif, sans-serif;
+  letter-spacing: -0.03em;
   text-wrap: balance;
 }
 
-/* The page's one moment of motion: the saved seconds light up once, in order. */
-@keyframes bar-saved {
+/* The soft colour behind the page, which gives the glass something to blur. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(38rem 30rem at 12% 8%, var(--ambient-1), transparent 70%),
+    radial-gradient(34rem 28rem at 88% 14%, var(--ambient-2), transparent 70%),
+    radial-gradient(44rem 34rem at 70% 92%, var(--ambient-3), transparent 70%),
+    radial-gradient(36rem 30rem at 10% 88%, var(--ambient-4), transparent 70%);
+}
+
+/* Sunlight from the top-right corner: uneven beams, fading out with distance. */
+.sun-glow,
+.sun-rays {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.sun-glow {
+  width: 60rem;
+  height: 44rem;
+  max-width: 100%;
+  background: var(--glow);
+}
+
+.sun-rays {
+  width: 140vw;
+  height: 140vh;
+  transform-origin: 100% 0;
+  will-change: transform, opacity;
+  background: conic-gradient(
+    from 180deg at 100% 0%,
+    transparent 0deg 6deg,
+    rgb(var(--ray) / calc(38% * var(--ray-strength))) 10deg 14deg,
+    transparent 19deg 25deg,
+    rgb(var(--ray) / calc(26% * var(--ray-strength))) 29deg 31deg,
+    transparent 35deg 39deg,
+    rgb(var(--ray) / calc(44% * var(--ray-strength))) 44deg 52deg,
+    transparent 58deg 62deg,
+    rgb(var(--ray) / calc(28% * var(--ray-strength))) 65deg 68deg,
+    transparent 72deg 76deg,
+    rgb(var(--ray) / calc(34% * var(--ray-strength))) 80deg 83deg,
+    transparent 87deg 360deg
+  );
+  mask-image: radial-gradient(ellipse 100% 100% at 100% 0%, #000 8%, rgb(0 0 0 / 55%) 40%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 100% 100% at 100% 0%, #000 8%, rgb(0 0 0 / 55%) 40%, transparent 78%);
+  filter: blur(10px);
+  animation: sun-sway 16s ease-in-out infinite alternate;
+}
+
+@keyframes sun-sway {
   from {
-    background-color: color-mix(in oklch, var(--screen-foreground) 35%, transparent);
+    transform: rotate(-2deg);
+    opacity: 0.75;
+  }
+  to {
+    transform: rotate(2.5deg);
+    opacity: 1;
   }
 }
 
-.saved-bar {
-  animation: bar-saved 350ms ease-out 1 backwards;
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-highlight);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+.glass-hover {
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glass-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lift), inset 0 1px 0 var(--glass-highlight);
+}
+
+/* A soft light that follows the pointer across a card; PointerGlow.tsx sets where. */
+.glass-hover {
+  position: relative;
+}
+
+.glass-hover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(18rem circle at var(--glow-x, 50%) var(--glow-y, 50%), color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%);
+  transition: opacity 400ms ease;
+}
+
+.glass-hover:hover::after {
+  opacity: 1;
+}
+
+/* Example lines drifting past under the hero. Four copies of a row, so moving a quarter loops cleanly. */
+.marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+  animation: marquee 90s linear infinite;
+}
+
+.marquee-reverse {
+  animation-direction: reverse;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-25%);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+.keycap {
+  display: inline-block;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.6rem;
+  background: var(--keycap-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgb(20 21 40 / 10%), 0 3px 8px -3px rgb(20 21 40 / 16%);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 1px 2px rgb(20 21 40 / 20%), 0 10px 24px -8px rgb(20 21 40 / 45%), inset 0 1px 0 rgb(255 255 255 / 18%);
+  transition:
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 4px rgb(20 21 40 / 20%), 0 18px 34px -10px rgb(20 21 40 / 55%), inset 0 1px 0 rgb(255 255 255 / 18%);
+}
+
+/* The sound playing on the floating card. */
+@keyframes bar-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.bar {
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  animation: bar-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.drift {
+  animation: drift 6s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -85,5 +288,5 @@ h3 {
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: 6px;
 }

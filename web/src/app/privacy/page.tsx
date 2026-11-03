@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function Privacy() {
   return (
-    <Prose title="Privacy" updated="2 November 2026">
+    <Prose title="Privacy" updated="3 November 2026">
       <p>
         Voice Notes needs a Google account. It keeps your recordings, pages and settings on your PC and syncs them to your account. This page says
         what goes where.
@@ -44,6 +44,12 @@ export default function Privacy() {
         page&apos;s body, stays in your account on the server, hidden from your PCs, until your account is deleted.
       </p>
 
+      <h2>The web app</h2>
+      <p>
+        The web app at app.voicenote.cloud shows the same account&apos;s notes and pages, and sends your edits through the same sync. Your browser
+        keeps your sign-in on that site until you sign out, and remembers your light or dark choice. It sends nothing anywhere else.
+      </p>
+
       <h2>Voice Notes Cloud transcription</h2>
       <p>
         If you haven&apos;t set up another transcription provider, Cloud is used automatically. You can choose another provider
@@ -69,6 +75,13 @@ export default function Privacy() {
       <p>
         When you say &ldquo;add this to&rdquo; a page, what the window in front is showing isn&apos;t sent. The app writes its own line for that
         window on your PC, which can include its address, file path or a screenshot. That line then syncs like the rest of the page.
+      </p>
+
+      <h2>Paid plans</h2>
+      <p>
+        If you subscribe to a paid plan, you pay through Razorpay, which handles your UPI, card or bank details under{" "}
+        <a href="https://razorpay.com/privacy/">its own privacy policy</a>. We never see them. We keep your subscription&apos;s ID, plan, status and
+        renewal date with your account.
       </p>
 
       <h2>Google Calendar</h2>

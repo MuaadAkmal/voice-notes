@@ -1,0 +1,12 @@
+// The marketing site on Cloudflare: plain files from `out/` (Workers static assets), no Worker code.
+// `npm run deploy` builds, then publishes to voicenote.cloud.
+{
+  "name": "voicenote-site",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./out", "not_found_handling": "404-page" },
+  "routes": [
+    { "pattern": "voicenote.cloud", "custom_domain": true },
+    { "pattern": "www.voicenote.cloud", "custom_domain": true },
+  ],
+  "workers_dev": false,
+}

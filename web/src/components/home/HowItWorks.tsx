@@ -1,3 +1,5 @@
+import { Reveal } from "../Reveal";
+
 const STEPS = [
   {
     title: "Hear a line",
@@ -15,14 +17,22 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
-      <h2 className="text-3xl font-semibold sm:text-4xl">Save it after you hear it</h2>
-      <ol className="mt-10 grid gap-10 md:grid-cols-3">
+    <section className="mx-auto w-full max-w-5xl px-4 py-14 sm:px-6">
+      <Reveal>
+        <h2 className="text-center text-3xl font-semibold sm:text-5xl">Save it after you hear it</h2>
+      </Reveal>
+      <ol className="mt-12 grid gap-4 md:grid-cols-3">
         {STEPS.map((step, i) => (
           <li key={step.title}>
-            <span className="font-display text-5xl font-semibold text-muted-foreground">{i + 1}</span>
-            <h3 className="mt-3 text-xl font-semibold">{step.title}</h3>
-            <p className="mt-2 leading-relaxed text-muted-foreground">{step.body}</p>
+            <Reveal delay={i * 0.1} className="h-full">
+              <div className="glass glass-hover h-full rounded-3xl p-7">
+                <span className="flex size-10 items-center justify-center rounded-full bg-primary font-medium text-primary-foreground shadow-soft">
+                  {i + 1}
+                </span>
+                <h3 className="mt-6 text-xl font-semibold">{step.title}</h3>
+                <p className="mt-2.5 leading-relaxed text-muted-foreground">{step.body}</p>
+              </div>
+            </Reveal>
           </li>
         ))}
       </ol>

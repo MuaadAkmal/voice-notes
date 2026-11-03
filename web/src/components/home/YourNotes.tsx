@@ -1,22 +1,28 @@
+import { Reveal } from "../Reveal";
+
 const POINTS = [
   { title: "Folders and search", body: "Sort clips into folders by language or show, and search titles, shows and transcripts." },
   { title: "Text pages", body: "Keep word lists and grammar notes in markdown pages next to your clips." },
   { title: "A Home you arrange", body: "Pin the pages you use most, and add to a daily list from a quick-add box." },
-  { title: "Sync between PCs", body: "Sign in with Google and turn on sync to keep notes, pages and audio the same on each PC." },
+  { title: "Sync between PCs", body: "Your notes, pages and audio stay the same on each PC you sign in on." },
 ];
 
 export function YourNotes() {
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,8fr)] lg:gap-14">
-      <h2 className="text-3xl font-semibold sm:text-4xl">Everything you catch stays organised</h2>
-      <dl className="grid gap-x-10 gap-y-8 sm:grid-cols-2">
-        {POINTS.map((point) => (
-          <div key={point.title}>
-            <dt className="font-semibold">{point.title}</dt>
-            <dd className="mt-1.5 leading-relaxed text-muted-foreground">{point.body}</dd>
-          </div>
+    <section className="mx-auto w-full max-w-5xl px-4 py-14 sm:px-6">
+      <Reveal>
+        <h2 className="text-center text-3xl font-semibold sm:text-5xl">Turn what you hear and find into notes you&apos;ll actually revisit</h2>
+      </Reveal>
+      <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {POINTS.map((point, i) => (
+          <Reveal key={point.title} delay={i * 0.08} className="h-full">
+            <div className="glass glass-hover h-full rounded-3xl p-6">
+              <h3 className="text-lg font-semibold">{point.title}</h3>
+              <p className="mt-2 leading-relaxed text-muted-foreground">{point.body}</p>
+            </div>
+          </Reveal>
         ))}
-      </dl>
+      </div>
     </section>
   );
 }

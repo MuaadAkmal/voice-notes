@@ -4,13 +4,10 @@ import { DOWNLOAD_URL } from "@/lib/site";
 export function DownloadButton() {
   return (
     <div>
-      <a
-        href={DOWNLOAD_URL}
-        className="inline-block rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground transition-opacity hover:opacity-85"
-      >
+      <a href={DOWNLOAD_URL} className="btn-primary inline-block rounded-full px-7 py-3.5 font-medium">
         Download for Windows
       </a>
-      <p className="mt-2 text-sm text-muted-foreground lg:hidden">For Windows PCs</p>
+      <p className="mt-3 text-sm text-muted-foreground lg:hidden">For Windows PCs</p>
     </div>
   );
 }

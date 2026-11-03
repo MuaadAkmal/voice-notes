@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Prose } from "@/components/Prose";
 import { CONTACT_EMAIL } from "@/lib/site";
 
@@ -9,8 +10,22 @@ export const metadata: Metadata = {
 
 export default function Terms() {
   return (
-    <Prose title="Terms" updated="1 November 2026">
+    <Prose title="Terms" updated="3 November 2026">
       <p>By using Voice Notes, you agree to these terms.</p>
+
+      <h2>Plans and payment</h2>
+      <p>
+        Voice Notes has a free plan and two paid plans, Standard and Pro, sold as subscriptions in Indian rupees through Razorpay. The{" "}
+        <Link href="/#pricing">pricing</Link> section lists what each plan includes.
+      </p>
+      <ul>
+        <li>A subscription renews automatically every month or year at the same price until you cancel.</li>
+        <li>You can cancel anytime. The plan lasts until the end of the period you&apos;ve paid for.</li>
+        <li>
+          Refunds follow the <Link href="/refund">refund and cancellation policy</Link>.
+        </li>
+        <li>A founding member price stays the same for as long as that subscription stays active.</li>
+      </ul>
 
       <h2>The app is provided as is</h2>
       <p>
@@ -19,7 +34,7 @@ export default function Terms() {
       </p>
 
       <h2>Online services can change</h2>
-      <p>Sync, Voice Notes Cloud and voice commands can change or stop. This includes the free allowance of 120 Cloud minutes a month and other limits.</p>
+      <p>Sync, Voice Notes Cloud and voice commands can change or stop. This includes the free plan&apos;s allowance and other limits. A paid plan&apos;s allowance doesn&apos;t shrink during a period you&apos;ve paid for.</p>
 
       <h2>Use it fairly</h2>
       <ul>

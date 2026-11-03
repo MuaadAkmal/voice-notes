@@ -1,3 +1,5 @@
+import { Reveal } from "../Reveal";
+
 const SHORTCUTS = [
   {
     keys: ["Alt", "Win"],
@@ -13,24 +15,26 @@ const SHORTCUTS = [
 
 export function EverydayCapture() {
   return (
-    <section className="border-y border-border bg-muted">
-      <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
-        <h2 className="text-3xl font-semibold sm:text-4xl">Your own voice works too</h2>
-        <div className="mt-10 grid gap-12 md:grid-cols-2">
-          {SHORTCUTS.map((item) => (
-            <div key={item.title}>
+    <section className="mx-auto w-full max-w-5xl px-4 py-14 sm:px-6">
+      <Reveal>
+        <h2 className="text-center text-3xl font-semibold sm:text-5xl">Your own voice works too</h2>
+      </Reveal>
+      <div className="mt-12 grid gap-4 md:grid-cols-2">
+        {SHORTCUTS.map((item, i) => (
+          <Reveal key={item.title} delay={i * 0.1} className="h-full">
+            <div className="glass glass-hover h-full rounded-3xl p-8">
               <p className="flex gap-2" aria-label={`Shortcut: ${item.keys.join(" and ")}`}>
                 {item.keys.map((key) => (
-                  <kbd key={key} className="rounded-lg border border-border bg-card px-3 py-1.5 font-sans text-sm font-medium shadow-sm">
+                  <kbd key={key} className="keycap font-sans">
                     {key}
                   </kbd>
                 ))}
               </p>
-              <h3 className="mt-4 text-xl font-semibold">{item.title}</h3>
-              <p className="mt-2 leading-relaxed text-muted-foreground">{item.body}</p>
+              <h3 className="mt-6 text-2xl font-semibold">{item.title}</h3>
+              <p className="mt-2.5 leading-relaxed text-muted-foreground">{item.body}</p>
             </div>
-          ))}
-        </div>
+          </Reveal>
+        ))}
       </div>
     </section>
   );
