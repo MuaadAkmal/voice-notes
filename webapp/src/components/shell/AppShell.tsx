@@ -4,6 +4,7 @@ import { MenuIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useStore } from "@/app/providers";
 import { ItemList } from "@/components/ItemList";
+import { PageView } from "@/components/page/PageView";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useRoute } from "@/hooks/useRoute";
@@ -46,7 +47,7 @@ export function AppShell() {
 
   let content: React.ReactNode;
   if (!snap.loaded) content = <Loading />;
-  else if (route.kind === "page") content = <p className="text-muted-foreground">Page {route.id}</p>;
+  else if (route.kind === "page") content = <PageView key={route.id} id={route.id} />;
   else if (route.kind === "note") content = <p className="text-muted-foreground">Note {route.id}</p>;
   else content = <ItemList key={route.kind === "folder" ? route.id : route.view} route={route} />;
 

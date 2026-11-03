@@ -130,3 +130,28 @@
     @apply font-sans;
   }
 }
+/* Rendered page bodies: calm reading type, close to the desktop's live preview. */
+.vn-prose {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.vn-prose > * + * { margin-top: 0.85em; }
+.vn-prose h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; margin-top: 1.6em; }
+.vn-prose h2 { font-size: 1.35rem; font-weight: 600; margin-top: 1.5em; }
+.vn-prose h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.3em; }
+.vn-prose :is(h1, h2, h3):first-child { margin-top: 0; }
+.vn-prose ul { list-style: disc; padding-left: 1.4em; }
+.vn-prose ol { list-style: decimal; padding-left: 1.4em; }
+.vn-prose li + li, .vn-prose li > ul, .vn-prose li > ol { margin-top: 0.25em; }
+.vn-prose li.task-list-item { list-style: none; margin-left: -1.4em; }
+.vn-prose li.task-list-item:has(> input:checked) { color: var(--muted-foreground); text-decoration: line-through; }
+.vn-prose a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); }
+.vn-prose a:hover { text-decoration-color: currentColor; }
+.vn-prose blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
+.vn-prose code { font-family: var(--font-geist-mono), monospace; font-size: 0.875em; background: var(--muted); padding: 0.15em 0.35em; border-radius: 4px; }
+.vn-prose pre { background: var(--muted); padding: 0.9em 1em; border-radius: 8px; overflow-x: auto; }
+.vn-prose pre code { background: none; padding: 0; }
+.vn-prose hr { border-color: var(--border); margin: 2em 0; }
+.vn-prose table { width: 100%; border-collapse: collapse; font-size: 0.925em; display: block; overflow-x: auto; }
+.vn-prose :is(th, td) { border: 1px solid var(--border); padding: 0.4em 0.7em; text-align: left; }
+.vn-prose img { max-width: 100%; height: auto; }
