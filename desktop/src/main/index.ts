@@ -65,7 +65,7 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from './account/config';
 import { SessionStore } from './account/session-store';
 import { pendingBeforeSignOut } from './profiles/sign-out';
 import { chooseStart } from './profiles/choose';
-import { migrateToProfiles, needsMigration } from './profiles/migrate';
+import { migrateToProfiles, migrationNotice, needsMigration } from './profiles/migrate';
 import { relaunch, relaunches } from './profiles/relaunch';
 import { sessionUserId } from './profiles/session-user';
 import { startSignIn } from './signin-mode';
@@ -106,6 +106,7 @@ function showDashboard(): void {
 
 // Kept referenced: a garbage-collected Notification loses its click handler.
 let updateToast: Notification | null = null;
+let migratedToast: Notification | null = null;
 
 function electronUpdater(beforeInstall: () => void): UpdaterPort {
   return {
@@ -205,9 +206,19 @@ async function start(): Promise<void> {
   const root = app.getPath('userData');
   const auth = makeAuth(root);
   const user = testing ? process.env.VOICE_NOTES_TEST_SESSION || null : sessionUserId(auth.sessionStore, SUPABASE_URL);
-  if (needsMigration(root)) log.info('[profiles] migrated into', migrateToProfiles(root, user));
+  const owner = needsMigration(root) ? migrateToProfiles(root, user) : null;
+  if (owner) log.info('[profiles] migrated into', owner);
   const choice = chooseStart(root, user);
-  if (choice.mode === 'profile') return boot(root, choice, auth);
+  if (choice.mode === 'profile') {
+    await boot(root, choice, auth);
+    // The old library went to another account: say so, or this profile just looks empty.
+    const notice = migrationNotice(owner, user);
+    if (notice && !testing) {
+      migratedToast = new Notification({ title: 'Your earlier notes', body: notice });
+      migratedToast.show();
+    }
+    return;
+  }
 
   const account = makeAccount(auth, (info) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);

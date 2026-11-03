@@ -2,11 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { splitSettings } from '../settings';
-import { profileDir, UNCLAIMED } from './paths';
+import { profileDir, profilesDir, UNCLAIMED } from './paths';
 
 const DB = 'voice-notes.sqlite';
-/** What moves into the profile, as it sat at the root before profiles. */
-const MOVED = [DB, `${DB}-wal`, `${DB}-shm`, 'recordings', 'images'];
+/**
+ * What moves into the profile, as it sat at the root before profiles. Each group moves whole or not at all, its
+ * first entry deciding: a database never gets another database's -wal. Side files go before the database, so a
+ * move interrupted halfway still has the database at the root and finishes next time.
+ */
+const GROUPS: { decides: string; files: string[] }[] = [
+  { decides: DB, files: [`${DB}-wal`, `${DB}-shm`, DB] },
+  { decides: 'recordings', files: ['recordings'] },
+  { decides: 'images', files: ['images'] },
+];
 /** Written first, removed last: the owner picked by a run that was interrupted. */
 const MARKER = 'migrating-to';
 
@@ -35,7 +43,7 @@ export function readAccountId(dbFile: string): string | null {
  * else unclaimed (the first account to sign in gets it). Every step is skipped once done, so an interrupted
  * run finishes on the next start; nothing already in the profile is overwritten. Returns the owner, or null.
  */
-export function migrateToProfiles(root: string, sessionUserId: string | null): string | null {
+export function migrateToProfiles(root: string, sessionUserId: string | null, now: () => number = Date.now): string | null {
   if (!needsMigration(root)) return null;
   const at = (f: string) => path.join(root, f);
   const owner = readMarker(at(MARKER)) ?? readAccountId(at(DB)) ?? sessionUserId ?? UNCLAIMED;
@@ -48,7 +56,21 @@ export function migrateToProfiles(root: string, sessionUserId: string | null): s
     writeJson(at('pc.json'), { ...readJson(at('pc.json')), ...pc });
     if (!fs.existsSync(path.join(dir, 'profile.json'))) writeJson(path.join(dir, 'profile.json'), profile);
   }
-  for (const f of MOVED) if (fs.existsSync(at(f)) && !fs.existsSync(path.join(dir, f))) fs.renameSync(at(f), path.join(dir, f));
+  // A group the profile already has (a library from an older build reinstalled after this one) is set aside whole,
+  // never mixed in or deleted.
+  // A root database that can't go in takes the rest of its library with it.
+  let parked: string | null = null;
+  const dbParked = fs.existsSync(at(DB)) && fs.existsSync(path.join(dir, DB));
+  for (const g of GROUPS) {
+    const present = g.files.filter((f) => fs.existsSync(at(f)));
+    if (!present.length) continue;
+    const fits = !dbParked && fs.existsSync(at(g.decides)) && !fs.existsSync(path.join(dir, g.decides));
+    if (!fits) {
+      parked ??= path.join(profilesDir(root), `_parked-${now()}`);
+      fs.mkdirSync(parked, { recursive: true });
+    }
+    for (const f of present) fs.renameSync(at(f), path.join(fits ? dir : parked!, f));
+  }
 
   fs.rmSync(at('settings.json'), { force: true });
   fs.rmSync(at(MARKER), { force: true });
@@ -75,4 +97,13 @@ function readJson(file: string): Record<string, unknown> {
 function writeJson(file: string, value: unknown): void {
   fs.writeFileSync(`${file}.tmp`, JSON.stringify(value, null, 2));
   fs.renameSync(`${file}.tmp`, file);
+}
+
+/**
+ * After an upgrade: the old library went to the account this PC synced with, not the one signed in now, so this
+ * profile opens without it. Says where it is, or null when there's nothing to say.
+ */
+export function migrationNotice(owner: string | null, sessionUserId: string | null): string | null {
+  if (!owner || owner === UNCLAIMED || !sessionUserId || owner === sessionUserId) return null;
+  return 'Your notes from before this update belong to the account this PC synced with, not the one signed in now. Sign out and sign in with that account to see them.';
 }

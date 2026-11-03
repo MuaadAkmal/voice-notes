@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
 import { beforeEach, expect, it } from 'vitest';
-import { migrateToProfiles, needsMigration } from '../../../src/main/profiles/migrate';
+import { migrateToProfiles, migrationNotice, needsMigration } from '../../../src/main/profiles/migrate';
 import { profileDir, UNCLAIMED } from '../../../src/main/profiles/paths';
 
 let root: string;
@@ -88,7 +88,7 @@ it('never overwrites', () => {
   fs.writeFileSync(at('settings.json'), JSON.stringify({ transcribeLanguage: 'en' }));
   migrateToProfiles(root, null);
   expect(fs.readdirSync(path.join(profileDir(root, 'acc'), 'images'))).toEqual(['keep.png']);
-  expect(fs.existsSync(at('images', 'i1.png'))).toBe(true);
+  expect(fs.existsSync(at('images'))).toBe(false); // set aside, not mixed in (see below)
   expect(readJson(path.join(profileDir(root, 'acc'), 'profile.json'))).toEqual({ homeWidgets: [] });
 });
 
@@ -114,4 +114,37 @@ it('resumes with the owner chosen the first time, even after the database moved'
   expect(migrateToProfiles(root, 'someone-else')).toBe('acc');
   expect(fs.existsSync(path.join(profileDir(root, 'acc'), 'recordings', 'n1.webm'))).toBe(true);
   expect(fs.existsSync(at('migrating-to'))).toBe(false);
+});
+
+const parked = () => fs.readdirSync(at('profiles')).filter((d) => d.startsWith('_parked-'));
+
+it('a database already in the profile: the root library is set aside whole, its -wal with it', () => {
+  oldLibrary('acc');
+  fs.writeFileSync(at('voice-notes.sqlite-wal'), 'wal of the root db');
+  fs.mkdirSync(profileDir(root, 'acc'), { recursive: true });
+  fs.writeFileSync(path.join(profileDir(root, 'acc'), 'voice-notes.sqlite'), 'the profile db');
+  migrateToProfiles(root, null, () => 42);
+  expect(fs.readFileSync(path.join(profileDir(root, 'acc'), 'voice-notes.sqlite'), 'utf8')).toBe('the profile db');
+  expect(fs.existsSync(path.join(profileDir(root, 'acc'), 'voice-notes.sqlite-wal'))).toBe(false);
+  expect(parked()).toEqual(['_parked-42']);
+  expect(fs.readdirSync(at('profiles', '_parked-42'))).toEqual(expect.arrayContaining(['images', 'recordings', 'voice-notes.sqlite', 'voice-notes.sqlite-wal']));
+  expect(fs.readdirSync(profileDir(root, 'acc'))).toEqual(['voice-notes.sqlite']); // nothing of the root library mixed in
+  expect(needsMigration(root)).toBe(false);
+});
+
+it('a -wal is never moved next to a database it did not come with', () => {
+  fs.writeFileSync(at('voice-notes.sqlite-wal'), 'orphan wal');
+  fs.writeFileSync(at('settings.json'), '{}');
+  fs.mkdirSync(profileDir(root, 'me'), { recursive: true });
+  fs.writeFileSync(path.join(profileDir(root, 'me'), 'voice-notes.sqlite'), 'the profile db');
+  migrateToProfiles(root, 'me', () => 7);
+  expect(fs.existsSync(path.join(profileDir(root, 'me'), 'voice-notes.sqlite-wal'))).toBe(false);
+});
+
+it('the notice: only when the library went to an account other than the one signed in', () => {
+  expect(migrationNotice('acc', 'me')).toMatch(/account this PC synced with/);
+  expect(migrationNotice('me', 'me')).toBeNull();
+  expect(migrationNotice('_unclaimed', 'me')).toBeNull();
+  expect(migrationNotice('acc', null)).toBeNull();
+  expect(migrationNotice(null, 'me')).toBeNull();
 });
