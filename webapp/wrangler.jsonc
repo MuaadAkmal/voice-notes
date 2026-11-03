@@ -1,0 +1,10 @@
+// The web app on Cloudflare: plain files from `out/` (Workers static assets, which apply public/_headers),
+// no Worker code. `npm run deploy` builds, then publishes to app.voicenote.cloud.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "voicenote-app",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "./out", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "app.voicenote.cloud", "custom_domain": true }],
+  "workers_dev": false,
+}
