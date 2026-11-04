@@ -41,6 +41,7 @@ const FUNCTIONS = {
     'commands/groq.ts',
     'commands/core.ts',
     'commands/polish.ts',
+    'commands/title.ts',
     'commands/handler.ts',
   ],
   asr: [

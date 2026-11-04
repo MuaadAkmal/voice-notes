@@ -37,7 +37,12 @@ export class CommandsClient {
     return this.post('polish', { text }, o);
   }
 
-  private async post<T>(route: 'resolve' | 'remind' | 'polish', req: unknown, o?: { signal: AbortSignal; timeoutMs: number }): Promise<T> {
+  /** A short title for a voice note's transcript; null means keep the note's own. */
+  title(text: string): Promise<{ title: string | null }> {
+    return this.post('title', { text }, { signal: new AbortController().signal, timeoutMs: 10_000 });
+  }
+
+  private async post<T>(route: 'resolve' | 'remind' | 'polish' | 'title', req: unknown, o?: { signal: AbortSignal; timeoutMs: number }): Promise<T> {
     const token = await this.d.getToken();
     if (!token) throw new NotSignedIn();
     let res: Response;

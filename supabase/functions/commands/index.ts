@@ -11,6 +11,7 @@ import { groqChat } from './_shared/commands/groq.ts';
 import { handleCommands } from './_shared/commands/handler.ts';
 import { RestUsageStore } from './_shared/commands/pg-store.ts';
 import { PolishCore } from './_shared/commands/polish.ts';
+import { TitleCore } from './_shared/commands/title.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const apiKey = Deno.env.get('GROQ_API_KEY') ?? '';
@@ -40,6 +41,16 @@ const polish = missing.length
       dailyLimit: Number(Deno.env.get('POLISH_DAILY_LIMIT')) || 1000,
       now: Date.now,
       timing: (steps) => console.log('[polish] ms', JSON.stringify(steps)),
+    });
+
+const title = missing.length
+  ? null
+  : new TitleCore({
+      chat: groqChat({ apiKey, model: Deno.env.get('GROQ_TITLE_MODEL') || Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-20b', fetch, timeoutMs: 8_000, maxTokens: 400 }),
+      usage: new RestUsageStore({ url: SUPABASE_URL, serviceKey, fetch, rpc: 'count_title' }),
+      dailyLimit: Number(Deno.env.get('TITLE_DAILY_LIMIT')) || 300,
+      now: Date.now,
+      timing: (steps) => console.log('[title] ms', JSON.stringify(steps)),
     });
 
 // The project's public signing keys, as the platform provides them; null if absent or unreadable.
@@ -76,6 +87,7 @@ Deno.serve((req) =>
     },
     core,
     polish,
+    title,
     missing,
   }),
 );
