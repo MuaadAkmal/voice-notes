@@ -13,11 +13,12 @@ const isPcm16k = (wav: Uint8Array) => {
 };
 
 export function elevenLabsTranscriber(apiKey: string, fetchFn: typeof globalThis.fetch): Transcriber {
-  return async (wav, language, { clean, signal }) => {
+  return async (wav, language, { clean, keyterms, signal }) => {
     const form = new FormData();
     form.set('model_id', 'scribe_v2');
     if (language) form.set('language_code', language);
     if (clean) form.set('no_verbatim', 'true');
+    for (const term of keyterms) form.append('keyterms', term); // 20% more per request, so only when the user has words
     if (isPcm16k(wav)) {
       form.set('file_format', 'pcm_s16le_16');
       form.set('file', new Blob([wav.subarray(HEADER_BYTES) as BlobPart], { type: 'application/octet-stream' }), 'audio.pcm');

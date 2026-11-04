@@ -17,11 +17,11 @@ export class QuotaExceeded extends Error {
 }
 export class ProviderFailed extends Error {}
 
-/** clean: leave out filler words and false starts. */
+/** clean: leave out filler words and false starts. keyterms: the user's own words to listen for (may be empty). */
 export type Transcriber = (
   wav: Uint8Array,
   language: string | null,
-  opts: { clean: boolean; signal: AbortSignal },
+  opts: { clean: boolean; keyterms: string[]; signal: AbortSignal },
 ) => Promise<{ text: string; language: string | null }>;
 
 /** 'YYYY-MM-01' of the UTC month of `t`, and the start of the next month as ISO. */
@@ -62,7 +62,7 @@ export function canonicalWav(pcm: Uint8Array, sampleRate: number, channels: numb
 export class AsrCore {
   constructor(private readonly d: { store: AsrStore; transcribe: Transcriber; now: () => number }) {}
 
-  async transcribe(user: string, body: Uint8Array, language: string | null, clean = false): Promise<TranscribeResponse> {
+  async transcribe(user: string, body: Uint8Array, language: string | null, clean = false, keyterms: string[] = []): Promise<TranscribeResponse> {
     if (body.length > MAX_BYTES) throw new TooLarge('body too large');
     const info = wavInfo(body);
     if (!info || info.dataBytes <= 0) throw new BadAudio('not a 16-bit PCM WAV');
@@ -76,7 +76,7 @@ export class AsrCore {
     const ms: { reserve?: number; provider?: number } = {};
     const cancel = new AbortController();
     // Settled either way, so a provider failure can't go unhandled while the reservation is awaited.
-    const provider = this.d.transcribe(wav, language, { clean, signal: cancel.signal }).then(
+    const provider = this.d.transcribe(wav, language, { clean, keyterms, signal: cancel.signal }).then(
       (out) => ({ ok: true as const, out }),
       (error: unknown) => ({ ok: false as const, error }),
     );

@@ -22,6 +22,21 @@ it('transcribes with the verified user and language', async () => {
   expect((await r.json()).language).toBe('en');
 });
 
+it('passes custom words on as key terms, cleaned again', async () => {
+  let seen: unknown = null;
+  const core = { ...ok, transcribe: async (_u: string, _b: Uint8Array, _l: string | null, _c?: boolean, k?: string[]) => ((seen = k), ok.transcribe('', new Uint8Array(), null)) };
+  const q = encodeURIComponent(JSON.stringify(['Muaad', 'a{b}']));
+  expect((await handleAsr(req(`transcribe?keyterms=${q}`, { method: 'POST', body: new Uint8Array(4) }), mk(core))).status).toBe(200);
+  expect(seen).toEqual(['Muaad', 'ab']);
+});
+
+it.each(['not json', '{"a":1}', '[1,2]', ''])('treats key terms %j as none', async (raw) => {
+  let seen: unknown = null;
+  const core = { ...ok, transcribe: async (_u: string, _b: Uint8Array, _l: string | null, _c?: boolean, k?: string[]) => ((seen = k), ok.transcribe('', new Uint8Array(), null)) };
+  expect((await handleAsr(req(`transcribe?keyterms=${encodeURIComponent(raw)}`, { method: 'POST', body: new Uint8Array(4) }), mk(core))).status).toBe(200);
+  expect(seen).toEqual([]);
+});
+
 it('reports usage', async () => {
   const r = await handleAsr(req('usage'), mk(ok));
   expect(await r.json()).toMatchObject({ used: 0, limit: 7200 });

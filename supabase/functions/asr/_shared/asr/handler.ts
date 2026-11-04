@@ -1,4 +1,5 @@
 import { type AsrCore, BadAudio, ProviderFailed, QuotaExceeded, TooLarge } from './core.ts';
+import { normalizeWords } from '../custom-words.ts';
 import { MAX_BYTES } from './protocol.ts';
 
 // The `asr` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
@@ -15,6 +16,16 @@ export type AsrHandlerDeps = {
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+/** The `keyterms` query (a JSON array of strings) cleaned as the app cleans it; anything else is none. */
+function readKeyterms(raw: string | null): string[] {
+  try {
+    const list: unknown = JSON.parse(raw ?? '');
+    return Array.isArray(list) ? normalizeWords(list.filter((t): t is string => typeof t === 'string')) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** The body, or null as soon as it passes MAX_BYTES. */
 async function readCapped(req: Request): Promise<Uint8Array | null> {
@@ -64,7 +75,8 @@ export async function handleAsr(req: Request, d: AsrHandlerDeps): Promise<Respon
     const body = await readCapped(req).catch(() => new Uint8Array(0));
     if (!body) return json(413, { error: 'too_large' });
     const language = url.searchParams.get('language') || null;
-    return json(200, await d.core.transcribe(user.userId, body, language, url.searchParams.get('clean') === '1'));
+    const keyterms = readKeyterms(url.searchParams.get('keyterms'));
+    return json(200, await d.core.transcribe(user.userId, body, language, url.searchParams.get('clean') === '1', keyterms));
   } catch (err) {
     if (err instanceof BadAudio) return json(400, { error: 'bad_audio' });
     if (err instanceof TooLarge) return json(413, { error: 'too_large' });

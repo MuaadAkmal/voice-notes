@@ -45,6 +45,7 @@ const FUNCTIONS = {
     'commands/handler.ts',
   ],
   asr: [
+    'custom-words.ts',
     'asr/protocol.ts',
     'asr/wav-info.ts',
     'asr/store.ts',

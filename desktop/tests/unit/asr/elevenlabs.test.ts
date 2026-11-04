@@ -4,7 +4,7 @@ import { elevenLabsTranscriber } from '../../../src/shared/asr/elevenlabs';
 
 const pcm = new Uint8Array([1, 2, 3, 4]);
 const wav = canonicalWav(pcm, 44100, 2);
-const opts = (clean = false) => ({ clean, signal: new AbortController().signal });
+const opts = (clean = false, keyterms: string[] = []) => ({ clean, keyterms, signal: new AbortController().signal });
 function fake(res: Response) {
   const calls: { url: string; init: RequestInit }[] = [];
   const f = (async (url: string, init: RequestInit) => {
@@ -13,6 +13,15 @@ function fake(res: Response) {
   }) as unknown as typeof fetch;
   return { f, calls };
 }
+
+it('sends each key term as its own field, and none without any', async () => {
+  const withWords = fake(new Response(JSON.stringify({ text: 'hi' })));
+  await elevenLabsTranscriber('K', withWords.f)(wav, null, opts(false, ['Muaad', 'Pixie']));
+  expect((withWords.calls[0].init.body as FormData).getAll('keyterms')).toEqual(['Muaad', 'Pixie']);
+  const without = fake(new Response(JSON.stringify({ text: 'hi' })));
+  await elevenLabsTranscriber('K', without.f)(wav, null, opts());
+  expect((without.calls[0].init.body as FormData).has('keyterms')).toBe(false);
+});
 
 it('posts the clip to Scribe and maps the reply', async () => {
   const { f, calls } = fake(new Response(JSON.stringify({ text: 'hi', language_code: 'eng' })));
@@ -58,7 +67,7 @@ it('keeps the WAV for 16 kHz stereo', async () => {
 it('stops when cancelled', async () => {
   const { f, calls } = fake(new Response(JSON.stringify({ text: 'x' })));
   const cancel = new AbortController();
-  await elevenLabsTranscriber('K', f)(wav, null, { clean: false, signal: cancel.signal });
+  await elevenLabsTranscriber('K', f)(wav, null, { clean: false, keyterms: [], signal: cancel.signal });
   cancel.abort();
   expect(calls[0].init.signal?.aborted).toBe(true);
 });

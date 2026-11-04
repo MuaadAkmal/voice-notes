@@ -28,7 +28,7 @@ function wav(seconds: number, rate = 16000): Uint8Array {
 function setup(nowIso = '2026-10-15T12:00:00Z') {
   const store = new MemoryAsrStore();
   let now = Date.parse(nowIso);
-  const transcribe = vi.fn(async (_w: Uint8Array, _l: string | null, _o: { clean: boolean; signal: AbortSignal }) => ({
+  const transcribe = vi.fn(async (_w: Uint8Array, _l: string | null, _o: { clean: boolean; keyterms: string[]; signal: AbortSignal }) => ({
     text: 'hello',
     language: 'en' as string | null,
   }));
@@ -107,6 +107,12 @@ describe('AsrCore', () => {
     expect(transcribe.mock.calls[0][2].signal.aborted).toBe(true);
   });
 
+  it('passes key terms on to the provider', async () => {
+    const { core, transcribe } = setup();
+    await core.transcribe(U, wav(1), null, false, ['Muaad']);
+    expect(transcribe.mock.calls[0][2].keyterms).toEqual(['Muaad']);
+  });
+
   it('runs the provider while the reservation is still out, and passes clean on', async () => {
     const { core, store, transcribe } = setup();
     let release = () => undefined as void;
@@ -118,6 +124,7 @@ describe('AsrCore', () => {
     const done = core.transcribe(U, wav(1), null, true);
     await vi.waitFor(() => expect(transcribe).toHaveBeenCalledTimes(1));
     expect(transcribe.mock.calls[0][2].clean).toBe(true);
+    expect(transcribe.mock.calls[0][2].keyterms).toEqual([]);
     release();
     expect((await done).text).toBe('hello');
   });
