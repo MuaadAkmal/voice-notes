@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { CommandsCore, HERE_RULE, LimitReached, readReply, SYSTEM_PROMPT } from '../../../src/shared/commands/core';
+import { CommandsCore, HERE_RULE, LEARN_RULE, LimitReached, readReply, SYSTEM_PROMPT } from '../../../src/shared/commands/core';
 import { groqChat, LlmFailed } from '../../../src/shared/commands/groq';
 import { MemoryUsageStore } from '../../../src/shared/commands/store';
 
@@ -120,6 +120,28 @@ ${HERE_RULE}`, JSON.stringify({
     here: true,
   }));
   expect(HERE_RULE).toContain('"@this"');
+});
+
+it('with learn, adds the language rule (after the @this one), and never sends the flag on', async () => {
+  const { chat, core: c } = core('{"page": 2, "items": ["شكرا · shukran · thank you"]}');
+  expect(await c.resolve('u', { text: 'I learned a new word in Arabic, shukran', pages: PAGES, learn: true })).toEqual({
+    action: 'append',
+    pageId: 'a',
+    items: ['شكرا · shukran · thank you'],
+  });
+  expect(chat).toHaveBeenLastCalledWith(`${SYSTEM_PROMPT}
+${LEARN_RULE}`, JSON.stringify({ pages: ['1. Groceries', '2. Arabic phrases', '3. YouTube watch list'], command: 'I learned a new word in Arabic, shukran' }));
+  await c.resolve('u', { text: 'add this', pages: PAGES, here: true, learn: true });
+  expect((chat.mock.calls.at(-1) as unknown as string[])[0]).toBe(`${SYSTEM_PROMPT}
+${HERE_RULE}
+${LEARN_RULE}`);
+  expect(LEARN_RULE).toContain(' · ');
+});
+
+it('without learn, the prompt is as before', async () => {
+  const { chat, core: c } = core('{"page": 1, "items": ["x"]}');
+  await c.resolve('u', { text: 'x', pages: PAGES, learn: 'yes' as unknown as true });
+  expect((chat.mock.calls[0] as unknown as string[])[0]).toBe(SYSTEM_PROMPT);
 });
 
 it('ignores a here that is not true', async () => {

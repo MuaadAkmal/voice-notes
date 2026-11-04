@@ -5,8 +5,9 @@ export type ListPage = { id: string; title: string };
 /**
  * `text`: the dictation after the wake word. `pages`: every page on the PC, the only places items may go.
  * `here`: a window was in front when the user spoke; what it shows stays on the PC.
+ * `learn`: the language learner is on (a learned word comes back as word · pronunciation · meaning).
  */
-export type ResolveRequest = { text: string; pages: ListPage[]; here?: true };
+export type ResolveRequest = { text: string; pages: ListPage[]; here?: true; learn?: true };
 
 /** The item the LLM answers for "this" (what the user is looking at); the app puts the window's line in its place. */
 export const THIS_ITEM = '@this';

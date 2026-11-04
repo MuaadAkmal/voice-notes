@@ -23,6 +23,9 @@ Rules:
 /** Added only when the app says a window was in front (`here`). */
 export const HERE_RULE = `- If "here" is true and the user means what they are looking at ("this", "this video", "this page", "this file", "it", or the same in their language), use exactly "@this" as that item. It can sit among other items: "add this and milk" gives ["@this", "milk"].`;
 
+/** Added while the app's language learner is on (`learn`). */
+export const LEARN_RULE = `- If the user says they learned, or want to remember, a word or phrase in a language ("I learned a new word in Tamil, vanakkam"), the page is the one named for that language, and the item is exactly one string: "<the word in that language's own script> · <how it sounds, in English letters> · <its meaning in English>" ("வணக்கம் · vanakkam · hello"). If unsure of the script, write the word as spoken. Keep it on one line.`;
+
 export const REMIND_PROMPT = `You set reminders from voice commands.
 You get the current local time ("now", with its UTC offset), the time zone and the command. Reply with JSON only:
 {"text": <the task to be reminded of>, "due": <when, as an ISO 8601 local datetime with offset, or null>}
@@ -63,8 +66,7 @@ export class CommandsCore {
     const timed = <T>(name: string, p: Promise<T>) => p.finally(() => (times[name] = this.d.now() - t0));
     const [count, content] = await Promise.all([
       timed('usage', this.d.usage.increment(userId, day)),
-      timed('llm', this.d.chat(req.here ? `${SYSTEM_PROMPT}
-${HERE_RULE}` : SYSTEM_PROMPT, user)),
+      timed('llm', this.d.chat([SYSTEM_PROMPT, ...(req.here ? [HERE_RULE] : []), ...(req.learn ? [LEARN_RULE] : [])].join('\n'), user)),
     ]);
     this.d.timing?.(times);
     if (count > this.d.dailyLimit) throw new LimitReached();
@@ -117,6 +119,7 @@ function readRequest(raw: unknown): ResolveRequest {
     text,
     pages: pages.map((p) => ({ id: p.id, title: p.title.trim() })),
     ...(r?.here === true ? { here: true as const } : {}),
+    ...(r?.learn === true ? { learn: true as const } : {}),
   };
 }
 

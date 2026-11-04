@@ -1040,6 +1040,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   const listUndo = new ListUndo({ pages: store.pages, pagesChanged: () => toDashboard(Ch.PagesChanged), now: Date.now });
   const listCommands = new ListCommands({
     remember: (pageId, lines) => listUndo.remember(pageId, lines),
+    learn: () => settings.languageLearner,
     resolve: (req) => commandsClient.resolve(req),
     describe: describeWindow,
     saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),

@@ -213,6 +213,11 @@ it('custom words follow the account; the rest of these stay on the PC', () => {
   expect(pc).toEqual({ autoTranscribe: false, autoTitle: false, cloudWarnedPeriod: 'x' });
 });
 
+it('the language learner starts off and stays on this PC', () => {
+  expect(loadSettings(files).languageLearner).toBe(false);
+  expect(splitSettings({ languageLearner: true }).pc).toEqual({ languageLearner: true });
+});
+
 it('custom words are normalised on load', () => {
   writeBoth(JSON.stringify({ customWords: [' Muaad ', 'muaad', 'a[b]'] }));
   expect(loadSettings(files).customWords).toEqual(['Muaad', 'ab']);

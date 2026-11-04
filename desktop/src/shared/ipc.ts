@@ -92,6 +92,7 @@ export const SettingsFieldSchemas = {
   customWords: z.array(z.string().max(200)).max(200).transform(normalizeWords),
   cloudWarnedPeriod: z.string().max(40).nullable(),
   cloudOutPeriod: z.string().max(40).nullable(),
+  languageLearner: z.boolean(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

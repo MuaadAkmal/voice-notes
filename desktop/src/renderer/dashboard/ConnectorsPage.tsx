@@ -16,6 +16,7 @@ export function ConnectorsPage() {
         <GoogleCalendarCard />
         <VoiceToCalendar />
         <VoiceToLists />
+        <LanguageLearner />
       </div>
     </div>
   );
@@ -121,6 +122,42 @@ function VoiceToLists() {
           </span>
         </label>
       )}
+    </div>
+  );
+}
+
+/** "Pixie, I learned a new word in Tamil, vanakkam" goes on the Tamil page with how it sounds and what it means. Per PC. */
+function LanguageLearner() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [name, setName] = useState(DEFAULT_WAKE_WORDS[0]);
+  useEffect(() => {
+    const load = () =>
+      api.getSettings().then((s) => {
+        setOn(s.languageLearner);
+        setName(s.noteWakeWords[0] || DEFAULT_WAKE_WORDS[0]);
+      });
+    load();
+    return api.onSettingsChanged(load);
+  }, []);
+  if (on === null) return null;
+
+  return (
+    <div className="flex items-center gap-4 rounded-2xl border bg-card p-5">
+      <div className="min-w-0 flex-1">
+        <div className="text-base font-medium">Language learner</div>
+        <div className="mt-0.5 text-sm text-muted-foreground">
+          Say “{name}, I learned a new word in Tamil, vanakkam” and it's added to your Tamil page with how it sounds and what it
+          means. Uses Voice to lists, so the page needs to exist.
+        </div>
+      </div>
+      <Switch
+        aria-label="Language learner"
+        checked={on}
+        onCheckedChange={(v) => {
+          setOn(v);
+          void api.setSettings({ languageLearner: v });
+        }}
+      />
     </div>
   );
 }

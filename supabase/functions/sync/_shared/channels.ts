@@ -94,6 +94,7 @@ export type Settings = {
   customWords: string[]; // names and jargon every transcription is steered towards (synced)
   cloudWarnedPeriod: string | null; // the Cloud month (its resetsAt) the 80% notice was shown for
   cloudOutPeriod: string | null; // the Cloud month the minutes-used notice was shown for
+  languageLearner: boolean; // a "Pixie, I learned … in Tamil" word is written with pronunciation and meaning
 };
 
 /** Overlay window top-left, relative to that display's work area. */
