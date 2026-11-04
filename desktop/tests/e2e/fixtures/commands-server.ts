@@ -7,19 +7,23 @@ import { TitleCore } from '../../../src/shared/commands/title';
 
 /**
  * The `commands` Edge Function's handler over memory, on a local port, with a fake LLM that titles
- * every note `title` (and files no command). Every token is `user`.
+ * every note `title` and answers every list command with `resolve` (the LLM's JSON). Every token is `user`.
  */
-export async function startCommandsServer(user: { userId: string }, title = 'Shopping list'): Promise<{
+export async function startCommandsServer(
+  user: { userId: string },
+  o: { title?: string; resolve?: string } = {},
+): Promise<{
   url: string;
   /** Requests that reached a path ending in `route`, with their JSON bodies. */
   bodies(route: string): unknown[];
   close(): Promise<void>;
 }> {
-  const chat = async () => JSON.stringify({ title, page: null, items: [] });
+  const titleChat = async () => JSON.stringify({ title: o.title ?? 'Shopping list' });
+  const resolveChat = async () => o.resolve ?? JSON.stringify({ page: null, items: [] });
   const deps = {
     verify: async () => user,
-    core: new CommandsCore({ chat, usage: new MemoryUsageStore(), dailyLimit: 200, now: Date.now }),
-    title: new TitleCore({ chat, usage: new MemoryUsageStore(), dailyLimit: 300, now: Date.now }),
+    core: new CommandsCore({ chat: resolveChat, usage: new MemoryUsageStore(), dailyLimit: 200, now: Date.now }),
+    title: new TitleCore({ chat: titleChat, usage: new MemoryUsageStore(), dailyLimit: 300, now: Date.now }),
     missing: [],
   };
   const seen: { path: string; body: unknown }[] = [];
