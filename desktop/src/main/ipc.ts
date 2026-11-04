@@ -241,6 +241,8 @@ type DashboardDeps = {
   /** The timer lives in the overlay; main keeps its last state and passes commands on. */
   pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
   updates: Pick<UpdateService, 'status' | 'check' | 'restart'>;
+  /** A new account's first-run screen: shown while get() is true. */
+  onboarding: { get(): boolean; finish(): void };
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -254,6 +256,8 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   const none = z.undefined();
 
   handle(Ch.NotesList, none, () => d.store.list());
+  handle(Ch.OnboardingGet, none, () => d.onboarding.get());
+  handle(Ch.OnboardingFinish, none, () => d.onboarding.finish());
   handle(Ch.NotesRename, RenameSchema, ({ id, title }) => {
     const note = d.store.rename(id, title);
     d.notesChanged();

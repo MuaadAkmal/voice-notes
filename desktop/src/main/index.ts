@@ -75,6 +75,7 @@ import { QuotaWatch } from './transcription/quota-watch';
 import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
 import { ListUndo } from './commands/undo';
+import { addStarterPages, firstRun } from './first-run';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -950,6 +951,28 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     selfId: () => store.sync.state.deviceId(),
     onRemoteChange: () => syncController.onRemoteChange(),
   });
+  // A new account's first launch, decided once per boot after the first sync brought the account's rows in.
+  let onboarding = false;
+  let firstRunDecided = false;
+  const decideFirstRun = () => {
+    if (firstRunDecided) return;
+    firstRunDecided = true;
+    const builtIn = new Set([settings.laterPageId, settings.notesPageId]);
+    const r = firstRun({
+      onboarded: settings.onboarded,
+      notes: store.list().length,
+      userPages: store.pages.list().filter((p) => !builtIn.has(p.id)).length,
+    });
+    if (r.patch) updateSettings(r.patch);
+    if (r.starters) {
+      addStarterPages(store.pages);
+      toDashboard(Ch.PagesChanged);
+    }
+    if (r.onboard) {
+      onboarding = true;
+      if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.OnboardingChanged, true);
+    }
+  };
   const syncController: SyncController = new SyncController({
     pings: syncPings,
     files: fileSync,
@@ -966,6 +989,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onView: (view) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.SyncChanged, view);
     },
+    onSynced: () => decideFirstRun(),
     onChanged: (changes) => {
       // Settings arrive through updateSettings, which already tells both windows.
       if (changes.notes) toDashboard(Ch.NotesChanged);
@@ -1189,6 +1213,13 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     reminders,
     files: fileSync,
     updates,
+    onboarding: {
+      get: () => onboarding,
+      finish: () => {
+        onboarding = false;
+        if (!settings.onboarded) updateSettings({ onboarded: true });
+      },
+    },
     pomodoro: {
       get: () => pomodoro,
       command: (action) => send(Ch.PomodoroCommand, { action }),
@@ -1260,6 +1291,14 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         // A local stand-in for the `asr` function: its handler over memory, with a fake transcriber.
         useServer: (url: string) => void (cloudClient = makeCloudAsr(url)),
         useToken: (fn: () => Promise<string | null>) => void (testAsrToken = fn),
+      },
+      onboarding: {
+        // As after a new account's first sync (e2e has no sync server).
+        start: () => {
+          firstRunDecided = false;
+          decideFirstRun();
+        },
+        pending: () => onboarding,
       },
       commands: {
         // A local stand-in for the function: its handler over memory, with a fake Groq.

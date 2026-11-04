@@ -300,6 +300,9 @@ export const Ch = {
   PomodoroChanged: 'pomodoro:changed', // Pomodoro
   RemindersChanged: 'reminders:changed',
   OpenReminders: 'reminders:open', // a notification was clicked: show the Reminders tab
+  OnboardingGet: 'onboarding:get', // → boolean: show the first-run screen
+  OnboardingChanged: 'onboarding:changed', // → boolean
+  OnboardingFinish: 'onboarding:finish', // finished or skipped: the account is onboarded
   PomodoroSessionsChanged: 'pomodoro:sessions-changed',
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav
