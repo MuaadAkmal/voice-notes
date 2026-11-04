@@ -77,13 +77,12 @@ test('transcribes a note through an OpenAI-compatible server', async () => {
   await setTheme('dark');
   await shot('dark');
 
-  // Transcribe a recording.
+  // A new recording is transcribed by itself.
   await t.record(1500);
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const row = page
     .getByRole('listitem')
     .filter({ has: page.getByRole('button', { name: 'Play' }) });
-  await row.getByRole('button', { name: 'Transcribe', exact: true }).click();
   await expect(row.getByText('hola mundo')).toBeVisible();
   await expect(row.getByText('es', { exact: true })).toBeVisible();
   const sent = requests.at(-1)!;

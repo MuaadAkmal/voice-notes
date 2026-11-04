@@ -107,7 +107,7 @@ test('a voice note transcribes through the built-in engine', async () => {
   await t.record(1500);
   await page.getByRole('button', { name: /^Inbox/ }).click();
   const row = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Play' }) });
-  await row.getByRole('button', { name: 'Transcribe', exact: true }).click();
+  // New notes are transcribed by themselves.
   await expect(row.getByText('hello from local')).toBeVisible({ timeout: 15_000 });
 });
 

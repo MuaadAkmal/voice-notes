@@ -102,6 +102,25 @@ test('when the free minutes are used up, the pill says so', async () => {
   expect(await t.hooks((h) => h.pasted)).toEqual([]);
 });
 
+test('past 80% of the minutes, the pill says so once, with Upgrade', async () => {
+  const page = await signedIn();
+  await expect.poll(() => page.evaluate(() => window.dashboardApi.getSettings().then((s) => s.transcription.provider))).toBe('cloud');
+  await server.setUsed(5800); // of the Free fixture's 7200 s
+  const pill = await overlay(t);
+  await t.record(1200); // transcribed by itself
+  await expect(pill.getByTestId('pill')).toContainText('Cloud minutes 80% used', { timeout: 15_000 });
+  await pill.screenshot({ path: '.superpowers/shots/cloud-notice.png' });
+  await pill.getByRole('button', { name: 'Upgrade' }).click();
+  await expect.poll(() => t.hooks((h) => h.openedExternal)).toContain('https://app.voicenote.cloud/account/');
+
+  await expect(pill.getByTestId('pill')).not.toContainText('Cloud minutes', { timeout: 10_000 });
+  const before = server.requests('transcribe');
+  await t.record(1200);
+  await expect.poll(() => server.requests('transcribe'), { timeout: 15_000 }).toBe(before + 1);
+  await page.waitForTimeout(1000);
+  await expect(pill.getByTestId('pill')).not.toContainText('Cloud minutes 80% used');
+});
+
 test('signed out, the Cloud card asks to sign in', async () => {
   t = await launch();
   // As after an offline start with an expired token: the profile stays open, signed out.
