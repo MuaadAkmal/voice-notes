@@ -24,6 +24,7 @@ import { livePreview } from './live-preview';
 import { linkAt } from './preview-spans';
 import { markdownTheme } from './theme';
 import { checkImageFile } from './image-input';
+import { audioBlocks } from './audio-blocks';
 import {
   anchorPos,
   holdAnchor,
@@ -201,6 +202,8 @@ type Props = {
   autoFocus?: boolean;
   /** Not editable and no cursor, so everything renders as preview; checkboxes still toggle (onChange). */
   readOnly?: boolean;
+  /** The page being edited: `/audio` records a voice block into it. Without it voice blocks only play. */
+  pageId?: string;
 };
 
 /** CodeMirror markdown editor. Uncontrolled: `value` is read on mount; remount (change `key`) to load other text. */
@@ -211,6 +214,7 @@ export function MarkdownEditor({
   onError,
   autoFocus,
   readOnly,
+  pageId,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const callbacks = useRef({ onChange, onBlur, onError });
@@ -227,6 +231,7 @@ export function MarkdownEditor({
         extensions: [
           markdownExtensions(onError),
           insertAnchors(),
+          audioBlocks(readOnly ? null : (pageId ?? null), onError),
           EditorView.updateListener.of((update) => {
             if (update.docChanged)
               callbacks.current.onChange(update.state.doc.toString());

@@ -191,6 +191,7 @@ export function PageView({ page, fresh, onBack }: Props) {
       >
         <MarkdownEditor
           key={editorKey}
+          pageId={shown.id}
           value={shown.body}
           onChange={(body) => {
             localBody.current = body;
