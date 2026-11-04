@@ -18,6 +18,7 @@ import { AccountPage } from './AccountPage';
 import { ToastProvider, useToast } from './Toast';
 import { ConfirmProvider } from './ConfirmDialog';
 import { UpdateBanner } from './UpdateBanner';
+import { Onboarding } from './Onboarding';
 
 export type View =
   | { kind: 'home' }
@@ -59,6 +60,13 @@ export function App() {
   const loadNotes = useCallback(() => api.listNotes().then(setNotes), []);
   const loadPages = useCallback(() => api.listPages().then(setPages), []);
   const loadFolders = useCallback(() => api.listFolders().then(setFolders), []);
+
+  // A new account's first launch (main decides, after the first sync).
+  const [onboarding, setOnboarding] = useState(false);
+  useEffect(() => {
+    void api.getOnboarding().then(setOnboarding);
+    return api.onOnboardingChanged(setOnboarding);
+  }, []);
 
   // A reminder notification was clicked.
   useEffect(() => api.onOpenReminders(() => navigate({ kind: 'reminders' })), []);
@@ -121,6 +129,14 @@ export function App() {
           </div>
         </div>
         <UpdateBanner />
+        {onboarding && (
+          <Onboarding
+            onDone={(openTranscription) => {
+              setOnboarding(false);
+              if (openTranscription) navigate({ kind: 'transcription' });
+            }}
+          />
+        )}
         <div className="flex min-h-0 flex-1">
           <Sidebar view={view} onSelect={navigate} folders={folders} pages={pages} counts={counts} onNewPage={newPage} onOpenPage={openPage} />
           <main className="flex-1 overflow-y-auto">
