@@ -11,6 +11,7 @@ import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
+import { glossaryPrompt } from '../shared/custom-words';
 import { cleanTranscript } from '../shared/transcription';
 import { OFF as POMODORO_OFF, type Pomodoro } from '../shared/pomodoro';
 import { DictationController } from './dictation/controller';
@@ -343,7 +344,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   let cloudClient = makeCloudAsr(`${SUPABASE_URL}/functions/v1/asr`);
   // Through the current client, so a test's useServer() applies to jobs already wired.
   const cloudAsr: Pick<CloudAsrClient, 'transcribe' | 'usage'> = {
-    transcribe: (audio, language, signal, clean) => cloudClient.transcribe(audio, language, signal, clean),
+    transcribe: (audio, language, signal, clean, keyterms) => cloudClient.transcribe(audio, language, signal, clean, keyterms),
     usage: () => cloudClient.usage(),
   };
   const endpoint = () => resolveEndpoint({ settings: () => settings, secrets, local: localWhisper });
@@ -491,7 +492,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
         if (ep.cloud) {
           const t0 = Date.now();
-          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings));
+          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), settings.customWords);
           log.info('[dictation] ms', JSON.stringify({ transcribe: Date.now() - t0, server: r.ms, bytes: audio.length }));
           return cleanTranscript(r.text);
         }
@@ -502,6 +503,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
           language: transcribeLanguage === 'auto' ? null : transcribeLanguage,
           audio,
           filename: 'dictation.wav',
+          prompt: glossaryPrompt(settings.customWords) ?? undefined,
           // The built-in engine may still be loading its model on a slow CPU.
           timeoutMs: transcription.provider === 'local' ? 120_000 : 30_000,
           signal,
@@ -1028,6 +1030,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         return true;
       }),
     notesChanged: () => toDashboard(Ch.NotesChanged),
+    words: () => settings.customWords,
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);

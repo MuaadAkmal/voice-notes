@@ -54,6 +54,15 @@ it('posts the WAV, model and verbose_json with the bearer key', async () => {
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([1, 2, 3]);
 });
 
+it('sends the custom words prompt on both attempts, and none without one', async () => {
+  const f = fakeFetch([json(400, {}), json(200, { text: 'hi' })]);
+  await transcribe(req({ prompt: 'Glossary: A, B.' }), f.impl);
+  expect(f.calls.map((c) => c.form.get('prompt'))).toEqual(['Glossary: A, B.', 'Glossary: A, B.']);
+  const g = fakeFetch([json(200, { text: 'hi' })]);
+  await transcribe(req(), g.impl);
+  expect(g.calls[0].form.has('prompt')).toBe(false);
+});
+
 it('omits the key header without a key and sends a chosen language', async () => {
   const f = fakeFetch([json(200, { text: 'hola' })]);
   await transcribe(req({ apiKey: null, language: 'es' }), f.impl);

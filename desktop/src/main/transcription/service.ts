@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import type { Note, StatusMap, TestResult } from '../../shared/channels';
+import { glossaryPrompt } from '../../shared/custom-words';
 import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
 import { silentWav, trimWav } from '../../shared/wav';
 import type { NoteStore } from '../store/note-store';
@@ -22,6 +23,8 @@ export type ServiceDeps = {
   transcribe?: typeof realTranscribe;
   /** The `cloud` provider's client. */
   cloud?: Pick<CloudAsrClient, 'transcribe'>;
+  /** The user's custom words, read per request. */
+  words?: () => string[];
   now?: () => number;
   notesChanged: () => void;
   onStatus: (s: StatusMap) => void;
@@ -30,6 +33,8 @@ export type ServiceDeps = {
 /** Only set for the cloud, so requests to a server keep their exact shape. */
 const cloudFlag = (ep: Endpoint) => (ep.cloud ? { cloud: true } : {});
 
+type Request = Parameters<typeof realTranscribe>[0] & { cloud?: boolean; keyterms?: string[] };
+
 const MISSING = 'Audio file is missing';
 const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 
@@ -37,7 +42,7 @@ const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 export class TranscriptionService {
   private readonly queue: TranscriptionQueue;
   private readonly readFile: (absPath: string) => Promise<Uint8Array>;
-  private readonly transcribe: (req: Parameters<typeof realTranscribe>[0] & { cloud?: boolean }) => ReturnType<typeof realTranscribe>;
+  private readonly transcribe: (req: Request) => ReturnType<typeof realTranscribe>;
   private readonly now: () => number;
 
   constructor(private readonly d: ServiceDeps) {
@@ -47,9 +52,10 @@ export class TranscriptionService {
     const openai = this.transcribe;
     // Every request goes through here: the cloud client for `cloud`, else the OpenAI-shaped one.
     this.transcribe = (req) => {
-      if (!req.cloud) return openai(req);
+      const { cloud, keyterms, ...plain } = req;
+      if (!cloud) return openai(plain);
       if (!d.cloud) return Promise.reject(new Error('Set up transcription first'));
-      return req.signal ? d.cloud.transcribe(req.audio, req.language, req.signal) : d.cloud.transcribe(req.audio, req.language);
+      return keyterms ? d.cloud.transcribe(req.audio, req.language, req.signal, false, keyterms) : d.cloud.transcribe(req.audio, req.language);
     };
     this.queue = new TranscriptionQueue(
       (id, language) => this.run(id, language),
@@ -76,7 +82,7 @@ export class TranscriptionService {
     const audio = trimWav(await this.d.toWav(await this.readAudio(note), note.mimeType), seconds);
     const ep = await this.d.endpoint();
     try {
-      const { text } = await this.transcribe({ ...cloudFlag(ep), baseUrl: ep.baseUrl, model: ep.model, apiKey: ep.apiKey, language: null, audio, filename: `${id}.wav` });
+      const { text } = await this.transcribe({ ...cloudFlag(ep), ...this.wordsFor(ep), baseUrl: ep.baseUrl, model: ep.model, apiKey: ep.apiKey, language: null, audio, filename: `${id}.wav` });
       return text;
     } finally {
       ep.release();
@@ -132,6 +138,7 @@ export class TranscriptionService {
     try {
       result = await this.transcribe({
         ...cloudFlag(ep),
+        ...this.wordsFor(ep),
         baseUrl: ep.baseUrl,
         model: ep.model,
         apiKey: ep.apiKey,
@@ -151,6 +158,14 @@ export class TranscriptionService {
       throw e;
     }
     this.d.notesChanged();
+  }
+
+  /** The custom words in the shape the endpoint takes: key terms for the cloud, a prompt for Whisper. */
+  private wordsFor(ep: Endpoint): { keyterms: string[] } | { prompt: string } | Record<string, never> {
+    const words = this.d.words?.() ?? [];
+    if (ep.cloud) return { keyterms: words };
+    const prompt = glossaryPrompt(words);
+    return prompt ? { prompt } : {};
   }
 
   private async readAudio(note: Note): Promise<Uint8Array> {

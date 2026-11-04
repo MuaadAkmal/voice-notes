@@ -41,7 +41,7 @@ it('maps a rejected fetch to Offline', async () => {
 it('refreshes once on 401', async () => {
   let n = 0;
   const { client, refresh } = make(async () => (n++ === 0 ? ok({ error: 'x' }, 401) : ok(RESULT)));
-  expect(await client.transcribe(silentWav(1), null)).toEqual({ text: 'hi', language: 'en' });
+  expect(await client.transcribe(silentWav(1), null)).toMatchObject({ text: 'hi', language: 'en' });
   expect(refresh).toHaveBeenCalledTimes(1);
 });
 
@@ -78,6 +78,24 @@ it('sends language as a query only when set, with the bearer token', async () =>
   expect(f.mock.calls[1][0]).toBe('https://x.supabase.co/functions/v1/asr/transcribe?language=fr');
   expect((f.mock.calls[0][1]!.headers as Record<string, string>).authorization).toBe('Bearer t');
   expect((f.mock.calls[1][1]!.headers as Record<string, string>).apikey).toBe('pk');
+});
+
+it('sends key terms as a query only when there are some', async () => {
+  const { client, f } = make(async () => ok(RESULT));
+  await client.transcribe(silentWav(1), null, undefined, false, ['Muaad']);
+  await client.transcribe(silentWav(1), null, undefined, false, []);
+  expect(f.mock.calls[0][0]).toBe(`https://x.supabase.co/functions/v1/asr/transcribe?keyterms=${encodeURIComponent('["Muaad"]')}`);
+  expect(f.mock.calls[1][0]).toBe('https://x.supabase.co/functions/v1/asr/transcribe');
+});
+
+it('returns the usage for the month when the function sends it', async () => {
+  const { client } = make(async () => ok(RESULT));
+  expect((await client.transcribe(silentWav(1), null)).usage).toEqual({ used: 1, limit: 60, resetsAt: RESULT.resetsAt });
+});
+
+it('returns no usage from a function that leaves it out', async () => {
+  const { client } = make(async () => ok({ text: 'hi', language: 'en' }));
+  expect((await client.transcribe(silentWav(1), null)).usage).toBeUndefined();
 });
 
 it('reads usage', async () => {

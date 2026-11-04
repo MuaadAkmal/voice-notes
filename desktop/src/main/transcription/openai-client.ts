@@ -13,6 +13,7 @@ export type TranscribeRequest = {
   filename: string;
   timeoutMs?: number;
   signal?: AbortSignal; // cancels the request (e.g. a dictation cancelled with Esc)
+  prompt?: string; // the user's custom words (`glossaryPrompt`); steers spelling of names and jargon
 };
 
 export type TranscribeResult = { text: string; language: string | null };
@@ -41,6 +42,7 @@ export async function transcribe(
     form.append('model', req.model);
     form.append('response_format', format);
     if (req.language) form.append('language', req.language);
+    if (req.prompt) form.append('prompt', req.prompt);
     return send(fetchImpl, `${req.baseUrl}/audio/transcriptions`, {
       method: 'POST',
       headers: req.apiKey ? { Authorization: `Bearer ${req.apiKey}` } : {},

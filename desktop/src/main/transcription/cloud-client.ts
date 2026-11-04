@@ -42,6 +42,14 @@ function twoLetter(code: unknown): string | null {
   return THREE[s] ?? null;
 }
 
+export type CloudUsage = { used: number; limit: number; resetsAt: string };
+
+/** The usage in a transcribe reply, when all of it is there. */
+function usageOf(r: Partial<TranscribeResponse>): CloudUsage | undefined {
+  const { used, limit, resetsAt } = r;
+  return typeof used === 'number' && typeof limit === 'number' && typeof resetsAt === 'string' ? { used, limit, resetsAt } : undefined;
+}
+
 type Deps = {
   baseUrl: string; // …/functions/v1/asr
   apiKey: string; // publishable key
@@ -54,17 +62,25 @@ type Deps = {
 export class CloudAsrClient {
   constructor(private readonly d: Deps) {}
 
-  /** clean: leave out filler words and false starts (dictation; voice notes stay word for word). */
+  /**
+   * clean: leave out filler words and false starts (dictation; voice notes stay word for word).
+   * keyterms: the user's custom words. `usage`: the month so far, when the function says.
+   */
   async transcribe(
     audio: Uint8Array,
     language: string | null,
     signal?: AbortSignal,
     clean = false,
-  ): Promise<{ text: string; language: string | null; ms?: TranscribeResponse['ms'] }> {
+    keyterms: string[] = [],
+  ): Promise<{ text: string; language: string | null; ms?: TranscribeResponse['ms']; usage?: CloudUsage }> {
     const body = trimWav(audio, MAX_SECONDS);
-    const params = new URLSearchParams({ ...(language ? { language } : {}), ...(clean ? { clean: '1' } : {}) }).toString();
+    const params = new URLSearchParams({
+      ...(language ? { language } : {}),
+      ...(clean ? { clean: '1' } : {}),
+      ...(keyterms.length ? { keyterms: JSON.stringify(keyterms) } : {}),
+    }).toString();
     const r = await this.call<TranscribeResponse>(`/transcribe${params ? `?${params}` : ''}`, { method: 'POST', body, contentType: 'audio/wav', signal });
-    return { text: typeof r.text === 'string' ? r.text : '', language: language ?? twoLetter(r.language), ms: r.ms };
+    return { text: typeof r.text === 'string' ? r.text : '', language: language ?? twoLetter(r.language), ms: r.ms, usage: usageOf(r) };
   }
 
   usage(): Promise<UsageResponse> {

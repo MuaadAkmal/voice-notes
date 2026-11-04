@@ -112,6 +112,24 @@ it('converts, sends and saves a trimmed transcript', async () => {
   expect(service.status()).toEqual({});
 });
 
+it('sends the custom words to a server as its prompt, for notes and peeks', async () => {
+  const { service, deps, requests } = setup({ words: () => ['Muaad', 'Pixie'] });
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  (deps.toWav as ReturnType<typeof vi.fn>).mockResolvedValueOnce(silentWav(10));
+  await service.peek(ID, 4);
+  expect(requests.map((r) => r.prompt)).toEqual(['Glossary: Muaad, Pixie.', 'Glossary: Muaad, Pixie.']);
+});
+
+it('sends the custom words to the cloud as key terms', async () => {
+  const cloud = { transcribe: vi.fn(async () => ({ text: 'x', language: 'en' })) };
+  const { service, setSettings } = setup({ cloud, words: () => ['Muaad'] });
+  setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), null, undefined, false, ['Muaad']);
+});
+
 it('passes a chosen language', async () => {
   const { service, requests } = setup();
   service.enqueue([ID], 'es');
@@ -328,7 +346,7 @@ it('sends notes, peeks and tests through the cloud client when the provider is c
   setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
   service.enqueue([ID], 'fr');
   await service.idle();
-  expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), 'fr');
+  expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), 'fr', undefined, false, []);
   expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, 'nube', 'es');
   (deps.toWav as ReturnType<typeof vi.fn>).mockResolvedValueOnce(silentWav(10));
   expect(await service.peek(ID, 4)).toBe(' nube ');
