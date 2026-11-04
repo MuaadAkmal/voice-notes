@@ -13,7 +13,12 @@ const page = (id: string, title: string, body = ''): Page =>
 const PAGES = [page('g', 'Groceries'), page('a', 'Arabic phrases'), page('q', 'Quick notes'), page('y', 'YouTube')];
 const CAP: Capture = { hwnd: 7, title: 'Video - YouTube - Google Chrome', processName: 'chrome.exe', pid: 9 };
 
-function setup(reply: ResolveResponse | Error, pages = PAGES, described: Described = { label: 'Video', app: 'Chrome', url: 'https://y.com/w' }) {
+function setup(
+  reply: ResolveResponse | Error,
+  pages = PAGES,
+  described: Described = { label: 'Video', app: 'Chrome', url: 'https://y.com/w' },
+  extra: Partial<ConstructorParameters<typeof ListCommands>[0]> = {},
+) {
   const appended: [string, string][] = [];
   const sent: ResolveRequest[] = [];
   const pagesChanged = vi.fn();
@@ -34,6 +39,7 @@ function setup(reply: ResolveResponse | Error, pages = PAGES, described: Describ
     },
     quickNotes: () => 'q',
     pagesChanged,
+    ...extra,
   });
   return { svc, appended, sent, pagesChanged, describe, saveImage };
 }
@@ -44,6 +50,22 @@ it('sends the page titles and appends each item to the chosen page', async () =>
   expect(sent[0].pages.map((p) => p.title)).toEqual(['Groceries', 'Arabic phrases', 'Quick notes', 'YouTube']);
   expect(appended).toEqual([['g', 'milk'], ['g', 'eggs']]);
   expect(pagesChanged).toHaveBeenCalledOnce();
+});
+
+it('registers what it wrote for Undo and returns its id', async () => {
+  const remember = vi.fn(() => 'u1');
+  const { svc } = setup({ action: 'append', pageId: 'g', items: ['milk', 'eggs'] }, PAGES, undefined, { remember });
+  expect(await svc.add('add milk and eggs')).toMatchObject({ ok: true, undo: 'u1' });
+  expect(remember).toHaveBeenCalledWith('g', ['milk', 'eggs']);
+});
+
+it('asks for pronunciation and meaning only while the language learner is on', async () => {
+  const on = setup({ action: 'append', pageId: 'a', items: ['x'] }, PAGES, undefined, { learn: () => true });
+  await on.svc.add('I learned a new word in Arabic, shukran');
+  expect(on.sent[0].learn).toBe(true);
+  const off = setup({ action: 'append', pageId: 'a', items: ['x'] }, PAGES, undefined, { learn: () => false });
+  await off.svc.add('I learned a new word in Arabic, shukran');
+  expect(off.sent[0]).not.toHaveProperty('learn');
 });
 
 it('names a single item', async () => {

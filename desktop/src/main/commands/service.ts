@@ -22,9 +22,14 @@ type Deps = {
   /** The Quick notes page's id, creating the page first if it is gone. */
   quickNotes(): string;
   pagesChanged(): void;
+  /** Registers what was written for Undo / Move to…; returns its id. */
+  remember?(pageId: string, lines: string[]): string;
+  /** The language learner is on: learned words come back with pronunciation and meaning. */
+  learn?(): boolean;
 };
 
-export type ListResult = { ok: boolean; message: string };
+/** undo: the id Undo / Move to… use for what this command wrote. */
+export type ListResult = { ok: boolean; message: string; undo?: string };
 
 // No LLM answer to say what the user meant: only the word "this" counts ("that" and "it" are in
 // too many ordinary sentences to attach, and maybe screenshot, whatever window was open).
@@ -44,6 +49,7 @@ export class ListCommands {
         text: text.slice(0, LIMITS.text),
         pages: pages.map((p) => ({ id: p.id, title: p.title.slice(0, LIMITS.title) })),
         ...(capture ? { here: true as const } : {}),
+        ...(this.d.learn?.() ? { learn: true as const } : {}),
       });
     } catch (err) {
       return this.save(fallback, [await this.withLine(text, described)], failureText(err), text);
@@ -75,7 +81,8 @@ export class ListCommands {
     this.d.pagesChanged();
     const page = this.d.pages.get(pageId);
     const what = items.length === 1 ? (shown ?? items[0]) : `${items.length} items`;
-    return { ok: true, message: `Added · ${what} → ${page?.title || 'Untitled'}${why ? ` (${why})` : ''}` };
+    const undo = this.d.remember?.(pageId, items);
+    return { ok: true, message: `Added · ${what} → ${page?.title || 'Untitled'}${why ? ` (${why})` : ''}`, ...(undo ? { undo } : {}) };
   }
 }
 
