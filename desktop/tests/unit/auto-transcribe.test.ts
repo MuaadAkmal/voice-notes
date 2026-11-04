@@ -169,6 +169,19 @@ it('does nothing for a note deleted before the answer', async () => {
   expect(s.d.store.rename).not.toHaveBeenCalled();
 });
 
+it('a voice block in a page is transcribed, but never titled or filed', async () => {
+  const block = note({ pageId: 'p1', transcript: 'Pixie movie lines, I am your father' });
+  const { auto, d } = setup({ notes: [block] });
+  auto.saved(block);
+  expect(d.enqueue).toHaveBeenCalledWith(['n1'], 'auto');
+  await auto.transcribed('n1');
+  expect(d.title).not.toHaveBeenCalled();
+  expect(d.store.moveNotes).not.toHaveBeenCalled();
+  const off = setup({ settings: { autoTranscribe: false }, notes: [block] });
+  off.auto.saved(block);
+  expect(off.d.peekFolder).not.toHaveBeenCalled();
+});
+
 it('knows a default title', () => {
   expect(isDefaultTitle(note())).toBe(true);
   expect(isDefaultTitle(note({ title: 'Mine' }))).toBe(false);

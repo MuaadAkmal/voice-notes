@@ -45,7 +45,7 @@ export class AutoTranscribe {
   saved(note: Note): void {
     const s = this.d.settings();
     if (!s.autoTranscribe || !s.transcription.provider || (s.transcription.provider === 'cloud' && this.d.paused())) {
-      void this.d.peekFolder(note);
+      if (!note.pageId) void this.d.peekFolder(note); // a voice block stays in its page
       return;
     }
     this.fresh.add(note.id);
@@ -62,7 +62,7 @@ export class AutoTranscribe {
 
   private file(note: Note): void {
     const s = this.d.settings();
-    if (!s.voiceToFolders || note.kind !== 'note' || note.source !== 'mic' || !note.transcript) return;
+    if (!s.voiceToFolders || note.kind !== 'note' || note.source !== 'mic' || note.pageId || !note.transcript) return;
     const head = words(note.transcript).slice(0, FOLDER_WORDS).join(' ');
     const folder = matchFolderCommand(head, s.noteWakeWords, this.d.store.folders.list());
     if (!folder) return;
@@ -72,7 +72,8 @@ export class AutoTranscribe {
 
   private async retitle(id: string): Promise<void> {
     const note = this.d.store.get(id);
-    if (!this.d.settings().autoTitle || !note || !isDefaultTitle(note)) return;
+    // A voice block in a page shows no title anywhere.
+    if (!this.d.settings().autoTitle || !note || note.pageId || !isDefaultTitle(note)) return;
     const text = note.transcript ?? '';
     if (words(text).length < MIN_TITLE_WORDS) return;
     let title: string | null;

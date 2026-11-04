@@ -121,6 +121,12 @@ export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().mi
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });
 export const UndoSchema = z.object({ id: z.string().min(1).max(64) });
+export const SaveAudioSchema = z.object({
+  pageId: z.uuid(),
+  bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 50 * 1024 * 1024, 'Audio too large'),
+  durationMs: z.number().positive().max(301_000),
+  mimeType: z.string().min(1).max(100),
+});
 export const MicTestSchema = z.object({ deviceId: z.string().max(512).nullable() });
 export const MicLevelSchema = z.object({ level: z.number().min(0).max(1), heard: z.boolean(), done: z.literal(true).optional(), error: z.literal(true).optional() });
 export const MoveSchema = z.object({ id: z.string().min(1).max(64), pageId: z.uuid() });

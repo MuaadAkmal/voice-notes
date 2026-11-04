@@ -44,6 +44,7 @@ import {
   TranscriptionTestSchema,
   WavReplySchema,
   UndoSchema,
+  SaveAudioSchema,
   MicTestSchema,
   MicLevelSchema,
   MoveSchema,
@@ -247,6 +248,8 @@ type DashboardDeps = {
   updates: Pick<UpdateService, 'status' | 'check' | 'restart'>;
   /** A new account's first-run screen: shown while get() is true. */
   onboarding: { get(): boolean; finish(): void; testMic(deviceId: string | null): MicTestResult };
+  /** A voice block recorded in a page: saved as a note the page owns; returns its id. */
+  saveBlock(a: { pageId: string; bytes: Uint8Array; durationMs: number; mimeType: string }): Promise<string>;
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -259,7 +262,10 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     });
   const none = z.undefined();
 
-  handle(Ch.NotesList, none, () => d.store.list());
+  // Voice blocks belong to their page: never in the note lists.
+  handle(Ch.NotesList, none, () => d.store.list().filter((n) => !n.pageId));
+  handle(Ch.NotesGet, IdSchema, (id) => d.store.get(id) ?? null);
+  handle(Ch.PagesSaveAudio, SaveAudioSchema, (a) => d.saveBlock(a));
   handle(Ch.OnboardingGet, none, () => d.onboarding.get());
   handle(Ch.OnboardingFinish, none, () => d.onboarding.finish());
   handle(Ch.MicTest, MicTestSchema, ({ deviceId }) => d.onboarding.testMic(deviceId));

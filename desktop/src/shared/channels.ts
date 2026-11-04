@@ -217,6 +217,8 @@ export const Ch = {
   PomodoroCommand: 'pomodoro:command', // dashboard → main (invoke) → overlay: { action }
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
+  NotesGet: 'notes:get', // id → Note | null (a voice block in a page too)
+  PagesSaveAudio: 'pages:save-audio', // { pageId, bytes, durationMs, mimeType } → note id: a voice block
   NotesRename: 'notes:rename',
   NotesDelete: 'notes:delete',
   NotesReveal: 'notes:reveal',

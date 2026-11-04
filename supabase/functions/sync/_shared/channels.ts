@@ -20,6 +20,7 @@ export type Note = {
   transcript: string | null; // '' = transcribed, no speech
   transcriptLang: string | null;
   transcribedAt: number | null;
+  pageId?: string | null; // a voice block: the page that owns it (hidden from the note lists)
 };
 
 /** 'rewind': the last N seconds of system audio, saved from the film-mode buffer. */
@@ -216,6 +217,8 @@ export const Ch = {
   PomodoroCommand: 'pomodoro:command', // dashboard → main (invoke) → overlay: { action }
   // dashboard ↔ main (invoke)
   NotesList: 'notes:list',
+  NotesGet: 'notes:get', // id → Note | null (a voice block in a page too)
+  PagesSaveAudio: 'pages:save-audio', // { pageId, bytes, durationMs, mimeType } → note id: a voice block
   NotesRename: 'notes:rename',
   NotesDelete: 'notes:delete',
   NotesReveal: 'notes:reveal',

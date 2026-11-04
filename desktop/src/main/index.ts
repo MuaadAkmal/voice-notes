@@ -76,6 +76,7 @@ import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
 import { ListUndo } from './commands/undo';
 import { addStarterPages, firstRun, micTestAllowed } from './first-run';
+import { orphanBlocks, referencedNotes } from '../shared/audio-blocks';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -286,13 +287,18 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   // The display the pill is on while it follows focus; undefined until it has moved (or when off).
   let pillDisplay: number | undefined;
   const overlay = createOverlayWindow(() => settings.pillPosition, () => pillDisplay);
-  // Only the overlay records; the dashboard just plays files through note://.
+  // The overlay records notes; the dashboard may use the mic (audio only) for voice blocks in pages.
   const CAPTURE_PERMISSIONS = new Set(['media', 'display-capture']);
-  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) =>
-    callback(CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents),
+  const dashboardMic = (wc: Electron.WebContents | null, permission: string, mediaTypes?: string[]) =>
+    permission === 'media' && !!dashboard && !dashboard.isDestroyed() && wc === dashboard.webContents && (mediaTypes ?? ['audio']).every((t) => t === 'audio');
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) =>
+    callback(
+      (CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents) ||
+        dashboardMic(wc, permission, (details as { mediaTypes?: string[] }).mediaTypes),
+    ),
   );
   session.defaultSession.setPermissionCheckHandler(
-    (wc, permission) => CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents,
+    (wc, permission) => (CAPTURE_PERMISSIONS.has(permission) && wc === overlay.webContents) || dashboardMic(wc, permission),
   );
   // System audio: answer the overlay's getDisplayMedia with Windows loopback ('what you hear').
   // The screen source is required by the API; the overlay drops the video track immediately.
@@ -360,6 +366,16 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   setInterval(() => {
     if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
   }, DICTATION_PRUNE_MS);
+  // Voice blocks no page links to any more (the line or the page was deleted), at boot and hourly.
+  const sweepBlocks = () => {
+    const notes = store.list().map((n) => ({ id: n.id, pageId: n.pageId ?? null, createdAt: n.createdAt }));
+    const ids = orphanBlocks(notes, referencedNotes(store.pages.list().map((p) => p.body)), Date.now());
+    if (!ids.length) return;
+    log.info('[pages] removing', ids.length, 'unlinked voice block(s)');
+    store.deleteMany(ids).then(() => toDashboard(Ch.NotesChanged), (err) => log.warn('[pages] block sweep failed', err));
+  };
+  sweepBlocks();
+  setInterval(sweepBlocks, 60 * 60_000);
   const idleState = (): OverlayState =>
     settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
   // The last state sent to the pill: drops are only taken while it is visibly idle or showing "Saved".
@@ -1217,6 +1233,12 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     reminders,
     files: fileSync,
     updates,
+    saveBlock: async ({ pageId, bytes, durationMs, mimeType }) => {
+      if (!store.pages.get(pageId)) throw new Error('Page not found');
+      const note = await store.create({ bytes: Buffer.from(bytes), durationMs, mimeType, source: 'mic', pageId });
+      auto.saved(note);
+      return note.id;
+    },
     onboarding: {
       get: () => onboarding,
       testMic: (deviceId) => {

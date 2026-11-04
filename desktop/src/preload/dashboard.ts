@@ -166,6 +166,9 @@ const dashboardApi = {
   onOnboardingChanged: (cb: (show: boolean) => void) => subscribeWith(Ch.OnboardingChanged, cb),
   finishOnboarding: (): Promise<void> => ipcRenderer.invoke(Ch.OnboardingFinish),
   testMic: (deviceId: string | null): Promise<MicTestResult> => ipcRenderer.invoke(Ch.MicTest, { deviceId }),
+  getNote: (id: string): Promise<Note | null> => ipcRenderer.invoke(Ch.NotesGet, id),
+  saveAudioBlock: (a: { pageId: string; bytes: Uint8Array; durationMs: number; mimeType: string }): Promise<string> =>
+    ipcRenderer.invoke(Ch.PagesSaveAudio, a),
   onMicLevel: (cb: (l: MicLevel) => void) => subscribeWith(Ch.MicLevel, cb),
   onPomodoroSessionsChanged: (cb: () => void) => subscribe(Ch.PomodoroSessionsChanged, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
