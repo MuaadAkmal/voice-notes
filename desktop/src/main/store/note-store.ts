@@ -33,6 +33,8 @@ export type NewAudio = {
   kind?: NoteKind;
   windowTitle?: string | null;
   show?: string | null;
+  /** A voice block: the page that owns it. */
+  pageId?: string | null;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -111,6 +113,7 @@ export class NoteStore {
       transcript: null,
       transcriptLang: null,
       transcribedAt: null,
+      pageId: audio.pageId ?? null,
     };
     this.sqlite.transaction(() => {
       this.db.insert(notes).values(note).run();
@@ -315,6 +318,7 @@ export class NoteStore {
 
 /** A note as it syncs: where its audio sits on this PC is local. */
 export function toRow(note: Note): NoteRow {
-  const { filePath: _f, status: _s, syncedAt: _y, ...row } = note;
-  return row;
+  const { filePath: _f, status: _s, syncedAt: _y, pageId, ...row } = note;
+  // Only a voice block carries its page: every other row keeps the shape older apps know.
+  return pageId ? { ...row, pageId } : row;
 }

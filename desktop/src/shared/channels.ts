@@ -20,6 +20,7 @@ export type Note = {
   transcript: string | null; // '' = transcribed, no speech
   transcriptLang: string | null;
   transcribedAt: number | null;
+  pageId?: string | null; // a voice block: the page that owns it (hidden from the note lists)
 };
 
 /** 'rewind': the last N seconds of system audio, saved from the film-mode buffer. */

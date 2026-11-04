@@ -133,6 +133,9 @@ export const MIGRATIONS: string[] = [
      google_event_id TEXT
    );
    CREATE INDEX reminders_due ON reminders (status, due_at);`,
+  // Voice blocks: a note a page owns (`[🎙 …](note://id)` in its body) is hidden from the note lists.
+  // A column, not a kind: kind has a CHECK an older app's pull would fail on; it ignores this field.
+  `ALTER TABLE notes ADD COLUMN page_id TEXT;`,
 ];
 
 export function migrate(db: Database.Database): void {

@@ -47,6 +47,24 @@ it('a pulled note appears with its version, and the cursor moves', () => {
   expect(store.sync.outbox.pending()).toEqual([]); // applying never queues changes
 });
 
+it('a pulled voice block keeps its page; an older app’s row without one is an ordinary note', () => {
+  const base = {
+    title: 'Block', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
+    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null,
+    transcriptLang: null, transcribedAt: null,
+  };
+  const block = { ...base, id: '21111111-1111-4111-8111-111111111111', pageId: '31111111-1111-4111-8111-111111111111' };
+  const plain = { ...base, id: '41111111-1111-4111-8111-111111111111' };
+  applyPull(store, pull([
+    { entity: 'note', id: block.id, version: 4, deleted: false, data: block },
+    { entity: 'note', id: plain.id, version: 5, deleted: false, data: plain },
+  ]), () => undefined);
+  expect(store.get(block.id)!.pageId).toBe(block.pageId);
+  expect(toRow(store.get(block.id)!)).toEqual(block);
+  expect(store.get(plain.id)!.pageId).toBeNull();
+  expect(toRow(store.get(plain.id)!)).toEqual(plain);
+});
+
 it('a pulled delete hides the note, removes its audio and drops our waiting changes', async () => {
   const n = await store.create(audio());
   store.rename(n.id, 'mine');

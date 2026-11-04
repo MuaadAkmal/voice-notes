@@ -34,7 +34,7 @@ it('migration 9 keeps every note column and index and allows remote', () => {
   const after = new Database(file);
   try {
     expect(after.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
-    expect(after.prepare('SELECT * FROM notes').get()).toEqual(NOTE);
+    expect(after.prepare('SELECT * FROM notes').get()).toEqual({ ...NOTE, page_id: null }); // migration 12 adds page_id
     after.prepare("UPDATE notes SET status = 'remote'").run();
     expect(() => after.prepare("UPDATE notes SET status = 'bogus'").run()).toThrow();
     const indexes = (after.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'notes'").all() as { name: string }[]).map((r) => r.name);

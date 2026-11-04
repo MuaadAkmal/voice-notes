@@ -22,6 +22,7 @@ export const notes = sqliteTable('notes', {
   transcribedAt: integer('transcribed_at'),
   deletedAt: integer('deleted_at'),
   version: integer('version').notNull().default(0),
+  pageId: text('page_id'),
 });
 
 export const pages = sqliteTable('pages', {

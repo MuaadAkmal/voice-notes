@@ -41,6 +41,17 @@ it('create writes file and row', async () => {
   expect(store.get(note.id)).toEqual(note);
 });
 
+it('a voice block belongs to its page, and syncs that', async () => {
+  const PAGE = '31111111-1111-4111-8111-111111111111';
+  store.sync.state.setEnabled(true);
+  const note = await store.create({ ...audio(), pageId: PAGE });
+  expect(store.get(note.id)!.pageId).toBe(PAGE);
+  const op = store.sync.outbox.pending().map((e) => e.op).find((o) => o.op === 'note.create');
+  expect(op).toMatchObject({ row: { pageId: PAGE } });
+  const plain = await store.create(audio());
+  expect(store.get(plain.id)!.pageId).toBeNull();
+});
+
 it('create leaves no .tmp file', async () => {
   await store.create(audio());
   expect(fs.readdirSync(store.recordingsDir).filter((f) => f.endsWith('.tmp'))).toEqual([]);
