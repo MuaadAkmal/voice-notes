@@ -6,6 +6,11 @@ import { afterCalendarTrigger, parseCalendarCommand } from '../../shared/calenda
 import { parseNoteCommand } from '../../shared/note-command';
 import { isReminder } from '../../shared/reminder-command';
 import type { Capture } from '../commands/capture';
+import type { UndoOffer } from '../commands/undo';
+
+/** How long the pill offers Undo / Move to… after a voice-to-lists command, and shows what it did. */
+export const UNDO_FLASH_MS = 6000;
+const RESULT_FLASH_MS = 2500;
 
 export type DictationPorts = {
   overlay: { start(deviceId: string | null, ping: boolean): void; stop(): void; cancel(): void; setState(s: OverlayState): void };
@@ -37,8 +42,8 @@ export type DictationPorts = {
     enabled(): boolean;
     /** The names that start a command ("Pixie, …"). */
     wakeWords(): string[];
-    /** The message is fit for the pill ("Added · blueberry → Groceries" or why not). */
-    add(text: string, capture: Capture | null): Promise<{ ok: boolean; message: string }>;
+    /** The message is fit for the pill ("Added · blueberry → Groceries" or why not); undo: what Undo / Move to… may take back. */
+    add(text: string, capture: Capture | null): Promise<{ ok: boolean; message: string; undo?: UndoOffer }>;
   };
   /** Voice reminders: "remind me to … in 10 min", alone or after the wake word or calendar trigger. */
   reminder?: {
@@ -75,6 +80,9 @@ export class DictationController {
   private stopTimer: ReturnType<typeof setTimeout> | null = null;
   private maxTimer: ReturnType<typeof setTimeout> | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
+  /** The Undo / Move to… flash on screen, and whether the pointer or the picker is holding it. */
+  private undoShown: OverlayState | null = null;
+  private held = false;
   private readonly minMs: number;
   private readonly errorMs: number;
   private readonly stopTimeoutMs: number;
@@ -188,7 +196,8 @@ export class DictationController {
       const r = await command.add().catch(() => ({ ok: false, message: command.failed }));
       if (r.ok) {
         this.toIdle();
-        this.flash(r.message, 'done');
+        if ('undo' in r && r.undo) this.flashUndo(r.message, r.undo);
+        else this.flash(r.message, 'done');
         return;
       }
       this.flash(r.message); // then paste, so nothing is lost
@@ -205,7 +214,7 @@ export class DictationController {
   }
 
   /** What the transcript asks for instead of a paste, if anything. A reminder, then the calendar trigger, then lists. */
-  private command(text: string): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string }> } | null {
+  private command(text: string): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string; undo?: UndoOffer }> } | null {
     const { calendar, list, reminder } = this.p;
     if (reminder?.enabled()) {
       const asked = [text, parseNoteCommand(text, list?.wakeWords() ?? [])?.text, afterCalendarTrigger(text)]
@@ -230,6 +239,42 @@ export class DictationController {
     this.clearFlash();
   }
 
+  /** The pointer is over the Undo / Move to… flash, or its picker is open: keep it up. */
+  holdFlash(): void {
+    if (!this.undoShown) return;
+    this.stopFlashTimer();
+    this.held = true;
+  }
+
+  /** The pointer left, or the picker closed: the flash's time starts again. */
+  releaseFlash(): void {
+    if (!this.undoShown || !this.held) return;
+    this.held = false;
+    this.flashFor(UNDO_FLASH_MS);
+  }
+
+  /** What an Undo or Move to… did ("Undone", "Moved → Tamil"), shown briefly. */
+  showResult(message: string): void {
+    this.clearFlash();
+    this.p.overlay.setState({ kind: 'done', message });
+    this.flashFor(RESULT_FLASH_MS);
+  }
+
+  private flashUndo(message: string, undo: UndoOffer): void {
+    this.clearFlash();
+    this.undoShown = { kind: 'done', message, undo };
+    this.p.overlay.setState(this.undoShown);
+    this.flashFor(UNDO_FLASH_MS);
+  }
+
+  private flashFor(ms: number): void {
+    this.flashTimer = setTimeout(() => {
+      this.flashTimer = null;
+      this.undoShown = null;
+      this.p.overlay.setState(this.p.idleState());
+    }, ms);
+  }
+
   private showRecording(mode: 'hold' | 'handsfree'): void {
     this.p.overlay.setState({ kind: 'recording', mode, startedAt: this.startedAt, source: 'mic', dictation: true });
   }
@@ -250,7 +295,14 @@ export class DictationController {
     }, this.errorMs);
   }
 
+  /** Whatever flash is up is over (a new capture, another flash): the Undo flash with it. */
   private clearFlash(): void {
+    this.stopFlashTimer();
+    this.undoShown = null;
+    this.held = false;
+  }
+
+  private stopFlashTimer(): void {
     if (this.flashTimer) clearTimeout(this.flashTimer);
     this.flashTimer = null;
   }

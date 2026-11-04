@@ -5,6 +5,7 @@ import { progress } from '../../shared/pomodoro';
 import { PHASE_COLOR, PomodoroChip } from './Pomodoro';
 import { SaveThisButton } from './SaveLater';
 import { LATER_PAGE_TITLE } from '../../shared/later';
+import { normalize } from '../../shared/search';
 import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
 
@@ -80,6 +81,88 @@ type SavedState = Extract<OverlayState, { kind: 'saved' }>;
 type Hover = { onMouseEnter: () => void; onMouseLeave: () => void };
 
 /** "Saved ✓ · Add title": click to type the phrase or its meaning into the note's title. */
+type UndoOffer = NonNullable<Extract<OverlayState, { kind: 'done' }>['undo']>;
+const PICKER_ROWS = 6;
+
+/** "Added · milk → Groceries" with Undo and Move to…; the picker lists other pages to move it to. */
+function UndoPill({ message, undo, shell, hover }: { message: string; undo: UndoOffer; shell: string; hover: Hover }) {
+  const api = window.overlayApi;
+  const [picking, setPicking] = useState(false);
+  const [query, setQuery] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+
+  // The window only becomes focusable once main handles openMove; focus the box when it does.
+  useEffect(() => {
+    if (!picking) return;
+    const focus = () => input.current?.focus();
+    focus();
+    window.addEventListener('focus', focus);
+    return () => window.removeEventListener('focus', focus);
+  }, [picking]);
+
+  const btn = 'cursor-pointer rounded-full bg-white/20 px-3 py-1 font-medium hover:bg-white/30';
+  if (!picking) {
+    return (
+      <div {...hover} data-morph className={`${shell} h-10 gap-2 bg-emerald-600/95 pl-5 pr-2 text-sm`}>
+        <span className="truncate">{message}</span>
+        <button className={btn} onClick={() => api.undo(undo.id)}>
+          Undo
+        </button>
+        {undo.pages.length > 0 && (
+          <button
+            className={btn}
+            onClick={() => {
+              setPicking(true);
+              api.openMove();
+            }}
+          >
+            Move to…
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const q = normalize(query.trim());
+  const rows = undo.pages.filter((p) => normalize(p.title || 'Untitled').includes(q)).slice(0, PICKER_ROWS);
+  const cancel = () => {
+    setPicking(false);
+    api.cancelMove();
+  };
+  return (
+    <div {...hover} data-morph className={`${shell} w-64 flex-col items-stretch gap-1 rounded-2xl p-2 text-sm`}>
+      <input
+        ref={input}
+        value={query}
+        maxLength={80}
+        placeholder="Move to…"
+        aria-label="Page to move to"
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') cancel();
+          if (e.key === 'Enter' && rows[0]) api.move(undo.id, rows[0].id);
+        }}
+        onBlur={cancel}
+        className="rounded-lg bg-white/10 px-2.5 py-1.5 text-white placeholder:text-white/40 outline-none"
+      />
+      {rows.map((p) => (
+        <button
+          key={p.id}
+          // mousedown, not click: the input's blur would close the picker first
+          onMouseDown={(e) => {
+            e.preventDefault();
+            api.move(undo.id, p.id);
+          }}
+          className="cursor-pointer truncate rounded-lg px-2.5 py-1.5 text-left hover:bg-white/15"
+        >
+          {p.title || 'Untitled'}
+        </button>
+      ))}
+      {rows.length === 0 && <div className="px-2.5 py-1.5 text-white/50">No page called that</div>}
+    </div>
+  );
+}
+
 function SavedPill({ state, shell, hover }: { state: SavedState; shell: string; hover: Hover }) {
   const api = window.overlayApi;
   const [titling, setTitling] = useState(false);
@@ -335,6 +418,7 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
         <div data-morph className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
       );
     case 'done':
+      if (state.undo) return <UndoPill message={state.message} undo={state.undo} shell={shell} hover={hover} />;
       return <div data-morph className={`${shell} h-10 bg-emerald-600/95 px-5 text-sm`}>{state.message}</div>;
     case 'notice':
       return (

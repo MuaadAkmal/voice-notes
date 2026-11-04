@@ -74,6 +74,7 @@ import { applyCloudDefault } from './transcription/cloud-default';
 import { QuotaWatch } from './transcription/quota-watch';
 import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
+import { ListUndo } from './commands/undo';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -484,6 +485,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   gesture.onEvent((e) => {
     if (e === 'start' && !dictation.active) {
       releaseOverlayFocus(); // a new recording abandons an open title input
+      if (picking) closePicker(); // or Move to… picker
       dictation.dismissFlash();
     }
     controller.handleGesture(e);
@@ -582,7 +584,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     list: {
       enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
       wakeWords: () => settings.noteWakeWords,
-      add: (text, capture) => listCommands.add(text, capture),
+      add: async (text, capture) => {
+        const r = await listCommands.add(text, capture);
+        const undo = r.undo ? listUndo.offer(r.undo) : null;
+        return { ok: r.ok, message: r.message, ...(undo ? { undo } : {}) };
+      },
     },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
@@ -590,7 +596,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
   dictationGesture.onEvent((e) => {
     if (e === 'start' && controller.state === 'idle') {
-      releaseOverlayFocus(); // a dictation abandons an open title input, like a new recording
+      releaseOverlayFocus(); // a dictation abandons an open title input or picker, like a new recording
+      if (picking) closePicker();
       controller.dismissFlash();
     }
     dictation.handleGesture(e);
@@ -606,6 +613,17 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
 
   let devices: AudioDevice[] = [];
+  // The Move to… picker is open on the pill (it has keyboard focus, and its flash is held). The
+  // window grows upward for it (the pill sits at its bottom) and goes back after.
+  let picking = false;
+  let beforePicker: Electron.Rectangle | null = null;
+  const PICKER_EXTRA = 240;
+  const closePicker = () => {
+    picking = false;
+    releaseOverlayFocus();
+    if (beforePicker && !overlay.isDestroyed()) overlay.setBounds(beforePicker);
+    beforePicker = null;
+  };
   // The overlay's pomodoro, as it last reported it (the dashboard's Pomodoro page shows it).
   let pomodoro: Pomodoro = POMODORO_OFF;
   registerOverlayIpc({
@@ -651,6 +669,31 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         releaseOverlayFocus();
         controller.titleCancelled();
       },
+    },
+    lists: {
+      undo: (id) => {
+        closePicker();
+        dictation.showResult(listUndo.undo(id));
+      },
+      move: (id, pageId) => {
+        closePicker();
+        dictation.showResult(listUndo.move(id, pageId));
+      },
+      openPicker: () => {
+        if (picking || overlayState.kind !== 'done' || !overlayState.undo) return;
+        picking = true;
+        dictation.holdFlash();
+        beforePicker = overlay.getBounds();
+        overlay.setBounds({ ...beforePicker, y: beforePicker.y - PICKER_EXTRA, height: beforePicker.height + PICKER_EXTRA });
+        overlay.setFocusable(true);
+        overlay.focus();
+      },
+      cancelPicker: () => {
+        if (!picking) return;
+        closePicker();
+        dictation.releaseFlash();
+      },
+      picking: () => picking,
     },
     onFilmError: (message) => {
       log.warn('[film] buffer stopped:', message);
@@ -993,7 +1036,10 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       fetch: connectorsFetch,
     });
   let commandsClient = makeCommandsClient(SUPABASE_URL);
+  // Undo / Move to… on the pill for what a voice-to-lists command just wrote.
+  const listUndo = new ListUndo({ pages: store.pages, pagesChanged: () => toDashboard(Ch.PagesChanged), now: Date.now });
   const listCommands = new ListCommands({
+    remember: (pageId, lines) => listUndo.remember(pageId, lines),
     resolve: (req) => commandsClient.resolve(req),
     describe: describeWindow,
     saveImage: (bytes) => store.pages.saveImage(bytes, 'jpg'),

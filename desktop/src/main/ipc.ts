@@ -43,6 +43,8 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   WavReplySchema,
+  UndoSchema,
+  MoveSchema,
   NewEventSchema,
   type PomodoroAction,
   PomodoroCommandSchema,
@@ -88,6 +90,8 @@ type OverlayDeps = {
   onDevices: (devices: AudioDevice[]) => void;
   onDragEnd: () => void;
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
+  /** Undo / Move to… on a voice-to-lists flash. */
+  lists: { undo(id: string): void; move(id: string, pageId: string): void; openPicker(): void; cancelPicker(): void; picking(): boolean };
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
@@ -115,7 +119,7 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
 }
 
 export function registerOverlayIpc(deps: OverlayDeps): void {
-  const { overlay, gesture, controller, dictation, dictationGesture, onDevices, onDragEnd, titles } = deps;
+  const { overlay, gesture, controller, dictation, dictationGesture, onDevices, onDragEnd, titles, lists } = deps;
   ipcMain.on(Ch.FilmError, from(overlay, ErrorSchema, ({ message }) => deps.onFilmError(message)));
   ipcMain.on(
     Ch.FilmAudio,
@@ -131,6 +135,10 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(Ch.OverlayTitleStart, (e) => isFrom(overlay, e.sender) && titles.start());
   ipcMain.on(Ch.OverlayTitle, from(overlay, OverlayTitleSchema, ({ noteId, title }) => titles.submit(noteId, title)));
   ipcMain.on(Ch.OverlayTitleCancel, (e) => isFrom(overlay, e.sender) && titles.cancel());
+  ipcMain.on(Ch.OverlayUndo, from(overlay, UndoSchema, ({ id }) => lists.undo(id)));
+  ipcMain.on(Ch.OverlayMove, from(overlay, MoveSchema, ({ id, pageId }) => lists.move(id, pageId)));
+  ipcMain.on(Ch.OverlayMoveOpen, (e) => isFrom(overlay, e.sender) && lists.openPicker());
+  ipcMain.on(Ch.OverlayMoveCancel, (e) => isFrom(overlay, e.sender) && lists.cancelPicker());
   // The hands-free × discards whichever is recording (only one can be).
   ipcMain.on(Ch.OverlayDiscard, (e) => {
     if (!isFrom(overlay, e.sender)) return;
@@ -167,9 +175,14 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     Ch.OverlayPointer,
     from(overlay, PointerSchema, ({ over }) => {
       deps.overlayMouse.setHover(over);
-      // Hovering a "Saved" pill keeps it up long enough to click "Add title".
-      if (over) controller.pauseFlash();
-      else controller.resumeFlash();
+      // Hovering a "Saved" pill keeps it up long enough to click "Add title"; the same for Undo / Move to….
+      if (over) {
+        controller.pauseFlash();
+        dictation.holdFlash();
+      } else {
+        controller.resumeFlash();
+        if (!lists.picking()) dictation.releaseFlash();
+      }
     }),
   );
   ipcMain.handle(Ch.LaterDrop, (event: IpcMainInvokeEvent, payload: unknown) => {

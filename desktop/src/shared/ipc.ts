@@ -118,6 +118,8 @@ export const LocalRemoveSchema = z.object({ modelId: z.enum(MODEL_IDS), engineTo
 export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().min(1).max(200) });
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });
+export const UndoSchema = z.object({ id: z.string().min(1).max(64) });
+export const MoveSchema = z.object({ id: z.string().min(1).max(64), pageId: z.uuid() });
 export const DragSchema = z.object({ dx: z.number().int().min(-2000).max(2000), dy: z.number().int().min(-2000).max(2000) });
 export const ErrorSchema = z.object({ message: z.string().max(200) });
 // A long styled selection's HTML can be huge: keep the start rather than refuse the drop.

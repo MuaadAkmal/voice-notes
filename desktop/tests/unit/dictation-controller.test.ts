@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OverlayState } from '../../src/shared/channels';
 import { DictationController, type DictationPorts } from '../../src/main/dictation/controller';
 import type { Capture } from '../../src/main/commands/capture';
@@ -15,7 +15,7 @@ let paste: (text: string) => Promise<void>;
 let calendarOn: boolean;
 let calendarAdd: (text: string) => Promise<{ ok: boolean; message: string }>;
 let listOn: boolean;
-let listAdd: (text: string, capture: Capture | null) => Promise<{ ok: boolean; message: string }>;
+let listAdd: (text: string, capture: Capture | null) => Promise<{ ok: boolean; message: string; undo?: { id: string; pages: { id: string; title: string }[] } }>;
 let capture: Capture | null;
 let reminderOn: boolean;
 let ctl: DictationController;
@@ -344,6 +344,73 @@ it('voice to lists: the wake word adds to a list instead of pasting', async () =
     { kind: 'done', message: 'Added · blueberry → Groceries' },
   ]);
   expect(ctl.state).toBe('idle');
+});
+
+describe('Undo / Move to… on a voice-to-lists flash', () => {
+  const UNDO = { id: 'u1', pages: [{ id: 't', title: 'Tamil' }] };
+  const added = async () => {
+    listOn = true;
+    transcribe = async () => 'Pixie, add milk.';
+    listAdd = async () => ({ ok: true, message: 'Added · milk → Groceries', undo: UNDO });
+    ctl.handleGesture('start');
+    ctl.handleGesture('stop');
+    await ctl.onAudio(audio(800));
+  };
+
+  it('shows the buttons for 6 s', async () => {
+    await added();
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Added · milk → Groceries', undo: UNDO });
+    await vi.advanceTimersByTimeAsync(5900);
+    expect(states.at(-1)).toMatchObject({ undo: UNDO });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(states.at(-1)).toEqual(IDLE);
+  });
+
+  it('holds while hovered or picking, and restarts the 6 s after', async () => {
+    await added();
+    ctl.holdFlash();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(states.at(-1)).toMatchObject({ undo: UNDO });
+    ctl.releaseFlash();
+    await vi.advanceTimersByTimeAsync(5900);
+    expect(states.at(-1)).toMatchObject({ undo: UNDO });
+    await vi.advanceTimersByTimeAsync(200);
+    expect(states.at(-1)).toEqual(IDLE);
+  });
+
+  it('shows the result of an undo or move briefly', async () => {
+    await added();
+    ctl.holdFlash();
+    ctl.showResult('Undone');
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Undone' });
+    await vi.advanceTimersByTimeAsync(2600);
+    expect(states.at(-1)).toEqual(IDLE);
+  });
+
+  it('a new capture drops a held flash', async () => {
+    await added();
+    ctl.holdFlash();
+    ctl.dismissFlash();
+    ctl.releaseFlash(); // the picker closing afterwards must not bring it back
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(states.filter((s) => s.kind === 'done' && 'undo' in s)).toHaveLength(1);
+  });
+
+  it('a new dictation forgets the flash, so hovering the recording pill cannot end it', async () => {
+    await added();
+    ctl.handleGesture('start');
+    const recording = states.at(-1);
+    ctl.holdFlash();
+    ctl.releaseFlash();
+    await vi.advanceTimersByTimeAsync(7000);
+    expect(states.at(-1)).toEqual(recording);
+  });
+
+  it('other flashes are not held', async () => {
+    ctl.holdFlash();
+    ctl.releaseFlash();
+    expect(states).toEqual([]);
+  });
 });
 
 it('voice to lists: a failed add says why, then pastes the text', async () => {
