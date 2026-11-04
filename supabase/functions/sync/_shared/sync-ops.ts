@@ -11,7 +11,7 @@ export type PageRow = Page;
 export type FolderRow = Folder;
 
 /** Settings that follow the account; everything else in settings.json stays on this PC. */
-export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId', 'notesPageId', 'laterSites', 'customWords'] as const;
+export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId', 'notesPageId', 'laterSites', 'customWords', 'onboarded'] as const;
 export type SyncedKey = (typeof SYNCED_KEYS)[number];
 
 // updatedAt travels with a change (the sender's clock; it only sorts lists, never orders changes).

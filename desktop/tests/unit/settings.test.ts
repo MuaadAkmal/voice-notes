@@ -213,6 +213,11 @@ it('custom words follow the account; the rest of these stay on the PC', () => {
   expect(pc).toEqual({ autoTranscribe: false, autoTitle: false, cloudWarnedPeriod: 'x' });
 });
 
+it('onboarding is not done yet, and follows the account', () => {
+  expect(loadSettings(files).onboarded).toBe(false);
+  expect(splitSettings({ onboarded: true }).profile).toEqual({ onboarded: true });
+});
+
 it('the language learner starts off and stays on this PC', () => {
   expect(loadSettings(files).languageLearner).toBe(false);
   expect(splitSettings({ languageLearner: true }).pc).toEqual({ languageLearner: true });

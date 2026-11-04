@@ -24,6 +24,8 @@ type Deps = {
   refreshSession(): Promise<void>;
   onView(view: SyncView): void;
   onChanged(changes: PullChanges): void;
+  /** A sync went through (the account's rows from other PCs are in). */
+  onSynced?(): void;
   /** Audio and images: uploaded after each successful sync (sync/files.ts). */
   files: { drain(shouldYield?: () => boolean): Promise<{ storageFull: boolean }>; waiting(): number };
   /** Realtime pings from the account's other PCs (sync/pings.ts): listened to only while this PC syncs. */
@@ -175,6 +177,7 @@ export class SyncController {
       if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
       this.failures = 0;
       this.lastSyncedAt = Date.now();
+      this.d.onSynced?.();
       if (this.canSync()) this.set({ mode: 'idle', lastSyncedAt: this.lastSyncedAt });
       else this.refresh();
       await this.drainFiles();

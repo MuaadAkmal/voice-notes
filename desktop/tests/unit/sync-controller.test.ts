@@ -26,6 +26,7 @@ let refreshed: number;
 let files: { drain: ReturnType<typeof vi.fn<(shouldYield?: () => boolean) => Promise<{ storageFull: boolean }>>>; waiting: () => number; left: number };
 let ctl: SyncController;
 let pings: { update: ReturnType<typeof vi.fn<(userId: string | null) => void>> };
+let synced: number;
 
 const last = () => views[views.length - 1];
 
@@ -38,6 +39,7 @@ beforeEach(() => {
   changes = [];
   script = [];
   refreshed = 0;
+  synced = 0;
   files = { drain: vi.fn(async () => ({ storageFull: false })), waiting: () => files.left, left: 0 };
   engine = {
     sync: vi.fn<() => Promise<typeof NONE>>(async () => (script.shift() ?? (async () => NONE))()),
@@ -53,6 +55,7 @@ beforeEach(() => {
     refreshSession: async () => void refreshed++,
     onView: (v) => views.push(v),
     onChanged: (c) => changes.push(c),
+    onSynced: () => void synced++,
     files,
   });
   ctl.start();
@@ -79,6 +82,15 @@ it('bind sets the account, enables once and syncs', async () => {
   ctl.bind('u1');
   await flush();
   expect(engine.enable).toHaveBeenCalledTimes(1);
+});
+
+it('says when a sync went through, and not when it failed', async () => {
+  script = [async () => Promise.reject(new Offline())];
+  ctl.bind('u1');
+  await flush();
+  expect(synced).toBe(0);
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(synced).toBe(1);
 });
 
 it('bind refuses a different account', async () => {

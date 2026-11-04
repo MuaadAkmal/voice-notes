@@ -53,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cloudWarnedPeriod: null,
   cloudOutPeriod: null,
   languageLearner: false,
+  onboarded: false,
 };
 
 function readRaw(file: string): Record<string, unknown> {

@@ -95,6 +95,7 @@ export type Settings = {
   cloudWarnedPeriod: string | null; // the Cloud month (its resetsAt) the 80% notice was shown for
   cloudOutPeriod: string | null; // the Cloud month the minutes-used notice was shown for
   languageLearner: boolean; // a "Pixie, I learned … in Tamil" word is written with pronunciation and meaning
+  onboarded: boolean; // the account has seen (or skipped) the first-run screen, or had data before it existed (synced)
 };
 
 /** Overlay window top-left, relative to that display's work area. */
