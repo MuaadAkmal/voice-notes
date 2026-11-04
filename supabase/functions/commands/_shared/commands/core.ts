@@ -24,7 +24,7 @@ Rules:
 export const HERE_RULE = `- If "here" is true and the user means what they are looking at ("this", "this video", "this page", "this file", "it", or the same in their language), use exactly "@this" as that item. It can sit among other items: "add this and milk" gives ["@this", "milk"].`;
 
 /** Added while the app's language learner is on (`learn`). */
-export const LEARN_RULE = `- If the user says they learned, or want to remember, a word or phrase in a language ("I learned a new word in Tamil, vanakkam"), the page is the one named for that language, and the item is exactly one string: "<the word in that language's own script> · <how it sounds, in English letters> · <its meaning in English>" ("வணக்கம் · vanakkam · hello"). If unsure of the script, write the word as spoken. Keep it on one line.`;
+export const LEARN_RULE = `- Exception to the rules above, for words being learned: if the user says they learned, or want to remember, a word or phrase in a language ("I learned a new word in Tamil, vanakkam"), the page is the one named for that language, and the item is exactly one string: "<the word in that language's own script> · <how it sounds, in English letters> · <its meaning in English>" ("வணக்கம் · vanakkam · hello"). If unsure of the script, write the word as spoken. Keep it on one line.`;
 
 export const REMIND_PROMPT = `You set reminders from voice commands.
 You get the current local time ("now", with its UTC offset), the time zone and the command. Reply with JSON only:

@@ -136,6 +136,7 @@ ${LEARN_RULE}`, JSON.stringify({ pages: ['1. Groceries', '2. Arabic phrases', '3
 ${HERE_RULE}
 ${LEARN_RULE}`);
   expect(LEARN_RULE).toContain(' · ');
+  expect(LEARN_RULE).toMatch(/^- Exception to the rules above/); // or the model may refuse to translate
 });
 
 it('without learn, the prompt is as before', async () => {
