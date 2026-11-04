@@ -366,16 +366,20 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   setInterval(() => {
     if (store.dictations.pruneOlderThan(DICTATION_TTL_MS) > 0) toDashboard(Ch.DictationsChanged);
   }, DICTATION_PRUNE_MS);
-  // Voice blocks no page links to any more (the line or the page was deleted), at boot and hourly.
+  // Voice blocks no page links to any more (the line or the page was deleted). Only right after a
+  // sync went through, so the account's pages are all here, and at most every 5 min; a note goes once
+  // it has been seen unlinked for 10 min (an undo in between brings it back).
+  let unlinkedSince = new Map<string, number>();
+  let lastSweep = 0;
   const sweepBlocks = () => {
-    const notes = store.list().map((n) => ({ id: n.id, pageId: n.pageId ?? null, createdAt: n.createdAt }));
-    const ids = orphanBlocks(notes, referencedNotes(store.pages.list().map((p) => p.body)), Date.now());
-    if (!ids.length) return;
-    log.info('[pages] removing', ids.length, 'unlinked voice block(s)');
-    store.deleteMany(ids).then(() => toDashboard(Ch.NotesChanged), (err) => log.warn('[pages] block sweep failed', err));
+    if (Date.now() - lastSweep < 5 * 60_000) return;
+    lastSweep = Date.now();
+    const r = orphanBlocks(store.list(), referencedNotes(store.pages.list().map((p) => p.body)), unlinkedSince, Date.now());
+    unlinkedSince = r.unlinkedSince;
+    if (!r.remove.length) return;
+    log.info('[pages] removing', r.remove.length, 'unlinked voice block(s)');
+    store.deleteMany(r.remove).then(() => toDashboard(Ch.NotesChanged), (err) => log.warn('[pages] block sweep failed', err));
   };
-  sweepBlocks();
-  setInterval(sweepBlocks, 60 * 60_000);
   const idleState = (): OverlayState =>
     settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
   // The last state sent to the pill: drops are only taken while it is visibly idle or showing "Saved".
@@ -1012,7 +1016,10 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onView: (view) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.SyncChanged, view);
     },
-    onSynced: () => decideFirstRun(),
+    onSynced: () => {
+      decideFirstRun();
+      sweepBlocks();
+    },
     onChanged: (changes) => {
       // Settings arrive through updateSettings, which already tells both windows.
       if (changes.notes) toDashboard(Ch.NotesChanged);

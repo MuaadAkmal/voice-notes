@@ -135,7 +135,10 @@ export const MIGRATIONS: string[] = [
    CREATE INDEX reminders_due ON reminders (status, due_at);`,
   // Voice blocks: a note a page owns (`[🎙 …](note://id)` in its body) is hidden from the note lists.
   // A column, not a kind: kind has a CHECK an older app's pull would fail on; it ignores this field.
-  `ALTER TABLE notes ADD COLUMN page_id TEXT;`,
+  // Pull everything once more: voice blocks this PC pulled before it knew page_id get their page.
+  // Safe to repeat: pulled rows are upserted and unsent local changes are laid back on top.
+  `ALTER TABLE notes ADD COLUMN page_id TEXT;
+   UPDATE sync_state SET value = '0' WHERE key = 'cursor';`,
 ];
 
 export function migrate(db: Database.Database): void {

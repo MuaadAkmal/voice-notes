@@ -25,11 +25,25 @@ export function referencedNotes(bodies: readonly string[]): Set<string> {
   return ids;
 }
 
-/** Notes a page owns that no page links to any more, once past the grace (an undo can bring a line back). */
+/**
+ * Notes a page owns that have been seen with no page linking them for the grace (10 min across
+ * sweeps, so an undo brings a line back in time). `unlinkedSince` carries when each was first seen
+ * unlinked from one sweep to the next. A recording whose audio this PC never had is left to the
+ * PCs that have it: its page may not have arrived here yet.
+ */
 export function orphanBlocks(
-  notes: readonly { id: string; pageId: string | null; createdAt: number }[],
+  notes: readonly { id: string; pageId?: string | null; createdAt: number; status: string }[],
   referenced: ReadonlySet<string>,
+  unlinkedSince: ReadonlyMap<string, number>,
   now: number,
-): string[] {
-  return notes.filter((n) => n.pageId && !referenced.has(n.id) && now - n.createdAt > GRACE_MS).map((n) => n.id);
+): { remove: string[]; unlinkedSince: Map<string, number> } {
+  const next = new Map<string, number>();
+  const remove: string[] = [];
+  for (const n of notes) {
+    if (!n.pageId || n.status === 'remote' || referenced.has(n.id)) continue;
+    const since = unlinkedSince.get(n.id) ?? now;
+    if (now - since > GRACE_MS) remove.push(n.id);
+    else next.set(n.id, since);
+  }
+  return { remove, unlinkedSince: next };
 }

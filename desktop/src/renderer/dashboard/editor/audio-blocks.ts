@@ -35,7 +35,7 @@ function decorations(state: EditorState, pageId: string | null, onError: (m: str
     const line = state.doc.line(n);
     const id = audioNoteId(line.text);
     // The cursor on the line shows its markdown, as for images and tables.
-    if (!id || (sel.from <= line.to && sel.to >= line.from)) continue;
+    if (!id || (!state.readOnly && sel.from <= line.to && sel.to >= line.from)) continue;
     ranges.push(Decoration.replace({ block: true, widget: new PlayerWidget(id) }).range(line.from, line.to));
   }
   const at = state.field(recorderAt, false);
@@ -93,10 +93,13 @@ const button = (label: string, cls: string) => {
   return b;
 };
 
-class RecorderWidget extends WidgetType {
-  private stop: (() => void) | null = null;
-  private discard = true;
+/**
+ * What a widget's DOM holds (a recording, a subscription), keyed by that DOM: CodeMirror may keep a
+ * widget's DOM under a newer widget object and calls destroy on that one, not the one that built it.
+ */
+const releases = new WeakMap<HTMLElement, () => void>();
 
+class RecorderWidget extends WidgetType {
   constructor(
     readonly pageId: string,
     readonly onError: (m: string) => void,
@@ -122,23 +125,35 @@ class RecorderWidget extends WidgetType {
     status.className = 'cm-vb-status';
     wrap.append(rec, time, status, close);
 
+    // stop: ends a recording in progress; keep: whether what it recorded is saved.
+    const take = { stop: null as (() => void) | null, keep: false };
+    releases.set(wrap, () => {
+      take.keep = false; // cancelled or the page closed: dropped, and the mic released
+      take.stop?.();
+    });
     close.addEventListener('mousedown', (e) => {
       e.preventDefault();
       view.dispatch({ effects: closeRecorder.of(null) });
     });
     rec.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      if (this.stop) {
-        this.discard = false;
-        this.stop();
+      if (take.stop) {
+        take.keep = true;
+        take.stop();
         return;
       }
-      void this.record(view, rec, time, status);
+      void this.record(view, take, rec, time, status);
     });
     return wrap;
   }
 
-  private async record(view: EditorView, rec: HTMLButtonElement, time: HTMLElement, status: HTMLElement) {
+  private async record(
+    view: EditorView,
+    take: { stop: (() => void) | null; keep: boolean },
+    rec: HTMLButtonElement,
+    time: HTMLElement,
+    status: HTMLElement,
+  ) {
     let stream: MediaStream;
     try {
       const { micDeviceId } = await api.getSettings();
@@ -151,24 +166,24 @@ class RecorderWidget extends WidgetType {
     const chunks: Blob[] = [];
     const started = Date.now();
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    const tick = setInterval(() => {
-      const ms = Date.now() - started;
-      time.textContent = formatDuration(ms);
-      if (ms >= MAX_MS) {
-        this.discard = false;
-        this.stop?.();
-      }
-    }, 250);
+    const tick = setInterval(() => (time.textContent = formatDuration(Date.now() - started)), 250);
+    // The cap on its own timer: an interval slows down while the window is hidden.
+    const cap = setTimeout(() => {
+      take.keep = true;
+      take.stop?.();
+    }, MAX_MS);
     recorder.onstop = async () => {
+      const durationMs = Math.min(MAX_MS, Date.now() - started); // before any await
       clearInterval(tick);
+      clearTimeout(cap);
       stream.getTracks().forEach((t) => t.stop());
-      this.stop = null;
-      if (this.discard) return;
+      take.stop = null;
+      if (!take.keep) return;
       rec.disabled = true;
       status.textContent = 'Saving…';
       try {
         const bytes = new Uint8Array(await new Blob(chunks, { type: MIME }).arrayBuffer());
-        const id = await api.saveAudioBlock({ pageId: this.pageId, bytes, durationMs: Date.now() - started, mimeType: MIME });
+        const id = await api.saveAudioBlock({ pageId: this.pageId, bytes, durationMs, mimeType: MIME });
         insertBlock(view, id);
       } catch {
         status.textContent = "Couldn't save it";
@@ -176,16 +191,14 @@ class RecorderWidget extends WidgetType {
         rec.disabled = false;
       }
     };
-    this.stop = () => recorder.state !== 'inactive' && recorder.stop();
+    take.stop = () => recorder.state !== 'inactive' && recorder.stop();
     recorder.start(1000);
     rec.textContent = '■ Stop';
     rec.classList.add('cm-vb-recording');
   }
 
-  /** Cancelled or the page closed: a recording in progress is dropped and the mic released. */
-  destroy() {
-    this.discard = true;
-    this.stop?.();
+  destroy(dom: HTMLElement) {
+    releases.get(dom)?.();
   }
 
   ignoreEvent() {
@@ -194,8 +207,6 @@ class RecorderWidget extends WidgetType {
 }
 
 class PlayerWidget extends WidgetType {
-  private cleanup: (() => void) | null = null;
-
   constructor(readonly noteId: string) {
     super();
   }
@@ -230,28 +241,33 @@ class PlayerWidget extends WidgetType {
       else audio.pause();
     });
 
-    const show = (n: Note | null) => {
+    // "Transcribing…" only while something will transcribe it; otherwise the line stays empty.
+    const show = (n: Note | null, transcribes: boolean) => {
       if (!n) {
         time.textContent = '';
         text.textContent = 'Voice note not found';
         return;
       }
       time.textContent = formatDuration(n.durationMs);
-      text.textContent = n.transcript === null ? 'Transcribing…' : n.transcript || 'No speech';
+      text.textContent = n.transcript === null ? (transcribes ? 'Transcribing…' : '') : n.transcript || 'No speech';
       text.classList.toggle('cm-vb-dim', !n.transcript);
     };
-    const load = () => void api.getNote(this.noteId).then(show, () => show(null));
+    const load = () =>
+      void Promise.all([api.getNote(this.noteId), api.getSettings()]).then(
+        ([n, s]) => show(n, s.autoTranscribe && s.transcription.provider !== null),
+        () => show(null, false),
+      );
     load();
     const off = api.onNotesChanged(load);
-    this.cleanup = () => {
+    releases.set(wrap, () => {
       off();
       audio.pause();
-    };
+    });
     return wrap;
   }
 
-  destroy() {
-    this.cleanup?.();
+  destroy(dom: HTMLElement) {
+    releases.get(dom)?.();
   }
 
   ignoreEvent() {
