@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log/main';
 import started from 'electron-squirrel-startup';
-import { type AccountInfo, type AudioDevice, Ch, type Note, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
+import { type AccountInfo, type AudioDevice, Ch, type Folder, type Note, type NoteContext, type OverlayState, type Settings } from '../shared/ipc';
 import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
@@ -72,6 +72,7 @@ import { sessionUserId } from './profiles/session-user';
 import { startSignIn } from './signin-mode';
 import { applyCloudDefault } from './transcription/cloud-default';
 import { type QuotaNotice, QuotaWatch } from './transcription/quota-watch';
+import { AutoTranscribe } from './transcription/auto';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -471,7 +472,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       onSaved: (note) => {
         log.info('[recorder] saved', note.id, note.durationMs, 'ms');
         toDashboard(Ch.NotesChanged);
-        void fileByVoice(note);
+        auto.saved(note);
       },
     },
   );
@@ -1061,6 +1062,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     words: () => settings.customWords,
     onUsage: (u) => showNotice(quota.observe(u)),
     onQuotaExceeded: (resetsAt) => showNotice(quota.exceeded(resetsAt)),
+    onTranscribed: (id) => void auto.transcribed(id),
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
@@ -1075,16 +1077,30 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       const folder = matchFolderCommand(head, settings.noteWakeWords, store.folders.list());
       if (!folder) return;
       store.moveNotes([note.id], folder.id);
-      toDashboard(Ch.NotesChanged);
-      log.info('[voice-to-folders]', note.id, '→', folder.name);
-      if (overlayState.kind === 'idle' || (overlayState.kind === 'saved' && overlayState.noteId === note.id)) {
-        setOverlayState({ kind: 'done', message: `Saved → ${folder.name}` });
-        setTimeout(() => overlayState.kind === 'done' && setOverlayState(idleState()), 2500);
-      }
+      filed(note, folder);
     } catch (e) {
       log.warn('[voice-to-folders] skipped', note.id, e instanceof Error ? e.message : e);
     }
   };
+  const filed = (note: Note, folder: Folder) => {
+    toDashboard(Ch.NotesChanged);
+    log.info('[voice-to-folders]', note.id, '→', folder.name);
+    if (overlayState.kind === 'idle' || (overlayState.kind === 'saved' && overlayState.noteId === note.id)) {
+      setOverlayState({ kind: 'done', message: `Saved → ${folder.name}` });
+      setTimeout(() => overlayState.kind === 'done' && setOverlayState(idleState()), 2500);
+    }
+  };
+  // New notes transcribe and get a title by themselves (Transcription page switches).
+  const auto = new AutoTranscribe({
+    settings: () => settings,
+    store: { get: (id) => store.get(id), rename: (id, title) => store.rename(id, title), moveNotes: (ids, f) => store.moveNotes(ids, f), folders: store.folders },
+    enqueue: (ids, language) => transcription.enqueue(ids, language),
+    paused: () => quota.paused(),
+    title: (text) => commandsClient.title(text),
+    peekFolder: fileByVoice,
+    onFiled: filed,
+    notesChanged: () => toDashboard(Ch.NotesChanged),
+  });
 
   registerDashboardIpc({
     getDashboard: () => dashboard,
