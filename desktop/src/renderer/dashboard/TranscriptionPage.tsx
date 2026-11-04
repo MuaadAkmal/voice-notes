@@ -18,7 +18,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { CloudCard } from './CloudCard';
+import { CustomWordsCard } from './CustomWordsCard';
 import { LocalWhisperCard } from './LocalWhisperCard';
+import { NewNotesCard } from './NewNotesCard';
 import { useToast } from './Toast';
 
 const api = window.dashboardApi;
@@ -271,6 +273,9 @@ export function TranscriptionPage() {
           </Select>
         </div>
       </div>
+
+      <NewNotesCard settings={settings} onChange={(patch) => api.setSettings(patch).then(setSettings)} />
+      <CustomWordsCard words={settings.customWords} onChange={(customWords) => api.setSettings({ customWords }).then(setSettings)} />
     </div>
   );
 }
