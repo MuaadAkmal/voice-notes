@@ -29,7 +29,8 @@ export function Onboarding({ onDone }: { onDone: (openTranscription: boolean) =>
 
   const at = STEPS.indexOf(step);
   const finish = () => {
-    void api.finishOnboarding().then(() => onDone(provider !== 'cloud'));
+    // Closes even if saving failed; main keeps it pending and shows it again next time.
+    void api.finishOnboarding().catch(() => undefined).then(() => onDone(provider !== 'cloud'));
   };
   const next = async () => {
     if (step === 'provider' && provider === 'cloud' && settings.transcription.provider !== 'cloud')
@@ -67,7 +68,7 @@ export function Onboarding({ onDone }: { onDone: (openTranscription: boolean) =>
           )}
           {step === 'mic' && <MicStep settings={settings} onChange={(s) => setSettings(s)} />}
           {step === 'provider' && <ProviderStep provider={provider} onChange={setProvider} />}
-          {step === 'hotkey' && <HotkeyStep label={settings.hotkeyLabel} />}
+          {step === 'hotkey' && <HotkeyStep label={settings.hotkeyLabel} transcribes={settings.autoTranscribe && settings.transcription.provider !== null} />}
           {step === 'pixie' && <PixieStep label={settings.dictationHotkeyLabel} wake={wake} />}
           {step === 'say' && <SayStep settings={settings} wake={wake} />}
         </div>
@@ -183,7 +184,7 @@ function ProviderStep({ provider, onChange }: { provider: Provider; onChange: (p
 }
 
 /** Watches for a note recorded after the step opened. */
-function HotkeyStep({ label }: { label: string }) {
+function HotkeyStep({ label, transcribes }: { label: string; transcribes: boolean }) {
   const since = useRef(Date.now());
   const [note, setNote] = useState<Note | null>(null);
   useEffect(() => {
@@ -194,9 +195,9 @@ function HotkeyStep({ label }: { label: string }) {
     <>
       <h1 className="text-2xl font-semibold tracking-tight">Record your first note</h1>
       <p className="mt-2 text-muted-foreground">
-        Press <Kbd>{label}</Kbd>, say something, then press it again. Or hold it while you talk.
+        Hold <Kbd>{label}</Kbd> while you talk and let go to save. Or double-tap it to record hands-free, and press it again to stop.
       </p>
-      <Done shown={!!note} text="Saved ✓" detail={note?.transcript || (note ? 'Transcribing…' : null)} />
+      <Done shown={!!note} text="Saved ✓" detail={!note ? null : note.transcript === '' ? 'No speech heard' : (note.transcript ?? (transcribes ? 'Transcribing…' : null))} />
     </>
   );
 }
@@ -232,7 +233,7 @@ function SayStep({ settings, wake }: { settings: Settings; wake: string }) {
     {
       title: 'Keys',
       lines: [
-        [settings.hotkeyLabel, 'Record a voice note (press, or hold while you talk)'],
+        [settings.hotkeyLabel, 'Record a voice note: hold while you talk, or double-tap for hands-free'],
         [settings.dictationHotkeyLabel, 'Dictate into any app'],
         [REWIND_LABEL, 'Save the last seconds of what was playing (turn on Film mode first)'],
       ],

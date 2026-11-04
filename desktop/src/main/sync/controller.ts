@@ -177,7 +177,11 @@ export class SyncController {
       if (changes.notes || changes.pages || changes.folders || changes.prefs) this.d.onChanged(changes);
       this.failures = 0;
       this.lastSyncedAt = Date.now();
-      this.d.onSynced?.();
+      try {
+        this.d.onSynced?.();
+      } catch (err) {
+        console.error('[sync] after-sync step failed', err); // never a sync error
+      }
       if (this.canSync()) this.set({ mode: 'idle', lastSyncedAt: this.lastSyncedAt });
       else this.refresh();
       await this.drainFiles();

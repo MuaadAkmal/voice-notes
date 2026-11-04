@@ -4,6 +4,11 @@ import type { Page } from '../../src/shared/channels';
 
 it('does nothing once the account is onboarded', () => {
   expect(firstRun({ onboarded: true, notes: 0, userPages: 0 })).toEqual({ onboard: false, starters: false, patch: null });
+  expect(firstRun({ onboarded: true, pending: true, notes: 0, userPages: 3 })).toEqual({ onboard: false, starters: false, patch: null });
+});
+
+it('onboarding left unfinished on this PC (a restart) shows again, without new starter pages', () => {
+  expect(firstRun({ onboarded: false, pending: true, notes: 1, userPages: 3 })).toEqual({ onboard: true, starters: false, patch: null });
 });
 
 it('an account with notes is not new: marked onboarded without showing it', () => {

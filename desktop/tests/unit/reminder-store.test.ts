@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => store.close());
 
 it('is migration #11', () => {
-  expect(MIGRATIONS).toHaveLength(11);
+  expect(MIGRATIONS[10]).toContain('CREATE TABLE reminders');
 });
 
 it('lists pending soonest first, then recent others latest first', () => {

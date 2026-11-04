@@ -93,6 +93,23 @@ it('says when a sync went through, and not when it failed', async () => {
   expect(synced).toBe(1);
 });
 
+it('a failure in what runs after a sync is not a sync error', async () => {
+  ctl.stop();
+  const errors: SyncView[] = [];
+  ctl = new SyncController({
+    pings, engine, state, settings: () => DEFAULT_SETTINGS, currentUser: () => user, refreshSession: async () => undefined,
+    onView: (v) => errors.push(v), onChanged: () => undefined, files,
+    onSynced: () => {
+      throw new Error('starter pages failed');
+    },
+  });
+  ctl.start();
+  ctl.bind('u1');
+  await flush();
+  expect(errors.at(-1)!.status.mode).toBe('idle');
+  expect(files.drain).toHaveBeenCalled();
+});
+
 it('bind refuses a different account', async () => {
   state.account = 'u1';
   state.rec = true;

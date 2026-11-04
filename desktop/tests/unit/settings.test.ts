@@ -215,6 +215,8 @@ it('custom words follow the account; the rest of these stay on the PC', () => {
 
 it('onboarding is not done yet, and follows the account', () => {
   expect(loadSettings(files).onboarded).toBe(false);
+  expect(loadSettings(files).onboardingPending).toBe(false);
+  expect(splitSettings({ onboardingPending: true }).pc).toEqual({ onboardingPending: true });
   expect(splitSettings({ onboarded: true }).profile).toEqual({ onboarded: true });
 });
 

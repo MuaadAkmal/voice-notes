@@ -972,7 +972,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onRemoteChange: () => syncController.onRemoteChange(),
   });
   // A new account's first launch, decided once per boot after the first sync brought the account's rows in.
-  let onboarding = false;
+  // Left unfinished before a restart: shown again at once, no need to wait for a sync.
+  let onboarding = settings.onboardingPending && !settings.onboarded;
   let firstRunDecided = false;
   const decideFirstRun = () => {
     if (firstRunDecided) return;
@@ -980,6 +981,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     const builtIn = new Set([settings.laterPageId, settings.notesPageId]);
     const r = firstRun({
       onboarded: settings.onboarded,
+      pending: settings.onboardingPending,
       notes: store.list().length,
       userPages: store.pages.list().filter((p) => !builtIn.has(p.id)).length,
     });
@@ -990,6 +992,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     }
     if (r.onboard) {
       onboarding = true;
+      if (!settings.onboardingPending) updateSettings({ onboardingPending: true });
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.OnboardingChanged, true);
     }
   };
@@ -1247,8 +1250,9 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         return { ok: true };
       },
       finish: () => {
+        // Saved first: if that fails, the screen stays rather than being lost for good.
+        updateSettings({ onboarded: true, onboardingPending: false });
         onboarding = false;
-        if (!settings.onboarded) updateSettings({ onboarded: true });
       },
     },
     pomodoro: {

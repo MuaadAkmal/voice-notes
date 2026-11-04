@@ -6,9 +6,11 @@ import type { Page } from '../shared/channels';
 
 export type FirstRun = { onboard: boolean; starters: boolean; patch: { onboarded: true } | null };
 
-/** userPages: pages other than the built-in Review later and Quick notes. */
-export function firstRun(i: { onboarded: boolean; notes: number; userPages: number }): FirstRun {
+/** userPages: pages other than the built-in Review later and Quick notes. pending: onboarding was left unfinished on this PC. */
+export function firstRun(i: { onboarded: boolean; pending?: boolean; notes: number; userPages: number }): FirstRun {
   if (i.onboarded) return { onboard: false, starters: false, patch: null };
+  // Quit or restarted mid-way: the starter pages it made would otherwise read as an account with data.
+  if (i.pending) return { onboard: true, starters: false, patch: null };
   if (i.notes > 0 || i.userPages > 0) return { onboard: false, starters: false, patch: { onboarded: true } };
   return { onboard: true, starters: true, patch: null };
 }

@@ -54,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cloudOutPeriod: null,
   languageLearner: false,
   onboarded: false,
+  onboardingPending: false,
 };
 
 function readRaw(file: string): Record<string, unknown> {
