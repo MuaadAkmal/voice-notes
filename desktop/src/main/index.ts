@@ -53,7 +53,7 @@ import { MonitorFollower } from './overlay-position';
 import { loginItem, updateExePath } from './updater/install';
 import { type UpdaterEvents, UpdateService, type UpdaterPort } from './updater/service';
 import { NoteStore } from './store/note-store';
-import { CloudAsrClient } from './transcription/cloud-client';
+import { CloudAsrClient, QuotaExceeded as CloudQuotaExceeded } from './transcription/cloud-client';
 import { resolveEndpoint } from './transcription/endpoint';
 import { matchFolderCommand, PEEK_SECONDS } from '../shared/folder-command';
 import { transcribe } from './transcription/openai-client';
@@ -71,6 +71,8 @@ import { relaunch, relaunches } from './profiles/relaunch';
 import { sessionUserId } from './profiles/session-user';
 import { startSignIn } from './signin-mode';
 import { applyCloudDefault } from './transcription/cloud-default';
+import { type QuotaNotice, QuotaWatch } from './transcription/quota-watch';
+import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
 import { ReminderScheduler } from './reminders/scheduler';
@@ -359,6 +361,24 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     overlayState = s;
     send(Ch.OverlayState, s);
   };
+  // Cloud minutes: a heads-up at 80% and a clear word at the limit, once a month each, with Upgrade.
+  const quota = new QuotaWatch({ getSettings: () => settings, save: (p) => updateSettings(p), now: Date.now });
+  const NOTICE_MS = 6000;
+  // A notice waits (up to 10 s) for the pill to finish what it is showing, e.g. a dictation pasting.
+  const showNotice = (notice: QuotaNotice | null, waitedMs = 0) => {
+    if (!notice) return;
+    if (!(overlayState.kind === 'idle' || overlayState.kind === 'saved')) {
+      if (waitedMs < 10_000) setTimeout(() => showNotice(notice, waitedMs + 500), 500);
+      return;
+    }
+    const message = notice === 'low' ? 'Cloud minutes 80% used' : 'Cloud minutes used';
+    setOverlayState({ kind: 'notice', message, action: 'upgrade' });
+    setTimeout(() => overlayState.kind === 'notice' && setOverlayState(idleState()), NOTICE_MS);
+  };
+  const openPlanPage = () => {
+    if (testing) openedExternal.push(PLAN_PAGE_URL);
+    else void shell.openExternal(PLAN_PAGE_URL);
+  };
   const overlayMouse = new OverlayMouse((ignore) => {
     if (!overlay.isDestroyed()) overlay.setIgnoreMouseEvents(ignore, { forward: true });
   });
@@ -492,7 +512,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
         if (ep.cloud) {
           const t0 = Date.now();
-          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), settings.customWords);
+          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), settings.customWords).catch((e: unknown) => {
+            if (e instanceof CloudQuotaExceeded) showNotice(quota.exceeded(e.resetsAt)); // after the dictation's own error
+            throw e;
+          });
+          if (r.usage) showNotice(quota.observe(r.usage));
           log.info('[dictation] ms', JSON.stringify({ transcribe: Date.now() - t0, server: r.ms, bytes: audio.length }));
           return cleanTranscript(r.text);
         }
@@ -651,6 +675,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         throw err;
       }
     },
+    onUpgrade: openPlanPage,
     onCaptureLater: async () => {
       try {
         const result = await saveCapture({
@@ -810,6 +835,9 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     // Boot (session restored) and every sign-in: Cloud becomes the provider if none is set up.
     const patch = bootTestSession ? null : applyCloudDefault(settings, info.state === 'signed-in');
     if (patch) updateSettings(patch, { record: false });
+    // Learn whether this month's minutes are already used, so auto-transcribe doesn't start on a refusal.
+    if (info.state === 'signed-in' && settings.transcription.provider === 'cloud')
+      cloudAsr.usage().then((u) => quota.observe(u, { quiet: true }), () => undefined);
   });
   // e2e: launched signed in as the profile's account, with the provider left unset as the specs expect; a spec's
   // own setTestSession then applies the Cloud default like a real sign-in.
@@ -1031,6 +1059,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       }),
     notesChanged: () => toDashboard(Ch.NotesChanged),
     words: () => settings.customWords,
+    onUsage: (u) => showNotice(quota.observe(u)),
+    onQuotaExceeded: (resetsAt) => showNotice(quota.exceeded(resetsAt)),
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);

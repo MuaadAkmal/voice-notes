@@ -4,7 +4,7 @@ import { glossaryPrompt } from '../../shared/custom-words';
 import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
 import { silentWav, trimWav } from '../../shared/wav';
 import type { NoteStore } from '../store/note-store';
-import type { CloudAsrClient } from './cloud-client';
+import { type CloudAsrClient, type CloudUsage, QuotaExceeded } from './cloud-client';
 import type { Endpoint } from './endpoint';
 import { transcribe as realTranscribe } from './openai-client';
 import { TranscriptionQueue } from './queue';
@@ -28,6 +28,12 @@ export type ServiceDeps = {
   now?: () => number;
   notesChanged: () => void;
   onStatus: (s: StatusMap) => void;
+  /** The Cloud month so far, after each cloud transcript that says. */
+  onUsage?: (u: CloudUsage) => void;
+  /** The cloud refused a clip for minutes (resetsAt may be ''). */
+  onQuotaExceeded?: (resetsAt: string) => void;
+  /** A note's transcript was saved. */
+  onTranscribed?: (id: string) => void;
 };
 
 /** Only set for the cloud, so requests to a server keep their exact shape. */
@@ -55,7 +61,17 @@ export class TranscriptionService {
       const { cloud, keyterms, ...plain } = req;
       if (!cloud) return openai(plain);
       if (!d.cloud) return Promise.reject(new Error('Set up transcription first'));
-      return keyterms ? d.cloud.transcribe(req.audio, req.language, req.signal, false, keyterms) : d.cloud.transcribe(req.audio, req.language);
+      const call = keyterms ? d.cloud.transcribe(req.audio, req.language, req.signal, false, keyterms) : d.cloud.transcribe(req.audio, req.language);
+      return call.then(
+        (r) => {
+          if ('usage' in r && r.usage) d.onUsage?.(r.usage);
+          return r;
+        },
+        (e: unknown) => {
+          if (e instanceof QuotaExceeded) d.onQuotaExceeded?.(e.resetsAt);
+          throw e;
+        },
+      );
     };
     this.queue = new TranscriptionQueue(
       (id, language) => this.run(id, language),
@@ -158,6 +174,7 @@ export class TranscriptionService {
       throw e;
     }
     this.d.notesChanged();
+    this.d.onTranscribed?.(id);
   }
 
   /** The custom words in the shape the endpoint takes: key terms for the cloud, a prompt for Whisper. */

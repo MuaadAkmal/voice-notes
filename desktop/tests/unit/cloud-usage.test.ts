@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planName, usageText } from '../../src/shared/cloud-usage';
+import { planName, quotaState, usageText } from '../../src/shared/cloud-usage';
 
 describe('usageText', () => {
   const resetsAt = new Date(2026, 10, 1, 12).toISOString();
@@ -18,5 +18,20 @@ describe('usageText', () => {
 describe('planName', () => {
   it('names the plans, and passes an unknown one through', () => {
     expect(['free', 'standard', 'pro', 'team'].map(planName)).toEqual(['Free', 'Standard', 'Pro', 'team']);
+  });
+});
+
+describe('quotaState', () => {
+  it('is low from 80% and out at the limit', () => {
+    expect(quotaState({ used: 1439, limit: 1800 })).toBe('ok');
+    expect(quotaState({ used: 1440, limit: 1800 })).toBe('low');
+    expect(quotaState({ used: 1800, limit: 1800 })).toBe('out');
+    expect(quotaState({ used: 1900, limit: 1800 })).toBe('out');
+  });
+
+  it('is ok when the numbers make no sense', () => {
+    expect(quotaState({ used: 5, limit: 0 })).toBe('ok');
+    expect(quotaState({ used: Number.NaN, limit: 1800 })).toBe('ok');
+    expect(quotaState({ used: 5, limit: Number.POSITIVE_INFINITY })).toBe('ok');
   });
 });

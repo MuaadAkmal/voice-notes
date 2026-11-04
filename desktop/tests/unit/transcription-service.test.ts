@@ -10,6 +10,7 @@ import {
   TranscriptionService,
 } from '../../src/main/transcription/service';
 import { resolveEndpoint } from '../../src/main/transcription/endpoint';
+import { QuotaExceeded } from '../../src/main/transcription/cloud-client';
 import { silentWav } from '../../src/shared/wav';
 
 const ID = '123e4567-e89b-42d3-a456-426614174000';
@@ -352,4 +353,34 @@ it('sends notes, peeks and tests through the cloud client when the provider is c
   expect(await service.peek(ID, 4)).toBe(' nube ');
   expect(await service.testCurrent()).toMatchObject({ ok: true, language: 'es' });
   expect(requests).toEqual([]);
+});
+
+it('reports the month’s usage from each cloud transcript', async () => {
+  const usage = { used: 10, limit: 1800, resetsAt: 'r' };
+  const cloud = { transcribe: vi.fn(async () => ({ text: 'x', language: 'en', usage })) };
+  const onUsage = vi.fn();
+  const { service, setSettings } = setup({ cloud, onUsage });
+  setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  expect(onUsage).toHaveBeenCalledWith(usage);
+});
+
+it('reports a cloud refusal for minutes, and still fails the job', async () => {
+  const cloud = { transcribe: vi.fn(async () => { throw new QuotaExceeded('2026-12-01T00:00:00.000Z'); }) };
+  const onQuotaExceeded = vi.fn();
+  const { service, setSettings } = setup({ cloud, onQuotaExceeded });
+  setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  expect(onQuotaExceeded).toHaveBeenCalledWith('2026-12-01T00:00:00.000Z');
+  expect(service.status()[ID]).toMatchObject({ state: 'failed' });
+});
+
+it('tells who wants to know once a transcript is saved', async () => {
+  const onTranscribed = vi.fn();
+  const { service } = setup({ onTranscribed });
+  service.enqueue([ID], 'auto');
+  await service.idle();
+  expect(onTranscribed).toHaveBeenCalledWith(ID);
 });

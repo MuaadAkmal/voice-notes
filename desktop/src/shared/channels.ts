@@ -111,7 +111,8 @@ export type OverlayState =
   // micOnly: 'both' was requested but system audio failed; titled: confirmation after a title was added
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean }
-  | { kind: 'done'; message: string }; // a short success, e.g. a dictation added to the calendar
+  | { kind: 'done'; message: string } // a short success, e.g. a dictation added to the calendar
+  | { kind: 'notice'; message: string; action: 'upgrade' }; // Cloud minutes running low or used up, with an Upgrade button
 
 /** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
 export type DropPayload = { text: string; uriList: string; html: string };
@@ -178,6 +179,7 @@ export const Ch = {
   OverlayPointer: 'overlay:pointer', // { over: boolean }
   OverlayClick: 'overlay:click',
   OverlayRetry: 'overlay:retry',
+  OverlayUpgrade: 'overlay:upgrade', // the notice's Upgrade button: opens the plan page
   OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
   OverlayDragEnd: 'overlay:drag-end',
   OverlayTitleStart: 'overlay:title-start',

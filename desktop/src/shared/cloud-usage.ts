@@ -18,3 +18,10 @@ export function usageText(u: { used: number; limit: number; resetsAt: string }):
       : `${Math.floor(u.used / 60)} / ${Math.floor(u.limit / 60)} min`;
   return `${amount} this month · resets ${resets}`;
 }
+
+/** Where the month's Cloud minutes stand: low from 80% (time to warn), out at the limit. */
+export function quotaState(u: { used: number; limit: number }): 'ok' | 'low' | 'out' {
+  if (!Number.isFinite(u.used) || !Number.isFinite(u.limit) || u.limit <= 0) return 'ok';
+  if (u.used >= u.limit) return 'out';
+  return u.used >= u.limit * 0.8 ? 'low' : 'ok';
+}

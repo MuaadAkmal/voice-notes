@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CloudUsageResult, Settings } from '../../shared/channels';
-import { planName, usageText } from '../../shared/cloud-usage';
+import { planName, quotaState, usageText } from '../../shared/cloud-usage';
 import { cleanIpcError } from '../../shared/format';
 import { Button } from '@/components/ui/button';
 import { PlanButton } from './PlanCard';
@@ -9,6 +9,9 @@ import { useToast } from './Toast';
 
 const api = window.dashboardApi;
 
+
+/** Amber from 80% of the month's minutes, red once they're used. */
+const BAR = { ok: 'bg-primary', low: 'bg-amber-500', out: 'bg-destructive' } as const;
 export function CloudCard({ settings, onSaved }: { settings: Settings; onSaved: (s: Settings) => void }) {
   const toast = useToast();
   const account = useAccount();
@@ -92,7 +95,7 @@ export function CloudCard({ settings, onSaved }: { settings: Settings; onSaved: 
                   className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
                 >
                   <div
-                    className="h-full rounded-full bg-primary"
+                    className={`h-full rounded-full ${BAR[quotaState(usage)]}`}
                     style={{ width: `${usage.limit > 0 ? Math.min(100, (usage.used / usage.limit) * 100) : 0}%` }}
                   />
                 </div>

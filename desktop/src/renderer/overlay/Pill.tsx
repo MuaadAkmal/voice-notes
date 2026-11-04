@@ -336,5 +336,14 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
       );
     case 'done':
       return <div data-morph className={`${shell} h-10 bg-emerald-600/95 px-5 text-sm`}>{state.message}</div>;
+    case 'notice':
+      return (
+        <div {...hover} data-morph className={`${shell} h-10 gap-3 bg-amber-600/95 pl-5 pr-2 text-sm`}>
+          <span>{state.message}</span>
+          <button onClick={() => api.upgrade()} className="cursor-pointer rounded-full bg-white/20 px-3 py-1 font-medium hover:bg-white/30">
+            Upgrade
+          </button>
+        </div>
+      );
   }
 }

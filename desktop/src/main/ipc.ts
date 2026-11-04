@@ -92,6 +92,7 @@ type OverlayDeps = {
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
   onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
+  onUpgrade: () => void; // the Cloud notice's Upgrade button
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;
 };
@@ -193,6 +194,7 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(Ch.OverlayRetry, (e) => {
     if (isFrom(overlay, e.sender)) controller.retry().catch((err) => log.error(err));
   });
+  ipcMain.on(Ch.OverlayUpgrade, (e) => isFrom(overlay, e.sender) && deps.onUpgrade());
 }
 
 type DashboardDeps = {
