@@ -16,8 +16,11 @@ export class WavBridge {
 
   constructor(private readonly timeoutMs = 60_000) {}
 
-  /** `send` delivers the request to the dashboard and returns false when there is none. */
-  request(send: (requestId: number) => boolean): Promise<Uint8Array> {
+  /**
+   * Each `send` delivers the request to a renderer that can decode audio and returns false when it
+   * isn't there; the first that takes it answers (the dashboard first, else the always-open pill).
+   */
+  request(...senders: ((requestId: number) => boolean)[]): Promise<Uint8Array> {
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -25,7 +28,7 @@ export class WavBridge {
         reject(new Error(NO_DASHBOARD));
       }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      if (!send(id)) this.settle(id, { error: NO_DASHBOARD });
+      if (!senders.some((send) => send(id))) this.settle(id, { error: NO_DASHBOARD });
     });
   }
 

@@ -180,6 +180,7 @@ export const Ch = {
   OverlayClick: 'overlay:click',
   OverlayRetry: 'overlay:retry',
   OverlayUpgrade: 'overlay:upgrade', // the notice's Upgrade button: opens the plan page
+  OverlayWav: 'overlay:wav', // the pill's answer to transcription:need-wav when there is no dashboard
   OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
   OverlayDragEnd: 'overlay:drag-end',
   OverlayTitleStart: 'overlay:title-start',

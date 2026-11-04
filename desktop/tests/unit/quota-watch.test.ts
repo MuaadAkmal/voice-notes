@@ -21,6 +21,16 @@ it('says nothing while under 80%', () => {
   expect(watch.paused()).toBe(false);
 });
 
+it('a notice is only remembered as shown once it is', () => {
+  const { watch, settings } = setup();
+  expect(watch.observe({ used: 1500, limit: 1800, resetsAt: NOV }, { mark: false })).toBe('low');
+  expect(settings().cloudWarnedPeriod).toBeNull();
+  expect(watch.observe({ used: 1500, limit: 1800, resetsAt: NOV }, { mark: false })).toBe('low');
+  watch.shown('low', NOV);
+  expect(settings().cloudWarnedPeriod).toBe(NOV);
+  expect(watch.observe({ used: 1500, limit: 1800, resetsAt: NOV }, { mark: false })).toBeNull();
+});
+
 it('warns once per month at 80%', () => {
   const { watch, settings } = setup();
   expect(watch.observe({ used: 1500, limit: 1800, resetsAt: NOV })).toBe('low');

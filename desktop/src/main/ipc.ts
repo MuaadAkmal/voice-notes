@@ -93,6 +93,7 @@ type OverlayDeps = {
   onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
   onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
   onUpgrade: () => void; // the Cloud notice's Upgrade button
+  onWav: (reply: { requestId: number; bytes: Uint8Array } | { requestId: number; error: string }) => void; // a clip the pill turned into WAV for transcription
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;
 };
@@ -195,6 +196,7 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
     if (isFrom(overlay, e.sender)) controller.retry().catch((err) => log.error(err));
   });
   ipcMain.on(Ch.OverlayUpgrade, (e) => isFrom(overlay, e.sender) && deps.onUpgrade());
+  ipcMain.on(Ch.OverlayWav, from(overlay, WavReplySchema, (reply) => deps.onWav(reply)));
 }
 
 type DashboardDeps = {

@@ -18,7 +18,7 @@ export const isDefaultTitle = (n: Pick<Note, 'title' | 'createdAt'>): boolean =>
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean);
 
 export type AutoDeps = {
-  settings(): Pick<Settings, 'autoTranscribe' | 'autoTitle' | 'transcription' | 'voiceToFolders' | 'noteWakeWords'>;
+  settings(): Pick<Settings, 'autoTranscribe' | 'autoTitle' | 'transcription' | 'transcribeLanguage' | 'voiceToFolders' | 'noteWakeWords'>;
   store: {
     get(id: string): Note | null | undefined;
     rename(id: string, title: string): Note;
@@ -26,7 +26,7 @@ export type AutoDeps = {
     folders: { list(): Folder[] };
   };
   enqueue(ids: string[], language: TranscribeLanguage): void;
-  /** Cloud minutes are used up for the month. */
+  /** Cloud minutes are used up for the month (only holds back the cloud provider). */
   paused(): boolean;
   title(text: string): Promise<{ title: string | null }>;
   /** Voice to folders by its own peek at the first seconds (auto off). */
@@ -44,12 +44,12 @@ export class AutoTranscribe {
   /** A note was just recorded on this PC. */
   saved(note: Note): void {
     const s = this.d.settings();
-    if (!s.autoTranscribe || !s.transcription.provider || this.d.paused()) {
+    if (!s.autoTranscribe || !s.transcription.provider || (s.transcription.provider === 'cloud' && this.d.paused())) {
       void this.d.peekFolder(note);
       return;
     }
     this.fresh.add(note.id);
-    this.d.enqueue([note.id], 'auto');
+    this.d.enqueue([note.id], s.transcribeLanguage);
   }
 
   /** A note's transcript was saved (by auto or by hand). Best effort: never throws. */

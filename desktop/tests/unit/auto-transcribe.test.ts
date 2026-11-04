@@ -68,6 +68,20 @@ it('queues a new mic note and a new rewind', () => {
   ]);
 });
 
+it('queues in the default language', () => {
+  const { auto, d } = setup({ settings: { transcribeLanguage: 'ur' } });
+  auto.saved(note());
+  expect(d.enqueue).toHaveBeenCalledWith(['n1'], 'ur');
+});
+
+it('out of Cloud minutes only holds back Cloud, not Built-in or My server', () => {
+  for (const provider of ['local', 'server'] as const) {
+    const s = setup({ paused: true, settings: { transcription: { ...DEFAULT_SETTINGS.transcription, provider } } });
+    s.auto.saved(note());
+    expect(s.d.enqueue).toHaveBeenCalled();
+  }
+});
+
 it('queues nothing when switched off, not set up, or out of Cloud minutes', () => {
   for (const s of [setup({ settings: { autoTranscribe: false } }), setup({ settings: { transcription: DEFAULT_SETTINGS.transcription } }), setup({ paused: true })]) {
     s.auto.saved(note());

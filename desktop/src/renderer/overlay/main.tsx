@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { OverlayState } from '../../shared/channels';
 import { acceptsDrops } from '../../shared/later';
+import { toWav } from '../common/to-wav';
 import { Confetti } from './Confetti';
 import { DropPill, Pill } from './Pill';
 import { SaveLaterPill } from './SaveLater';
@@ -64,5 +65,13 @@ function Overlay() {
     </div>
   );
 }
+
+// With no dashboard open (started hidden at login), main asks the pill to turn a clip into WAV.
+window.overlayApi.onNeedWav(({ requestId, bytes }) =>
+  toWav(bytes).then(
+    (wav) => window.overlayApi.sendWav({ requestId, bytes: wav }),
+    () => window.overlayApi.sendWav({ requestId, error: "Couldn't read the audio" }),
+  ),
+);
 
 createRoot(document.getElementById('root')!).render(<Overlay />);

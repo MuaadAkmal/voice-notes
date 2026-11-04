@@ -16,6 +16,14 @@ it('resolves with the bytes the dashboard sends back', async () => {
   await expect(p2).rejects.toThrow("Couldn't read the audio");
 });
 
+it('falls back to the next renderer when the first is not there', async () => {
+  const bridge = new WavBridge();
+  let id = 0;
+  const p = bridge.request(() => false, (i) => ((id = i), true));
+  bridge.settle(id, { bytes: new Uint8Array([7]) });
+  await expect(p).resolves.toEqual(new Uint8Array([7]));
+});
+
 it('rejects at once without a dashboard', async () => {
   const bridge = new WavBridge();
   await expect(bridge.request(() => false)).rejects.toThrow(

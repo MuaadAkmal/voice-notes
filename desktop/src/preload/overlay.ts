@@ -31,6 +31,8 @@ const overlayApi = {
   click: () => ipcRenderer.send(Ch.OverlayClick),
   retry: () => ipcRenderer.send(Ch.OverlayRetry),
   upgrade: () => ipcRenderer.send(Ch.OverlayUpgrade),
+  onNeedWav: (cb: (req: { requestId: number; bytes: Uint8Array; mimeType: string }) => void) => on(Ch.TranscriptionNeedWav, cb),
+  sendWav: (reply: { requestId: number; bytes: Uint8Array } | { requestId: number; error: string }) => ipcRenderer.send(Ch.OverlayWav, reply),
   sendDevices: (devices: AudioDevice[]) => ipcRenderer.send(Ch.OverlayDevices, devices),
   drag: (dx: number, dy: number) => ipcRenderer.send(Ch.OverlayDrag, { dx, dy }),
   dragEnd: () => ipcRenderer.send(Ch.OverlayDragEnd),

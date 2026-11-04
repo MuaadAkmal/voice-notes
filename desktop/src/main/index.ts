@@ -53,7 +53,7 @@ import { MonitorFollower } from './overlay-position';
 import { loginItem, updateExePath } from './updater/install';
 import { type UpdaterEvents, UpdateService, type UpdaterPort } from './updater/service';
 import { NoteStore } from './store/note-store';
-import { CloudAsrClient, QuotaExceeded as CloudQuotaExceeded } from './transcription/cloud-client';
+import { CloudAsrClient, type CloudUsage, QuotaExceeded as CloudQuotaExceeded } from './transcription/cloud-client';
 import { resolveEndpoint } from './transcription/endpoint';
 import { matchFolderCommand, PEEK_SECONDS } from '../shared/folder-command';
 import { transcribe } from './transcription/openai-client';
@@ -71,7 +71,8 @@ import { relaunch, relaunches } from './profiles/relaunch';
 import { sessionUserId } from './profiles/session-user';
 import { startSignIn } from './signin-mode';
 import { applyCloudDefault } from './transcription/cloud-default';
-import { type QuotaNotice, QuotaWatch } from './transcription/quota-watch';
+import { QuotaWatch } from './transcription/quota-watch';
+import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
@@ -364,17 +365,15 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   };
   // Cloud minutes: a heads-up at 80% and a clear word at the limit, once a month each, with Upgrade.
   const quota = new QuotaWatch({ getSettings: () => settings, save: (p) => updateSettings(p), now: Date.now });
-  const NOTICE_MS = 6000;
-  // A notice waits (up to 10 s) for the pill to finish what it is showing, e.g. a dictation pasting.
-  const showNotice = (notice: QuotaNotice | null, waitedMs = 0) => {
-    if (!notice) return;
-    if (!(overlayState.kind === 'idle' || overlayState.kind === 'saved')) {
-      if (waitedMs < 10_000) setTimeout(() => showNotice(notice, waitedMs + 500), 500);
-      return;
-    }
-    const message = notice === 'low' ? 'Cloud minutes 80% used' : 'Cloud minutes used';
-    setOverlayState({ kind: 'notice', message, action: 'upgrade' });
-    setTimeout(() => overlayState.kind === 'notice' && setOverlayState(idleState()), NOTICE_MS);
+  const pillNotice = new PillNotice({ state: () => overlayState, set: setOverlayState, idle: idleState, shown: (n, period) => quota.shown(n, period) });
+  // Remembered for the month only once on screen: a notice the busy pill never showed comes back with the next result.
+  const usageSeen = (u: CloudUsage) => {
+    const notice = quota.observe(u, { mark: false });
+    if (notice) pillNotice.show(notice, u.resetsAt);
+  };
+  const minutesRefused = (resetsAt: string) => {
+    const notice = quota.exceeded(resetsAt, { mark: false });
+    if (notice) pillNotice.show(notice, resetsAt);
   };
   const openPlanPage = () => {
     if (testing) openedExternal.push(PLAN_PAGE_URL);
@@ -514,10 +513,10 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         if (ep.cloud) {
           const t0 = Date.now();
           const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), settings.customWords).catch((e: unknown) => {
-            if (e instanceof CloudQuotaExceeded) showNotice(quota.exceeded(e.resetsAt)); // after the dictation's own error
+            if (e instanceof CloudQuotaExceeded) minutesRefused(e.resetsAt); // after the dictation's own error
             throw e;
           });
-          if (r.usage) showNotice(quota.observe(r.usage));
+          if (r.usage) usageSeen(r.usage);
           log.info('[dictation] ms', JSON.stringify({ transcribe: Date.now() - t0, server: r.ms, bytes: audio.length }));
           return cleanTranscript(r.text);
         }
@@ -677,6 +676,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       }
     },
     onUpgrade: openPlanPage,
+    onWav: (reply) => wavBridge.settle(reply.requestId, reply),
     onCaptureLater: async () => {
       try {
         const result = await saveCapture({
@@ -1053,15 +1053,23 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     cloud: cloudAsr,
     secrets,
     toWav: (bytes, mimeType) =>
-      wavBridge.request((requestId) => {
-        if (!dashboard || dashboard.isDestroyed()) return false;
-        dashboard.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
-        return true;
-      }),
+      wavBridge.request(
+        (requestId) => {
+          if (!dashboard || dashboard.isDestroyed()) return false;
+          dashboard.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
+          return true;
+        },
+        // Started hidden at login, with no dashboard yet: the pill decodes too (it does for dictation).
+        (requestId) => {
+          if (overlay.isDestroyed()) return false;
+          overlay.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
+          return true;
+        },
+      ),
     notesChanged: () => toDashboard(Ch.NotesChanged),
     words: () => settings.customWords,
-    onUsage: (u) => showNotice(quota.observe(u)),
-    onQuotaExceeded: (resetsAt) => showNotice(quota.exceeded(resetsAt)),
+    onUsage: usageSeen,
+    onQuotaExceeded: minutesRefused,
     onTranscribed: (id) => void auto.transcribed(id),
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
