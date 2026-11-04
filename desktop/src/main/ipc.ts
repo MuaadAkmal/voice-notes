@@ -148,11 +148,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(
     Ch.OverlayDrag,
     from(overlay, DragSchema, ({ dx, dy }) => {
+      if (lists.picking()) return; // the window is taller for the picker: a position saved now would be wrong
       const [x, y] = overlay.getPosition();
       overlay.setPosition(x + dx, y + dy);
     }),
   );
-  ipcMain.on(Ch.OverlayDragEnd, (e) => isFrom(overlay, e.sender) && onDragEnd());
+  ipcMain.on(Ch.OverlayDragEnd, (e) => isFrom(overlay, e.sender) && !lists.picking() && onDragEnd());
   ipcMain.on(Ch.OverlayDevices, from(overlay, DevicesSchema, onDevices));
   ipcMain.on(
     Ch.RecorderAudio,

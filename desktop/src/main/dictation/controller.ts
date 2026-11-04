@@ -13,7 +13,8 @@ export const UNDO_FLASH_MS = 6000;
 const RESULT_FLASH_MS = 2500;
 
 export type DictationPorts = {
-  overlay: { start(deviceId: string | null, ping: boolean): void; stop(): void; cancel(): void; setState(s: OverlayState): void };
+  /** showing: what the pill shows now (a flash's end leaves the pill alone once something else took it over). */
+  overlay: { start(deviceId: string | null, ping: boolean): void; stop(): void; cancel(): void; setState(s: OverlayState): void; showing?(): OverlayState };
   /** A transcription server is set up. */
   configured(): boolean;
   /** A voice note is recording, saving or waiting for a retry: dictation must not start. */
@@ -82,6 +83,8 @@ export class DictationController {
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
   /** The Undo / Move to… flash on screen, and whether the pointer or the picker is holding it. */
   private undoShown: OverlayState | null = null;
+  /** The flash this controller last put on the pill. */
+  private flashed: OverlayState | null = null;
   private held = false;
   private readonly minMs: number;
   private readonly errorMs: number;
@@ -256,13 +259,15 @@ export class DictationController {
   /** What an Undo or Move to… did ("Undone", "Moved → Tamil"), shown briefly. */
   showResult(message: string): void {
     this.clearFlash();
-    this.p.overlay.setState({ kind: 'done', message });
+    this.flashed = { kind: 'done', message };
+    this.p.overlay.setState(this.flashed);
     this.flashFor(RESULT_FLASH_MS);
   }
 
   private flashUndo(message: string, undo: UndoOffer): void {
     this.clearFlash();
     this.undoShown = { kind: 'done', message, undo };
+    this.flashed = this.undoShown;
     this.p.overlay.setState(this.undoShown);
     this.flashFor(UNDO_FLASH_MS);
   }
@@ -271,6 +276,9 @@ export class DictationController {
     this.flashTimer = setTimeout(() => {
       this.flashTimer = null;
       this.undoShown = null;
+      // A rewind or a notice may have taken the pill meanwhile: only end our own flash.
+      const showing = this.p.overlay.showing?.();
+      if (showing && showing !== this.flashed) return;
       this.p.overlay.setState(this.p.idleState());
     }, ms);
   }
@@ -288,11 +296,9 @@ export class DictationController {
 
   private flash(message: string, kind: 'error' | 'done' = 'error'): void {
     this.clearFlash();
-    this.p.overlay.setState(kind === 'done' ? { kind, message } : { kind, message, retry: false });
-    this.flashTimer = setTimeout(() => {
-      this.flashTimer = null;
-      this.p.overlay.setState(this.p.idleState());
-    }, this.errorMs);
+    this.flashed = kind === 'done' ? { kind, message } : { kind, message, retry: false };
+    this.p.overlay.setState(this.flashed);
+    this.flashFor(this.errorMs);
   }
 
   /** Whatever flash is up is over (a new capture, another flash): the Undo flash with it. */

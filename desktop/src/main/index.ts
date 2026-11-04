@@ -500,6 +500,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       stop: () => send(Ch.RecorderStop),
       cancel: () => send(Ch.RecorderCancel),
       setState: setOverlayState,
+      showing: () => overlayState,
     },
     configured: () => settings.transcription.provider !== null,
     blocked: (): boolean => controller.state !== 'idle',
@@ -749,6 +750,9 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
 
   const rewind = () => {
+    // The pill is taken over: an open Move to… picker closes and the Undo flash is dropped.
+    if (picking) closePicker();
+    dictation.dismissFlash();
     if (!settings.filmMode) {
       controller.notify('Turn on film mode to rewind');
       return;

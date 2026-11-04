@@ -48,7 +48,9 @@ function Overlay() {
   }, []);
   // The element under the cursor is replaced on every state change; make the window click-through
   // again until the new pill reports mouseenter, so a vanished pill can't leave a dead click zone.
-  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, drop, later.phase.kind]);
+  // Undo → its result is done → done: count that as a change too, or the pill stays solid under the pointer.
+  const undoing = state.kind === 'done' && !!state.undo;
+  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, undoing, drop, later.phase.kind]);
 
   return (
     <div className="flex h-screen w-screen items-end justify-center pb-2">

@@ -20,6 +20,8 @@ let capture: Capture | null;
 let reminderOn: boolean;
 let ctl: DictationController;
 let ports: DictationPorts;
+/** What the pill shows now, when a test says something else took it over. */
+let shown: OverlayState | null;
 
 const audio = (durationMs: number) => ({ bytes: new Uint8Array([1, 2, 3]), durationMs });
 const flush = () => vi.advanceTimersByTimeAsync(0);
@@ -42,6 +44,7 @@ beforeEach(() => {
   };
   listOn = false;
   reminderOn = false;
+  shown = null;
   capture = null;
   listAdd = async (text) => {
     log.push(`list:${text}`);
@@ -53,6 +56,7 @@ beforeEach(() => {
       stop: () => log.push('stop'),
       cancel: () => log.push('cancel'),
       setState: (s) => states.push(s),
+      showing: () => shown ?? states.at(-1) ?? IDLE,
     },
     configured: () => configured,
     blocked: () => blocked,
@@ -404,6 +408,14 @@ describe('Undo / Move to… on a voice-to-lists flash', () => {
     ctl.releaseFlash();
     await vi.advanceTimersByTimeAsync(7000);
     expect(states.at(-1)).toEqual(recording);
+  });
+
+  it('its timer leaves alone a pill that something else took over (a rewind, a notice)', async () => {
+    await added();
+    const rewinding: OverlayState = { kind: 'busy', message: 'Saving…' };
+    shown = rewinding;
+    await vi.advanceTimersByTimeAsync(7000);
+    expect(states.at(-1)).not.toEqual(IDLE);
   });
 
   it('other flashes are not held', async () => {
