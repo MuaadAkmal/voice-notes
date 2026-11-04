@@ -97,6 +97,7 @@ export type Settings = {
   cloudOutPeriod: string | null; // the Cloud month the minutes-used notice was shown for
   languageLearner: boolean; // a "Pixie, I learned … in Tamil" word is written with pronunciation and meaning
   onboarded: boolean; // the account has seen (or skipped) the first-run screen, or had data before it existed (synced)
+  onboardingPending: boolean; // this PC started the first-run screen and it isn't finished yet (survives a restart)
 };
 
 /** Overlay window top-left, relative to that display's work area. */
