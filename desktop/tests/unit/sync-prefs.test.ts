@@ -93,6 +93,20 @@ it('takes the sites list from the account, unless this build cannot read it', ()
   expect(current.laterSites).toEqual(laterSites);
 });
 
+it('takes the custom words from the account, unless this build cannot read them', () => {
+  let current: Settings = { ...DEFAULT_SETTINGS };
+  const deps = {
+    getSettings: () => current,
+    updateSettings: (p: Partial<Settings>) => (current = { ...current, ...p }),
+    pages: store.pages,
+    deviceName: 'PC',
+  };
+  applyRemotePrefs([{ key: 'customWords', value: ['Muaad', 'Supabase'] }], deps);
+  expect(current.customWords).toEqual(['Muaad', 'Supabase']);
+  applyRemotePrefs([{ key: 'customWords', value: ['ok', 7] }], deps);
+  expect(current.customWords).toEqual(['Muaad', 'Supabase']);
+});
+
 it('a remote Review later id equal to ours changes nothing', () => {
   const ours = store.pages.create(null);
   const settings: Settings = { ...DEFAULT_SETTINGS, laterPageId: ours.id };

@@ -51,6 +51,9 @@ export function applyRemotePrefs(prefs: { key: SyncedKey; value: unknown }[], d:
       // Not hard-typed by the server: a list this build can't read is left out, not saved.
       const sites = SettingsFieldSchemas.laterSites.safeParse(value);
       if (sites.success) d.updateSettings({ laterSites: sites.data }, { record: false });
+    } else if (key === 'customWords') {
+      const words = SettingsFieldSchemas.customWords.safeParse(value);
+      if (words.success) d.updateSettings({ customWords: words.data }, { record: false });
     } else {
       d.updateSettings({ [key]: value } as Partial<Settings>, { record: false });
     }

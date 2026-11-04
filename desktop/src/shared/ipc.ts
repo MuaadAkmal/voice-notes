@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isSiteHost } from './later-routes';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
+import { normalizeWords } from './custom-words';
 
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
 import { MAX_DROP_FIELD } from './later';
@@ -86,6 +87,11 @@ export const SettingsFieldSchemas = {
     sound: z.boolean(),
     dailyGoal: z.number().int().min(1).max(24),
   }),
+  autoTranscribe: z.boolean(),
+  autoTitle: z.boolean(),
+  customWords: z.array(z.string().max(200)).max(200).transform(normalizeWords),
+  cloudWarnedPeriod: z.string().max(40).nullable(),
+  cloudOutPeriod: z.string().max(40).nullable(),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

@@ -196,3 +196,24 @@ it('keeps 24 widgets plus the locked one', () => {
   writeBoth(JSON.stringify({ homeWidgets: widgets }));
   expect(loadSettings(files).homeWidgets).toEqual(widgets);
 });
+
+it('auto-transcribe and titles start on, with no custom words or Cloud warnings yet', () => {
+  expect(loadSettings(files)).toMatchObject({
+    autoTranscribe: true,
+    autoTitle: true,
+    customWords: [],
+    cloudWarnedPeriod: null,
+    cloudOutPeriod: null,
+  });
+});
+
+it('custom words follow the account; the rest of these stay on the PC', () => {
+  const { pc, profile } = splitSettings({ customWords: ['Muaad'], autoTranscribe: false, autoTitle: false, cloudWarnedPeriod: 'x' });
+  expect(profile).toEqual({ customWords: ['Muaad'] });
+  expect(pc).toEqual({ autoTranscribe: false, autoTitle: false, cloudWarnedPeriod: 'x' });
+});
+
+it('custom words are normalised on load', () => {
+  writeBoth(JSON.stringify({ customWords: [' Muaad ', 'muaad', 'a[b]'] }));
+  expect(loadSettings(files).customWords).toEqual(['Muaad', 'ab']);
+});

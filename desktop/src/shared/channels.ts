@@ -89,6 +89,11 @@ export type Settings = {
   voiceToFolders: boolean; // a voice note starting "Pixie, <folder>" is filed there (its first seconds are transcribed)
   noteWakeWords: string[]; // the names that start a voice-to-lists command ("Pixie, …"); empty = Pixie
   pomodoro: PomodoroSettings;
+  autoTranscribe: boolean; // new notes recorded on this PC are transcribed without asking
+  autoTitle: boolean; // a transcribed note still on its default title gets one written by AI (the `commands` function)
+  customWords: string[]; // names and jargon every transcription is steered towards (synced)
+  cloudWarnedPeriod: string | null; // the Cloud month (its resetsAt) the 80% notice was shown for
+  cloudOutPeriod: string | null; // the Cloud month the minutes-used notice was shown for
 };
 
 /** Overlay window top-left, relative to that display's work area. */

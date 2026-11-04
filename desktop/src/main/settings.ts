@@ -47,6 +47,11 @@ export const DEFAULT_SETTINGS: Settings = {
   voiceToFolders: true,
   noteWakeWords: DEFAULT_WAKE_WORDS,
   pomodoro: DEFAULT_POMODORO,
+  autoTranscribe: true,
+  autoTitle: true,
+  customWords: [],
+  cloudWarnedPeriod: null,
+  cloudOutPeriod: null,
 };
 
 function readRaw(file: string): Record<string, unknown> {
