@@ -75,7 +75,7 @@ import { QuotaWatch } from './transcription/quota-watch';
 import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
 import { ListUndo } from './commands/undo';
-import { addStarterPages, firstRun } from './first-run';
+import { addStarterPages, firstRun, micTestAllowed } from './first-run';
 import { PLAN_PAGE_URL } from '../shared/cloud-usage';
 import { addErrorText, formatAdded } from '../shared/calendar-format';
 import { REMINDER_EVENT_MS, RemindersService } from './reminders/service';
@@ -317,6 +317,9 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   };
   const toDashboard = (channel: string) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(channel);
+  };
+  const toDashboardWith = (channel: string, payload: unknown) => {
+    if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(channel, payload);
   };
 
   // Built-in transcription: engine and models are downloaded on demand into whisper/.
@@ -722,6 +725,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     },
     onUpgrade: openPlanPage,
     onWav: (reply) => wavBridge.settle(reply.requestId, reply),
+    onMicLevel: (l) => toDashboardWith(Ch.MicLevel, l),
     onCaptureLater: async () => {
       try {
         const result = await saveCapture({
@@ -1215,6 +1219,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     updates,
     onboarding: {
       get: () => onboarding,
+      testMic: (deviceId) => {
+        if (!micTestAllowed(controller.state, dictation.active)) return { ok: false, reason: 'busy' };
+        send(Ch.MicTestStart, { deviceId });
+        return { ok: true };
+      },
       finish: () => {
         onboarding = false;
         if (!settings.onboarded) updateSettings({ onboarded: true });

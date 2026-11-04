@@ -7,6 +7,7 @@ import {
   Ch,
   type DictationAudio,
   type DropPayload,
+  type MicLevel,
   type OverlayState,
   type PomodoroAction,
   type PomodoroSettings,
@@ -35,6 +36,12 @@ const overlayApi = {
   move: (id: string, pageId: string) => ipcRenderer.send(Ch.OverlayMove, { id, pageId }),
   openMove: () => ipcRenderer.send(Ch.OverlayMoveOpen),
   cancelMove: () => ipcRenderer.send(Ch.OverlayMoveCancel),
+  onMicTest: (cb: (p: { deviceId: string | null }) => void) => {
+    const listener = (_e: unknown, p: { deviceId: string | null }) => cb(p);
+    ipcRenderer.on(Ch.MicTestStart, listener);
+    return () => void ipcRenderer.removeListener(Ch.MicTestStart, listener);
+  },
+  sendMicLevel: (l: MicLevel) => ipcRenderer.send(Ch.MicLevel, l),
   onNeedWav: (cb: (req: { requestId: number; bytes: Uint8Array; mimeType: string }) => void) => on(Ch.TranscriptionNeedWav, cb),
   sendWav: (reply: { requestId: number; bytes: Uint8Array } | { requestId: number; error: string }) => ipcRenderer.send(Ch.OverlayWav, reply),
   sendDevices: (devices: AudioDevice[]) => ipcRenderer.send(Ch.OverlayDevices, devices),

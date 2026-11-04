@@ -117,6 +117,10 @@ export type OverlayState =
   | { kind: 'done'; message: string; undo?: { id: string; pages: { id: string; title: string }[] } }
   | { kind: 'notice'; message: string; action: 'upgrade' }; // Cloud minutes running low or used up, with an Upgrade button
 
+/** The onboarding mic check, every 100 ms: level 0..1; heard = above the silence threshold. */
+export type MicLevel = { level: number; heard: boolean; done?: true; error?: true };
+export type MicTestResult = { ok: true } | { ok: false; reason: 'busy' };
+
 /** What a drag-and-drop onto the pill carried (empty string = that type was absent). */
 export type DropPayload = { text: string; uriList: string; html: string };
 /** The pill's Save this: label of the window saved to Review later, or nothing worth saving in front. */
@@ -303,6 +307,9 @@ export const Ch = {
   OnboardingGet: 'onboarding:get', // → boolean: show the first-run screen
   OnboardingChanged: 'onboarding:changed', // → boolean
   OnboardingFinish: 'onboarding:finish', // finished or skipped: the account is onboarded
+  MicTest: 'mic:test', // dashboard → main { deviceId }: the pill listens 3 s → MicTestResult
+  MicTestStart: 'mic:test-start', // main → pill { deviceId }
+  MicLevel: 'mic:level', // pill → main → dashboard: MicLevel
   PomodoroSessionsChanged: 'pomodoro:sessions-changed',
   TranscriptionStatus: 'transcription:status', // StatusMap
   TranscriptionNeedWav: 'transcription:need-wav', // { requestId, bytes, mimeType } → answered on transcription:wav

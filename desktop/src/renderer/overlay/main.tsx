@@ -9,6 +9,7 @@ import { SaveLaterPill } from './SaveLater';
 import { useDrag } from './useDrag';
 import { useDropLater } from './useDropLater';
 import { useFilmBuffer } from './useFilmBuffer';
+import { useMicTest } from './useMicTest';
 import { useMorph } from './useMorph';
 import { usePomodoro } from './usePomodoro';
 import { useRecorder } from './useRecorder';
@@ -19,6 +20,7 @@ function Overlay() {
   const [state, setState] = useState<OverlayState>({ kind: 'idle', visible: true });
   const analyser = useRecorder();
   useFilmBuffer();
+  useMicTest();
   const drag = useDrag();
   const pomo = usePomodoro(state.kind === 'recording');
   const drop = useDropLater(acceptsDrops(state));

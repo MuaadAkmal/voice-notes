@@ -25,6 +25,8 @@ import {
   type Settings,
   type StatusMap,
   type TestResult,
+  type MicLevel,
+  type MicTestResult,
   type UpdateStatus,
 } from '../shared/channels';
 import { chunk } from '../shared/format';
@@ -163,6 +165,8 @@ const dashboardApi = {
   getOnboarding: (): Promise<boolean> => ipcRenderer.invoke(Ch.OnboardingGet),
   onOnboardingChanged: (cb: (show: boolean) => void) => subscribeWith(Ch.OnboardingChanged, cb),
   finishOnboarding: (): Promise<void> => ipcRenderer.invoke(Ch.OnboardingFinish),
+  testMic: (deviceId: string | null): Promise<MicTestResult> => ipcRenderer.invoke(Ch.MicTest, { deviceId }),
+  onMicLevel: (cb: (l: MicLevel) => void) => subscribeWith(Ch.MicLevel, cb),
   onPomodoroSessionsChanged: (cb: () => void) => subscribe(Ch.PomodoroSessionsChanged, cb),
   onPagesChanged: (cb: () => void) => subscribe(Ch.PagesChanged, cb),
   onNotesChanged: (cb: () => void) => subscribe(Ch.NotesChanged, cb),

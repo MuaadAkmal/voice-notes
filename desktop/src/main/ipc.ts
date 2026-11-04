@@ -44,6 +44,8 @@ import {
   TranscriptionTestSchema,
   WavReplySchema,
   UndoSchema,
+  MicTestSchema,
+  MicLevelSchema,
   MoveSchema,
   NewEventSchema,
   type PomodoroAction,
@@ -73,7 +75,7 @@ import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
 import type { CloudAsrClient } from './transcription/cloud-client';
 import { NotSignedIn, Offline } from './sync/http-server';
-import type { CloudUsageResult } from '../shared/channels';
+import type { CloudUsageResult, MicLevel, MicTestResult } from '../shared/channels';
 import type { Secrets } from './transcription/secrets';
 import type { TranscriptionService } from './transcription/service';
 import type { WavBridge } from './transcription/wav-bridge';
@@ -97,7 +99,8 @@ type OverlayDeps = {
   onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
   onCaptureLater: () => Promise<CaptureResult>; // throws when saving fails
   onUpgrade: () => void; // the Cloud notice's Upgrade button
-  onWav: (reply: { requestId: number; bytes: Uint8Array } | { requestId: number; error: string }) => void; // a clip the pill turned into WAV for transcription
+  onWav: (reply: { requestId: number; bytes: Uint8Array } | { requestId: number; error: string }) => void;
+  onMicLevel: (l: MicLevel) => void; // the onboarding mic check, from the pill // a clip the pill turned into WAV for transcription
   onPomodoro: (timer: Pomodoro) => void;
   onPomodoroDone: (focusMs: number) => void;
 };
@@ -211,6 +214,7 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   });
   ipcMain.on(Ch.OverlayUpgrade, (e) => isFrom(overlay, e.sender) && deps.onUpgrade());
   ipcMain.on(Ch.OverlayWav, from(overlay, WavReplySchema, (reply) => deps.onWav(reply)));
+  ipcMain.on(Ch.MicLevel, from(overlay, MicLevelSchema, (l) => deps.onMicLevel(l)));
 }
 
 type DashboardDeps = {
@@ -242,7 +246,7 @@ type DashboardDeps = {
   pomodoro: { get(): Pomodoro; command(action: PomodoroAction): void; sessions(): PomodoroSession[]; clear(): void };
   updates: Pick<UpdateService, 'status' | 'check' | 'restart'>;
   /** A new account's first-run screen: shown while get() is true. */
-  onboarding: { get(): boolean; finish(): void };
+  onboarding: { get(): boolean; finish(): void; testMic(deviceId: string | null): MicTestResult };
 };
 
 export function registerDashboardIpc(d: DashboardDeps): void {
@@ -258,6 +262,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.NotesList, none, () => d.store.list());
   handle(Ch.OnboardingGet, none, () => d.onboarding.get());
   handle(Ch.OnboardingFinish, none, () => d.onboarding.finish());
+  handle(Ch.MicTest, MicTestSchema, ({ deviceId }) => d.onboarding.testMic(deviceId));
   handle(Ch.NotesRename, RenameSchema, ({ id, title }) => {
     const note = d.store.rename(id, title);
     d.notesChanged();
