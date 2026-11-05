@@ -14,7 +14,6 @@ const theme = EditorView.theme({
   ".cm-content": { fontFamily: "inherit", lineHeight: "1.75", padding: "0", caretColor: "var(--foreground)" },
   ".cm-line": { padding: "0" },
   ".cm-scroller": { fontFamily: "inherit" },
-  ".cm-cursor": { borderLeftColor: "var(--foreground)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "color-mix(in oklab, var(--ring) 25%, transparent)" },
 });
 
@@ -69,7 +68,8 @@ export function PageEditor({
     <CodeMirror
       value={seed}
       autoFocus
-      basicSetup={{ lineNumbers: false, foldGutter: false, highlightActiveLine: false, highlightActiveLineGutter: false }}
+      // Keep the browser caret: CodeMirror's selection overlay hides it with !important.
+      basicSetup={{ drawSelection: false, lineNumbers: false, foldGutter: false, highlightActiveLine: false, highlightActiveLineGutter: false }}
       extensions={extensions}
       theme="none"
       onChange={(text) => {
