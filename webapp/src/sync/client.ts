@@ -12,19 +12,19 @@ type Deps = { base: string; apikey: string; token: () => Promise<string | null>;
 export class SyncClient {
   constructor(private readonly d: Deps) {}
 
-  pull(req: PullRequest): Promise<PullResponse> {
-    return this.post("pull", req);
+  pull(req: PullRequest, signal?: AbortSignal): Promise<PullResponse> {
+    return this.post("pull", req, signal);
   }
 
-  push(req: PushRequest): Promise<PushResponse> {
-    return this.post("push", req);
+  push(req: PushRequest, signal?: AbortSignal): Promise<PushResponse> {
+    return this.post("push", req, signal);
   }
 
   download(kind: FileKind, name: string): Promise<DownloadResponse> {
     return this.post("files/download", { kind, name });
   }
 
-  private async post<T>(route: string, body: unknown): Promise<T> {
+  private async post<T>(route: string, body: unknown, signal?: AbortSignal): Promise<T> {
     const token = await this.d.token();
     if (!token) throw new NotSignedIn();
     let res: Response;
@@ -33,6 +33,7 @@ export class SyncClient {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, apikey: this.d.apikey, "content-type": "application/json" },
         body: JSON.stringify(body),
+        signal,
       });
     } catch {
       throw new Offline();

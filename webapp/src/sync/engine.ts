@@ -15,7 +15,10 @@ type Deps = {
   refresh: () => Promise<"ok" | "signed-out" | "offline">;
   /** The session is gone: the unsaved page bodies, for restoring after the next sign-in. */
   onSignedOut: (unsaved: Unsaved) => void;
-  onRejected?: (message: string) => void;
+  /** The server refused a change for good; `lost`: the page text it carried, to keep for the user. */
+  onRejected?: (message: string, lost: Unsaved) => void;
+  /** Pages whose text is too big to ever send; it stays queued here until made shorter. */
+  onTooLarge?: (pageIds: string[]) => void;
   now?: () => number;
 };
 
@@ -40,6 +43,8 @@ export class SyncEngine {
   private stopped = false;
   private listeners = new Set<(s: SyncStatus) => void>();
   private drafts = new Map<string, () => { body: string; base: number } | null>();
+  private abort = new AbortController();
+  private reportedTooLarge = "";
   private readonly now: () => number;
   private readonly onFocus = () => this.poke();
 
@@ -58,12 +63,15 @@ export class SyncEngine {
 
   start(): void {
     this.stopped = false;
+    if (this.abort.signal.aborted) this.abort = new AbortController();
     if (typeof window !== "undefined") window.addEventListener("focus", this.onFocus);
     void this.syncNow();
   }
 
+  /** Stops for good until start(): a request on its way is cancelled and no further batch goes out. */
   stop(): void {
     this.stopped = true;
+    this.abort.abort();
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     if (typeof window !== "undefined") window.removeEventListener("focus", this.onFocus);
@@ -146,9 +154,14 @@ export class SyncEngine {
     if (this.stopped) return;
     if (outbox.size) this.setStatus("saving");
     try {
-      for (let batch = outbox.take(); batch.length; batch = outbox.take()) {
+      const { signal } = this.abort;
+      // After a refused batch, one change at a time, so only the change at fault is dropped.
+      let single = false;
+      for (let batch = outbox.take(); batch.length; batch = outbox.take(single ? 1 : undefined)) {
+        if (this.stopped) return void outbox.release();
         try {
-          const res = await this.authed(() => client.push({ clientId: this.d.clientId, deviceName: this.d.deviceName, mutations: batch }));
+          const res = await this.authed(() => client.push({ clientId: this.d.clientId, deviceName: this.d.deviceName, mutations: batch }, signal));
+          if (this.stopped) return void outbox.release();
           const versions = new Map(res.acked.map((a) => [a.id, a.version]));
           for (const m of outbox.ack(res.acked)) {
             const version = versions.get(m.id)!;
@@ -157,23 +170,33 @@ export class SyncEngine {
           }
         } catch (err) {
           if (!(err instanceof Rejected)) throw err;
-          // This batch can never succeed; the pull below restores the server's rows.
-          outbox.drop(batch.map((m) => m.id));
-          this.d.onRejected?.(err.message);
+          if (batch.length > 1) {
+            outbox.release();
+            single = true;
+            continue;
+          }
+          // This change can never succeed; the pull below restores the server's row, and its text is kept.
+          this.d.onRejected?.(err.message, outbox.drop(batch.map((m) => m.id)));
         }
       }
+      this.reportTooLarge(outbox.oversized());
       for (let more = true; more; ) {
-        const res = await this.authed(() => client.pull({ clientId: this.d.clientId, cursor: store.snapshot().cursor }));
+        if (this.stopped) return;
+        const res = await this.authed(() => client.pull({ clientId: this.d.clientId, cursor: store.snapshot().cursor }, signal));
+        if (this.stopped) return;
         store.applyPull(res, outbox.pendingOps());
         more = res.hasMore;
       }
       store.markLoaded();
       this.failures = 0;
       this.retryAt = 0;
-      this.setStatus(outbox.size ? "saving" : "saved");
-      this.schedule(outbox.size ? EDIT_DELAY_MS : TICK_MS);
+      // A page too big to send waits for a shorter edit, which schedules its own sync.
+      const tooLarge = outbox.oversized().length > 0;
+      this.setStatus(tooLarge ? "error" : outbox.size ? "saving" : "saved");
+      this.schedule(outbox.size && !tooLarge ? EDIT_DELAY_MS : TICK_MS);
     } catch (err) {
       outbox.release();
+      if (this.stopped) return;
       if (err instanceof SignedOut || err instanceof NotSignedIn) {
         this.stop();
         this.d.onSignedOut(this.unsaved());
@@ -187,6 +210,14 @@ export class SyncEngine {
       this.timer = null;
       this.schedule(wait);
     }
+  }
+
+  /** Tells about pages too big to send, once per change in that list. */
+  private reportTooLarge(ids: string[]): void {
+    const key = ids.join(",");
+    if (key === this.reportedTooLarge) return;
+    this.reportedTooLarge = key;
+    if (ids.length) this.d.onTooLarge?.(ids);
   }
 
   /** Runs a call, refreshing the session once on 401. */

@@ -20,7 +20,7 @@ const duration = (ms: number) => {
 /** Asks for the audio only when Play is pressed: signed URLs are short-lived and most glances don't play. */
 function Player({ id }: { id: string }) {
   const [wanted, setWanted] = useState(false);
-  const { url, missing, failed } = useSignedUrl("audio", `${id}.webm`, wanted);
+  const { url, missing, failed, retry } = useSignedUrl("audio", `${id}.webm`, wanted);
   if (!wanted)
     return (
       <Button variant="outline" onClick={() => setWanted(true)}>
@@ -28,8 +28,15 @@ function Player({ id }: { id: string }) {
         Play
       </Button>
     );
-  if (missing) return <p className="text-sm text-muted-foreground">Audio is still on your PC</p>;
-  if (failed) return <p className="text-sm text-muted-foreground">Couldn&apos;t load the audio. Try again in a moment.</p>;
+  if (missing || failed)
+    return (
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <p>{missing ? "Audio is still on your PC" : "Couldn't load the audio."}</p>
+        <Button variant="outline" size="sm" onClick={retry}>
+          Try again
+        </Button>
+      </div>
+    );
   if (!url) return <p className="text-sm text-muted-foreground">Loading audio…</p>;
   return <audio controls autoPlay preload="none" src={url} className="w-full" />;
 }

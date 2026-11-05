@@ -12,7 +12,7 @@ import { SyncEngine, type SyncStatus } from "@/sync/engine";
 import { Outbox } from "@/sync/outbox";
 import { WebStore, type Snapshot } from "@/sync/store";
 
-type Sync = { store: WebStore; engine: SyncEngine; outbox: Outbox; client: SyncClient; email: string | null };
+type Sync = { store: WebStore; engine: SyncEngine; outbox: Outbox; client: SyncClient; userId: string; email: string | null };
 
 const SyncContext = createContext<Sync | null>(null);
 
@@ -33,12 +33,18 @@ async function refresh(): Promise<"ok" | "signed-out" | "offline"> {
   }
 }
 
-function makeSync(email: string | null): Sync {
+function makeSync(userId: string, email: string | null): Sync {
   const auth = supabase().auth;
+  // Only this account's token: after a switch to another account in this tab, this sync is signed out
+  // instead of sending its changes with the new account's token.
+  const session = async () => {
+    const s = (await auth.getSession()).data.session;
+    return s?.user.id === userId ? s : null;
+  };
   const client = new SyncClient({
     base: SYNC_URL,
     apikey: SUPABASE_PUBLISHABLE_KEY,
-    token: async () => (await auth.getSession()).data.session?.access_token ?? null,
+    token: async () => (await session())?.access_token ?? null,
   });
   const store = new WebStore();
   const outbox = new Outbox();
@@ -50,17 +56,24 @@ function makeSync(email: string | null): Sync {
     deviceName: deviceName(navigator.userAgent),
     refresh,
     onSignedOut: (unsaved) => {
-      saveUnsaved(unsaved);
-      void signOut();
+      saveUnsaved(userId, unsaved);
+      // Another account signed in meanwhile: leave its session alone.
+      void auth.getSession().then(({ data }) => {
+        if (!data.session || data.session.user.id === userId) void signOut();
+      });
     },
-    onRejected: () => toast.error("A change couldn't be saved"),
+    onRejected: (_message, lost) => {
+      saveUnsaved(userId, lost);
+      toast.error(Object.keys(lost).length ? "A change couldn't be saved. Its text is kept: reload to restore it." : "A change couldn't be saved");
+    },
+    onTooLarge: () => toast.error("A page is too long to save. Shorten it and it will sync; until then it stays in this tab."),
   });
-  return { store, engine, outbox, client, email };
+  return { store, engine, outbox, client, userId, email };
 }
 
 /** Sync for the signed-in account: the engine, the account's Realtime pings, and a warning before losing edits. */
 export function SyncProvider({ userId, email, children }: { userId: string; email: string | null; children: ReactNode }) {
-  const [sync] = useState(() => makeSync(email));
+  const [sync] = useState(() => makeSync(userId, email));
 
   useEffect(() => {
     const { engine } = sync;
@@ -81,7 +94,7 @@ export function SyncProvider({ userId, email, children }: { userId: string; emai
     return () => {
       // Torn down with text unsaved (signed out in another tab): keep it for the next sign-in.
       const unsaved = engine.unsaved();
-      if (Object.keys(unsaved).length) saveUnsaved(unsaved);
+      if (Object.keys(unsaved).length) saveUnsaved(userId, unsaved);
       engine.stop();
       if (channel) void sb.removeChannel(channel);
       window.removeEventListener("beforeunload", beforeUnload);

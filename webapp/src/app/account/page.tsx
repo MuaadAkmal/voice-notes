@@ -48,6 +48,7 @@ function message(err: unknown): string {
   if (err instanceof BillingError) {
     if (err.code === "offline") return "You're offline. Try again when you're connected.";
     if (err.code === "already_subscribed") return "This account already has a plan.";
+    if (err.code === "checkout_busy") return "A checkout is already open, maybe in another tab. Finish it there, or try again in a minute.";
     if (err.status === 401) return "Sign in again to continue.";
     if (err.code === "provider_failed") return "Razorpay didn't answer. Try again in a minute.";
   }

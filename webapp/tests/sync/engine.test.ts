@@ -111,7 +111,7 @@ it("a rejected batch is dropped, reported, and the pull restores the server's ro
   const { engine, store, outbox, onRejected } = setup({ pull, push });
   engine.edit({ op: "page.update", id: "a", fields: { title: "Bad" } });
   await engine.syncNow();
-  expect(onRejected).toHaveBeenCalledWith("Invalid change");
+  expect(onRejected).toHaveBeenCalledWith("Invalid change", {});
   expect(outbox.size).toBe(0);
   expect(store.snapshot().pages.get("a")?.data.title).toBe("Server");
 });
@@ -130,4 +130,61 @@ it("sends an edit about a second later and records the acked version", async () 
   expect(push.mock.calls[0][0]).toMatchObject({ clientId: "W", deviceName: "Web · Chrome" });
   expect(store.version("page", "n")).toBe(7);
   expect(engine.status).toBe("saved");
+});
+
+it("a refused batch is retried one change at a time: only the bad one is dropped, its text kept", async () => {
+  const push = vi.fn(async (req: PushRequest) => {
+    if (req.mutations.some((m) => m.op.op === "page.setBody" && m.op.body === "bad")) throw new Rejected("Invalid change");
+    return { acked: req.mutations.map((m) => ({ id: m.id, version: 3 })) };
+  });
+  const pull = vi.fn().mockResolvedValue(empty(3));
+  const { engine, outbox, onRejected } = setup({ pull, push });
+  engine.edit({ op: "page.setBody", id: "a", body: "bad" });
+  engine.edit({ op: "note.delete", id: "n" });
+  await engine.syncNow();
+  expect(onRejected).toHaveBeenCalledWith("Invalid change", { a: { body: "bad", base: 0 } });
+  expect(push.mock.calls.at(-1)![0].mutations.map((m) => ("id" in m.op ? m.op.id : ""))).toEqual(["n"]);
+  expect(outbox.size).toBe(0);
+});
+
+it("once stopped, no further batch goes out and the request on its way is cancelled", async () => {
+  let signal: AbortSignal | undefined;
+  let finish!: () => void;
+  const push = vi.fn((req: PushRequest, s?: AbortSignal) => {
+    signal = s;
+    return new Promise<{ acked: { id: string; version: number }[] }>((resolve) => {
+      finish = () => resolve({ acked: req.mutations.map((m) => ({ id: m.id, version: 1 })) });
+    });
+  });
+  const pull = vi.fn().mockResolvedValue(empty());
+  const { engine, outbox } = setup({ pull, push });
+  for (let i = 0; i < 150; i++) outbox.add({ op: "note.delete", id: `n${i}` }, 1);
+  const done = engine.syncNow();
+  await vi.advanceTimersByTimeAsync(0);
+  engine.stop(); // signed out, or another account signed in
+  expect(signal?.aborted).toBe(true);
+  finish();
+  await done;
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(pull).not.toHaveBeenCalled();
+});
+
+it("a page too big to send is reported once and waits, without a retry loop", async () => {
+  const push = vi.fn(async (req: PushRequest) => ({ acked: req.mutations.map((m) => ({ id: m.id, version: 2 })) }));
+  const pull = vi.fn().mockResolvedValue(empty(2));
+  const { engine, outbox } = setup({ pull, push });
+  const onTooLarge = vi.fn();
+  (engine as unknown as { d: { onTooLarge: unknown } }).d.onTooLarge = onTooLarge;
+  engine.edit({ op: "page.setBody", id: "big", body: "x".repeat(1_100_000) });
+  await engine.syncNow();
+  await engine.syncNow();
+  expect(onTooLarge).toHaveBeenCalledTimes(1);
+  expect(onTooLarge).toHaveBeenCalledWith(["big"]);
+  expect(push).not.toHaveBeenCalled();
+  expect(outbox.size).toBe(1);
+  expect(engine.status).toBe("error");
+  await vi.advanceTimersByTimeAsync(10_000); // the edit's own sync
+  const pulls = pull.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(pull).toHaveBeenCalledTimes(pulls); // no sync every second for it
 });

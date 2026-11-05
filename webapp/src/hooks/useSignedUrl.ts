@@ -1,12 +1,14 @@
 "use client";
 
 import type { FileKind } from "@wire/sync/protocol";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSync } from "@/app/providers";
 import type { SyncClient } from "@/sync/client";
 
 // Signed URLs live 120 s on the server; reuse one for 60 s.
 const FRESH_MS = 60_000;
+// A file still only on a PC is asked for again this often while shown: the PC uploads it after its next sync.
+const MISSING_RECHECK_MS = 30_000;
 const requests = new Map<string, { at: number; url: Promise<string | null> }>();
 
 /** The file's signed URL, or null while it is only on a PC; one request per file at a time. */
@@ -23,11 +25,20 @@ function signedUrl(client: Pick<SyncClient, "download">, kind: FileKind, name: s
 type State = { url: string | null; missing: boolean; failed: boolean };
 const NONE: State = { url: null, missing: false, failed: false };
 
-/** A short-lived URL for an account file (audio or a page image), once `enabled`. `missing`: still only on a PC. */
-export function useSignedUrl(kind: FileKind, name: string, enabled = true): State {
+/**
+ * A short-lived URL for an account file (audio or a page image), once `enabled`. `missing`: still only on
+ * a PC (asked again every 30 s while shown); `retry` asks again now, e.g. after `failed`.
+ */
+export function useSignedUrl(kind: FileKind, name: string, enabled = true): State & { retry: () => void } {
   const { client } = useSync();
   const key = `${kind}/${name}`;
   const [state, setState] = useState<State & { key: string }>({ ...NONE, key: "" });
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => {
+    requests.delete(key);
+    setState((s) => (s.key === key ? { ...NONE, key } : s)); // back to "Loading…"
+    setAttempt((n) => n + 1);
+  }, [key]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -39,7 +50,17 @@ export function useSignedUrl(kind: FileKind, name: string, enabled = true): Stat
     return () => {
       live = false;
     };
-  }, [client, kind, name, key, enabled]);
+  }, [client, kind, name, key, enabled, attempt]);
 
-  return state.key === key ? state : NONE;
+  const missing = state.key === key && state.missing;
+  useEffect(() => {
+    if (!missing) return;
+    const t = setTimeout(() => {
+      requests.delete(key);
+      setAttempt((n) => n + 1);
+    }, MISSING_RECHECK_MS);
+    return () => clearTimeout(t);
+  }, [missing, key]);
+
+  return { ...(state.key === key ? state : NONE), retry };
 }
