@@ -8,7 +8,8 @@ import { handle } from './_shared/sync/handler.ts';
 import { PgStore } from './_shared/sync/pg-store.ts';
 import { postgresDb } from './_shared/sync/postgres-db.ts';
 import { SyncCore } from './_shared/sync/server-core.ts';
-import { SupabaseBucket } from './supabase-bucket.ts';
+import type { FileKind } from './_shared/sync/protocol.ts';
+import { BUCKETS, SupabaseBucket } from './supabase-bucket.ts';
 
 // prepare: false keeps it working through Supavisor's transaction pooler too.
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { prepare: false, max: 4 });
@@ -29,7 +30,17 @@ async function quota(userId: string): Promise<{ used: number; limit: number }> {
   const [r] = await sql`select used, lim from public.storage_usage_for(${userId}::uuid)`;
   return { used: Number(r.used), limit: Number(r.lim) };
 }
-const files = new FileRules(store, new SupabaseBucket(storage), Date.now, quota);
+// Each upload URL reserves its file's room first (public.storage_reserve), so parallel uploads can't share it.
+async function reserve(userId: string, kind: FileKind, path: string, size: number): Promise<boolean> {
+  const [r] = await sql`select ok from public.storage_reserve(${userId}::uuid, ${BUCKETS[kind]}, ${path}, ${size})`;
+  return r?.ok === true;
+}
+// Files that arrived bigger than they were reserved for, which FileRules removes.
+async function oversized(userId: string): Promise<{ kind: FileKind; path: string }[]> {
+  const rows = await sql`select bucket_id, name from public.storage_oversized(${userId}::uuid)`;
+  return rows.map((r) => ({ kind: r.bucket_id === BUCKETS.audio ? 'audio' : 'image', path: r.name as string }));
+}
+const files = new FileRules(store, new SupabaseBucket(storage), Date.now, quota, reserve, oversized);
 
 /** The signed-in user's id from a verified access token; anything else is no one. */
 async function verify(jwt: string): Promise<string | null> {

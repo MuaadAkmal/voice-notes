@@ -26,6 +26,8 @@ export class BadRequest extends Error {}
 export class BadSignature extends Error {}
 export class AlreadySubscribed extends Error {}
 export class NoSubscription extends Error {}
+/** Another checkout of the account is under way (another tab). */
+export class CheckoutBusy extends Error {}
 
 /** Statuses that hold a subscription: a new checkout is refused while one exists. */
 const HOLDING = new Set(['authenticated', 'active', 'pending']);
@@ -80,28 +82,50 @@ export class BillingCore {
       (req.period !== 'monthly' && req.period !== 'annual')
     )
       throw new BadRequest('plan');
-    const latest = await this.d.store.latest(userId);
-    if (latest && HOLDING.has(latest.status)) throw new AlreadySubscribed();
-    const planId = this.d.plans[req.plan][req.period];
-    const sub = await this.d.razorpay.create({
-      planId,
-      totalCount: TOTAL_COUNT[req.period],
-      userId,
-    });
-    await this.d.store.save({
-      id: sub.id,
-      userId,
-      razorpayPlanId: planId,
-      plan: req.plan,
-      status: sub.status,
-      currentEnd: toIso(sub.current_end),
-      eventAt: BEFORE_ANY_EVENT,
-    });
-    return {
-      subscriptionId: sub.id,
-      keyId: this.d.keyId,
-      shortUrl: sub.short_url ?? null,
-    };
+    // One checkout at a time per account, so two tabs can't both pass the check below.
+    if (!(await this.d.store.beginCheckout(userId))) throw new CheckoutBusy();
+    try {
+      const latest = await this.d.store.latest(userId);
+      if (latest && HOLDING.has(latest.status)) throw new AlreadySubscribed();
+      // Checkouts left unpaid stay payable at Razorpay: cancel them, so only the newest can be paid.
+      for (const old of await this.d.store.unpaid(userId))
+        await this.retire(old.id);
+      const planId = this.d.plans[req.plan][req.period];
+      const sub = await this.d.razorpay.create({
+        planId,
+        totalCount: TOTAL_COUNT[req.period],
+        userId,
+      });
+      await this.d.store.save({
+        id: sub.id,
+        userId,
+        razorpayPlanId: planId,
+        plan: req.plan,
+        status: sub.status,
+        currentEnd: toIso(sub.current_end),
+        eventAt: BEFORE_ANY_EVENT,
+      });
+      return {
+        subscriptionId: sub.id,
+        keyId: this.d.keyId,
+        shortUrl: sub.short_url ?? null,
+      };
+    } finally {
+      await this.d.store.endCheckout(userId);
+    }
+  }
+
+  /** Cancels a checkout never paid. One Razorpay already moved on (expired, or paid after all) is saved as it is. */
+  private async retire(id: string): Promise<void> {
+    let sub: RazorpaySubscription;
+    try {
+      sub = await this.d.razorpay.cancelNow(id);
+    } catch (err) {
+      sub = await this.d.razorpay.fetch(id);
+      if (sub.status === 'created') throw err;
+    }
+    await this.apply(sub, new Date(this.d.now()).toISOString());
+    if (HOLDING.has(sub.status)) throw new AlreadySubscribed();
   }
 
   /** A Razorpay webhook. Events other than subscription.* are acknowledged and ignored. */

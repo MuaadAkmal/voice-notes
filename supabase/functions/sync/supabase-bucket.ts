@@ -4,7 +4,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2.118.0';
 import type { BucketObject, FileBucket } from './_shared/sync/file-bucket.ts';
 import type { FileKind } from './_shared/sync/protocol.ts';
 
-const BUCKETS: Record<FileKind, string> = { audio: 'audio', image: 'images' };
+export const BUCKETS: Record<FileKind, string> = { audio: 'audio', image: 'images' };
 const URL_SECONDS = 120;
 const PAGE = 1000;
 

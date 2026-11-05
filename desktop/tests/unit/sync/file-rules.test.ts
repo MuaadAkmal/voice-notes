@@ -162,3 +162,26 @@ it('with no cap, any size within the file limit is ok', async () => {
   await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
   expect((await rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size: 1000, full: true })).status).toBe('ok');
 });
+
+it('with a reservation, the reservation decides, for the file at its account path', async () => {
+  const { store, bucket, push } = setup();
+  const asked: unknown[] = [];
+  let fits = false;
+  const quota = async () => ({ used: 0, limit: 100 });
+  const rules = new FileRules(store, bucket, Date.now, quota, async (...a) => (asked.push(a), fits));
+  await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
+  const ask = () => rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size: 5, full: true });
+  expect(await ask()).toEqual({ status: 'storage-full' });
+  fits = true;
+  expect((await ask()).status).toBe('ok');
+  expect(asked[0]).toEqual([USER, 'audio', `${USER}/${NOTE}.webm`, 5]);
+});
+
+it('files that arrived bigger than claimed are removed before the next upload', async () => {
+  const { store, bucket, push } = setup();
+  await bucket.put('audio', `${USER}/liar.webm`, new Uint8Array(10));
+  const rules = new FileRules(store, bucket, Date.now, async () => null, async () => true, async () => [{ kind: 'audio', path: `${USER}/liar.webm` }]);
+  await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
+  await rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size: 5, full: true });
+  expect((await bucket.list('audio', USER)).map((o) => o.name)).not.toContain('liar.webm');
+});

@@ -6,6 +6,7 @@ import {
   AlreadySubscribed,
   BadSignature,
   BillingCore,
+  CheckoutBusy,
   NoSubscription,
   type PlanIds,
 } from '../../../src/shared/billing/core';
@@ -35,12 +36,13 @@ beforeAll(async () => {
   pg = new PGlite();
   await pg.exec(`create schema auth; create table auth.users (id uuid primary key);
     create role anon; create role authenticated; create role service_role;
-    create schema storage; create table storage.objects (bucket_id text, name text, metadata jsonb);
+    create schema storage; create table storage.objects (bucket_id text, name text, metadata jsonb, updated_at timestamptz default now());
     insert into auth.users values ('${A}'), ('${B}');`);
   for (const m of [
     '20261030105023_asr_usage.sql',
     '20261103065658_plan_limits.sql',
     '20261103065700_subscriptions.sql',
+    '20261105092013_billing_storage_races.sql',
   ])
     await pg.exec(migration(m));
 }, 60_000);
@@ -73,6 +75,12 @@ class FakeRazorpay implements Razorpay {
     this.cancelled.push(id);
     return this.subs.get(id)!;
   }
+  async cancelNow(id: string) {
+    const sub = this.subs.get(id)!;
+    if (sub.status !== 'created') throw new Error(`can't cancel a ${sub.status} subscription`);
+    sub.status = 'cancelled';
+    return sub;
+  }
 }
 
 let rzp: FakeRazorpay;
@@ -81,7 +89,7 @@ let store: BillingStore;
 
 beforeEach(async () => {
   await pg.exec(
-    'truncate public.subscriptions, public.account_plans, public.asr_usage, storage.objects',
+    'truncate public.subscriptions, public.account_plans, public.asr_usage, storage.objects, public.billing_checkouts, public.storage_reservations',
   );
   rzp = new FakeRazorpay();
   store = new BillingStore(pgBillingDb(pg));
@@ -174,6 +182,16 @@ describe('billing', () => {
     expect(await plan(A)).toBe('free');
   });
 
+  it('in the same second, an earlier state of the subscription never replaces a later one', async () => {
+    await core.checkout(A, { plan: 'standard', period: 'monthly' });
+    await hook({ id: 'sub_1', status: 'active' }, 'subscription.activated', T);
+    await hook({ id: 'sub_1', status: 'authenticated' }, 'subscription.authenticated', T);
+    expect(await plan(A)).toBe('standard');
+    await hook({ id: 'sub_1', status: 'cancelled' }, 'subscription.cancelled', T + 5);
+    await hook({ id: 'sub_1', status: 'active' }, 'subscription.charged', T + 5);
+    expect(await plan(A)).toBe('free');
+  });
+
   it('the same event twice is harmless', async () => {
     await hook({ id: 'sub_9', status: 'active' }, 'subscription.charged', T);
     await hook({ id: 'sub_9', status: 'active' }, 'subscription.charged', T);
@@ -251,6 +269,34 @@ describe('billing', () => {
     await expect(
       core.checkout(A, { plan: 'pro', period: 'monthly' }),
     ).rejects.toBeInstanceOf(AlreadySubscribed);
+  });
+
+  it('two checkouts at once: one goes through, the other is told to wait', async () => {
+    const results = await Promise.allSettled([
+      core.checkout(A, { plan: 'standard', period: 'monthly' }),
+      core.checkout(A, { plan: 'pro', period: 'monthly' }),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((r) => r.status === 'rejected')).toMatchObject({ reason: expect.any(CheckoutBusy) });
+    expect(rzp.subs.size).toBe(1);
+    // Finished, the next checkout may start (a crashed one's claim lapses after two minutes).
+    await core.checkout(A, { plan: 'pro', period: 'monthly' });
+  });
+
+  it('a new checkout cancels the earlier unpaid ones, so only one can be paid', async () => {
+    await core.checkout(A, { plan: 'standard', period: 'monthly' });
+    await core.checkout(A, { plan: 'pro', period: 'annual' });
+    expect(rzp.subs.get('sub_1')!.status).toBe('cancelled');
+    expect(rzp.subs.get('sub_2')!.status).toBe('created');
+    expect((await store.unpaid(A)).map((s) => s.id)).toEqual(['sub_2']);
+  });
+
+  it('an unpaid checkout that was paid after all blocks the new one', async () => {
+    await core.checkout(A, { plan: 'standard', period: 'monthly' });
+    rzp.subs.get('sub_1')!.status = 'active'; // paid, webhook not here yet
+    await expect(core.checkout(A, { plan: 'pro', period: 'monthly' })).rejects.toBeInstanceOf(AlreadySubscribed);
+    expect(await plan(A)).toBe('standard');
+    expect(rzp.subs.size).toBe(1);
   });
 
   it('verify checks the signature and the owner, then saves what Razorpay has', async () => {
@@ -394,5 +440,54 @@ describe('billing handler', () => {
       error: 'misconfigured',
       missing: ['RAZORPAY_KEY_SECRET'],
     });
+  });
+});
+
+describe('storage_reserve', () => {
+  const FREE = 262144000;
+  const reserve = async (name: string, size: number, user = A) =>
+    (await pg.query<{ ok: boolean }>('select ok from public.storage_reserve($1, $2, $3, $4)', [user, 'audio', `${user}/${name}`, size])).rows[0].ok;
+  const upload = (name: string, size: number) =>
+    pg.query("insert into storage.objects values ('audio', $1, jsonb_build_object('size', $2::bigint))", [`${A}/${name}`, size]);
+
+  it('parallel uploads cannot share the same free space', async () => {
+    expect(await reserve('a.webm', FREE - 10)).toBe(true);
+    expect(await reserve('b.webm', 20)).toBe(false); // a's room is taken, though a hasn't arrived
+    expect(await reserve('b.webm', 10)).toBe(true);
+  });
+
+  it('asking again for the same file replaces its reservation; an arrived file counts once', async () => {
+    expect(await reserve('a.webm', FREE - 10)).toBe(true);
+    expect(await reserve('a.webm', FREE - 10)).toBe(true); // a retry
+    await upload('a.webm', FREE - 10);
+    expect(await reserve('b.webm', 10)).toBe(true);
+    expect(await reserve('a.webm', FREE - 10)).toBe(true); // a replacement doesn't count against itself
+    expect(await reserve('c.webm', 1)).toBe(false);
+  });
+
+  it('reservations outlive the 2 hour upload URL, then lapse; they are per account', async () => {
+    expect(await reserve('a.webm', FREE)).toBe(true);
+    expect(await reserve('x.webm', FREE, B)).toBe(true);
+    await pg.query("update public.storage_reservations set at = now() - interval '2 hours'");
+    expect(await reserve('b.webm', 1)).toBe(false); // the URL may still be used
+    await pg.query("update public.storage_reservations set at = now() - interval '2 hours 16 minutes'");
+    expect(await reserve('b.webm', FREE)).toBe(true);
+  });
+
+  it('at most 20 files waiting to arrive per account', async () => {
+    for (let i = 0; i < 20; i++) expect(await reserve(`${i}.webm`, 1)).toBe(true);
+    expect(await reserve('21.webm', 1)).toBe(false);
+    expect(await reserve('0.webm', 1)).toBe(true); // asking again for one already reserved
+    await upload('0.webm', 1);
+    expect(await reserve('21.webm', 1)).toBe(true);
+  });
+
+  it('lists files that arrived bigger than claimed, not ones written before their reservation', async () => {
+    const oversized = async () => (await pg.query<{ name: string }>('select name from public.storage_oversized($1)', [A])).rows.map((r) => r.name);
+    await pg.query("insert into storage.objects values ('audio', $1, '{\"size\": 500}', now() - interval '1 hour')", [`${A}/old.webm`]);
+    expect(await reserve('old.webm', 10)).toBe(true); // an older, bigger copy is being replaced
+    expect(await reserve('liar.webm', 1)).toBe(true);
+    await upload('liar.webm', 50_000_000);
+    expect(await oversized()).toEqual([`${A}/liar.webm`]);
   });
 });

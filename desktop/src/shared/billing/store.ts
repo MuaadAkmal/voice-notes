@@ -81,6 +81,21 @@ export class BillingStore {
     return r ? toRow(r) : null;
   }
 
+  /** Claims the account's checkout: false while another checkout of the account is under way. */
+  async beginCheckout(user: string): Promise<boolean> {
+    const [r] = await this.db.rpc('billing_checkout_begin', { p_user: user });
+    return r?.ok === true;
+  }
+
+  async endCheckout(user: string): Promise<void> {
+    await this.db.rpc('billing_checkout_end', { p_user: user });
+  }
+
+  /** The account's checkouts started and never paid, oldest first. */
+  async unpaid(user: string): Promise<SubscriptionRow[]> {
+    return (await this.db.rpc('billing_unpaid', { p_user: user })).map(toRow);
+  }
+
   async cloud(
     user: string,
     period: string,

@@ -3,6 +3,7 @@ import {
   BadRequest,
   BadSignature,
   type BillingCore,
+  CheckoutBusy,
   NoSubscription,
 } from './core.ts';
 import { RazorpayFailed } from './razorpay.ts';
@@ -94,6 +95,8 @@ export async function handleBilling(
       return json(400, { error: 'bad_signature' });
     if (err instanceof AlreadySubscribed)
       return json(409, { error: 'already_subscribed' });
+    if (err instanceof CheckoutBusy)
+      return json(409, { error: 'checkout_busy' });
     if (err instanceof NoSubscription)
       return json(404, { error: 'no_subscription' });
     if (err instanceof RazorpayFailed) {

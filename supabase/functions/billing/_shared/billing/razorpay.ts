@@ -20,6 +20,8 @@ export interface Razorpay {
   }): Promise<RazorpaySubscription>;
   fetch(id: string): Promise<RazorpaySubscription>;
   cancelAtCycleEnd(id: string): Promise<RazorpaySubscription>;
+  /** Cancels at once: for a checkout never paid, so it can't be paid later. */
+  cancelNow(id: string): Promise<RazorpaySubscription>;
 }
 
 export function razorpayApi(
@@ -59,6 +61,10 @@ export function razorpayApi(
     cancelAtCycleEnd: (id) =>
       call('POST', `/subscriptions/${encodeURIComponent(id)}/cancel`, {
         cancel_at_cycle_end: 1,
+      }),
+    cancelNow: (id) =>
+      call('POST', `/subscriptions/${encodeURIComponent(id)}/cancel`, {
+        cancel_at_cycle_end: 0,
       }),
   };
 }
