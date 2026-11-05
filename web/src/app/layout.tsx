@@ -32,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: `try{if(localStorage.getItem("theme")==="dark")document.documentElement.dataset.theme="dark"}catch{}` }} />
         {/* Motion starts things hidden and JavaScript reveals them, so without JavaScript show them at once. The toggle needs JavaScript too. */}
         <noscript>
-          <style>{`[style*="opacity:0"]{opacity:1!important;transform:none!important}.theme-toggle{display:none!important}`}</style>
+          <style>{`[style*="opacity:0"]{opacity:1!important;transform:none!important;filter:none!important}.theme-toggle{display:none!important}`}</style>
         </noscript>
       </head>
       <body className="min-h-full flex flex-col">
