@@ -51,6 +51,28 @@ describe('storage', () => {
   });
 });
 
+describe('sweep (the scheduled job)', () => {
+  const request = (key: string | null) =>
+    new Request(`${BASE}/sweep`, { method: 'POST', headers: key ? { 'x-sweep-key': key } : {}, body: '{}' });
+  const base = { verify: async () => null, core: new SyncCore(new MemoryStore()) };
+
+  it("runs on the job's key, with no account token", async () => {
+    const keys: string[] = [];
+    const sweep = async (key: string) => (keys.push(key), key === 'k');
+    expect((await handle(request('k'), { ...base, sweep })).status).toBe(200);
+    expect((await handle(request('wrong'), { ...base, sweep })).status).toBe(401);
+    expect((await handle(request(null), { ...base, sweep })).status).toBe(401);
+    expect(keys).toEqual(['k', 'wrong']);
+  });
+
+  it('is 404 without the sweep dep, and a failure says nothing more', async () => {
+    expect((await handle(request('k'), base)).status).toBe(404);
+    const res = await handle(request('k'), { ...base, sweep: async () => Promise.reject(new Error('storage down')) });
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Server error' });
+  });
+});
+
 it('no token, or a token that does not verify, is 401', async () => {
   const { call } = setup();
   expect((await call('pull', { clientId: 'A', cursor: 0 }, null)).status).toBe(401);

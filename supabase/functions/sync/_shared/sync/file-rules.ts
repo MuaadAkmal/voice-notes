@@ -16,8 +16,8 @@ export type StorageQuota = (userId: string) => Promise<{ used: number; limit: nu
  * false: it doesn't fit. Used instead of the quota check when given.
  */
 export type StorageReserve = (userId: string, kind: FileKind, path: string, size: number) => Promise<boolean>;
-/** The account's files that arrived bigger than their upload was reserved for (`storage_oversized`). */
-export type StorageOversized = (userId: string) => Promise<{ kind: FileKind; path: string }[]>;
+/** The account's files that arrived bigger than their upload was reserved for (`storage_oversized`); null: every account's. */
+export type StorageOversized = (userId: string | null) => Promise<{ kind: FileKind; path: string }[]>;
 
 export class FileRules {
   private readonly lastSweep = new Map<string, number>();
@@ -49,8 +49,13 @@ export class FileRules {
     return !q || q.used + req.size <= q.limit;
   }
 
+  /** Every account's files uploaded bigger than claimed, for the scheduled job: one that went quiet keeps none. */
+  async sweepOversized(): Promise<void> {
+    await this.removeOversized(null);
+  }
+
   /** Removes files uploaded bigger than claimed: a size the quota never saw can't stay. */
-  private async removeOversized(userId: string): Promise<void> {
+  private async removeOversized(userId: string | null): Promise<void> {
     const files = (await this.oversized?.(userId)) ?? [];
     for (const kind of ['audio', 'image'] as const) {
       const paths = files.filter((f) => f.kind === kind).map((f) => f.path);

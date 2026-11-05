@@ -45,6 +45,7 @@ beforeAll(async () => {
     '20261103065700_subscriptions.sql',
     '20261105092013_billing_storage_races.sql',
     '20261105093825_billing_status_rank.sql',
+    '20261105100000_storage_oversized_sweep.sql',
   ])
     await pg.exec(migration(m));
 }, 60_000);
@@ -511,8 +512,10 @@ describe('storage_reserve', () => {
   const FREE = 262144000;
   const reserve = async (name: string, size: number, user = A) =>
     (await pg.query<{ ok: boolean }>('select ok from public.storage_reserve($1, $2, $3, $4)', [user, 'audio', `${user}/${name}`, size])).rows[0].ok;
-  const upload = (name: string, size: number) =>
-    pg.query("insert into storage.objects values ('audio', $1, jsonb_build_object('size', $2::bigint))", [`${A}/${name}`, size]);
+  const upload = (name: string, size: number, user = A) =>
+    pg.query("insert into storage.objects values ('audio', $1, jsonb_build_object('size', $2::bigint))", [`${user}/${name}`, size]);
+  const oversized = async (user: string | null) =>
+    (await pg.query<{ name: string }>('select name from public.storage_oversized($1)', [user])).rows.map((r) => r.name).sort();
 
   it('parallel uploads cannot share the same free space', async () => {
     expect(await reserve('a.webm', FREE - 10)).toBe(true);
@@ -547,11 +550,27 @@ describe('storage_reserve', () => {
   });
 
   it('lists files that arrived bigger than claimed, not ones written before their reservation', async () => {
-    const oversized = async () => (await pg.query<{ name: string }>('select name from public.storage_oversized($1)', [A])).rows.map((r) => r.name);
     await pg.query("insert into storage.objects values ('audio', $1, '{\"size\": 500}', now() - interval '1 hour')", [`${A}/old.webm`]);
     expect(await reserve('old.webm', 10)).toBe(true); // an older, bigger copy is being replaced
     expect(await reserve('liar.webm', 1)).toBe(true);
     await upload('liar.webm', 50_000_000);
-    expect(await oversized()).toEqual([`${A}/liar.webm`]);
+    expect(await oversized(A)).toEqual([`${A}/liar.webm`]);
+  });
+
+  it('the scheduled sweep lists every account, and lapsed reservations stay while they find an oversized file', async () => {
+    expect(await reserve('liar.webm', 1)).toBe(true);
+    expect(await reserve('fine.webm', 5)).toBe(true);
+    expect(await reserve('liar.webm', 1, B)).toBe(true);
+    await upload('liar.webm', 50_000_000);
+    await upload('fine.webm', 5);
+    await upload('liar.webm', 9, B);
+    expect(await oversized(null)).toEqual([`${A}/liar.webm`, `${B}/liar.webm`]);
+    await pg.query("update public.storage_reservations set at = now() - interval '3 hours'");
+    await pg.query("update storage.objects set updated_at = now() - interval '3 hours'");
+    await pg.query('select public.storage_prune_reservations(null)');
+    expect(await oversized(null)).toEqual([`${A}/liar.webm`, `${B}/liar.webm`]);
+    expect((await pg.query('select 1 from public.storage_reservations')).rows).toHaveLength(2);
+    expect(await reserve('next.webm', 1)).toBe(true); // an upload's own pruning keeps them too
+    expect(await oversized(A)).toEqual([`${A}/liar.webm`]);
   });
 });

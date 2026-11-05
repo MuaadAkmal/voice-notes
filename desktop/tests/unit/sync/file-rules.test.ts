@@ -177,6 +177,22 @@ it('with a reservation, the reservation decides, for the file at its account pat
   expect(asked[0]).toEqual([USER, 'audio', `${USER}/${NOTE}.webm`, 5]);
 });
 
+it("the scheduled sweep removes every account's files that arrived bigger than claimed", async () => {
+  const { store, bucket } = setup();
+  await bucket.put('audio', `${USER}/liar.webm`, new Uint8Array(10));
+  await bucket.put('image', `${OTHER}/liar.png`, new Uint8Array(10));
+  await bucket.put('audio', `${USER}/fine.webm`, new Uint8Array(10));
+  const asked: (string | null)[] = [];
+  const rules = new FileRules(store, bucket, Date.now, async () => null, async () => true, async (user) => (
+    asked.push(user),
+    [{ kind: 'audio', path: `${USER}/liar.webm` }, { kind: 'image', path: `${OTHER}/liar.png` }]
+  ));
+  await rules.sweepOversized();
+  expect(asked).toEqual([null]);
+  expect((await bucket.list('audio', USER)).map((o) => o.name)).toEqual(['fine.webm']);
+  expect(await bucket.list('image', OTHER)).toEqual([]);
+});
+
 it('files that arrived bigger than claimed are removed before the next upload', async () => {
   const { store, bucket, push } = setup();
   await bucket.put('audio', `${USER}/liar.webm`, new Uint8Array(10));

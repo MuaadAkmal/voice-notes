@@ -17,6 +17,11 @@ export type HandlerDeps = {
   storage?(userId: string): Promise<StorageResponse>;
   /** Tells the account's other PCs to sync now (a Realtime broadcast); `from` is the pushing PC. */
   notify?(userId: string, from: string): Promise<void>;
+  /**
+   * Removes every account's oversized files (`FileRules.sweepOversized`) for the scheduled job, whose
+   * `x-sweep-key` it checks first; false: not the job's key. Without it the `sweep` route is 404.
+   */
+  sweep?(key: string): Promise<boolean>;
   /** Browser origins allowed to call (the web app); a request without an Origin is unaffected. */
   origins?: readonly string[];
 };
@@ -53,6 +58,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   const last = parts[parts.length - 1];
   const route = parts[parts.length - 2] === 'files' ? `files/${last}` : last;
   const routes = [...(deps.files ? ['push', 'pull', 'files/upload', 'files/download'] : ['push', 'pull']), ...(deps.storage ? ['storage'] : [])];
+  if (req.method === 'POST' && route === 'sweep' && deps.sweep) return sweep(req, deps.sweep);
   if (req.method !== 'POST' || !routes.includes(route)) return reply(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
@@ -91,6 +97,17 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
       return reply(400, { error: 'A change could not be stored' });
     console.error('[sync] failed', err); // the function's own log; the client only learns that it failed
     return reply(500, { error: 'Server error' });
+  }
+}
+
+/** The scheduled job's call: no account, only its key. */
+async function sweep(req: Request, run: (key: string) => Promise<boolean>): Promise<Response> {
+  const key = req.headers.get('x-sweep-key') ?? '';
+  try {
+    return key && (await run(key)) ? json(200, { ok: true }) : json(401, { error: 'Not allowed' });
+  } catch (err) {
+    console.error('[sync] sweep', err);
+    return json(500, { error: 'Server error' });
   }
 }
 

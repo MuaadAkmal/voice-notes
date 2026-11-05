@@ -35,12 +35,23 @@ async function reserve(userId: string, kind: FileKind, path: string, size: numbe
   const [r] = await sql`select ok from public.storage_reserve(${userId}::uuid, ${BUCKETS[kind]}, ${path}, ${size})`;
   return r?.ok === true;
 }
-// Files that arrived bigger than they were reserved for, which FileRules removes.
-async function oversized(userId: string): Promise<{ kind: FileKind; path: string }[]> {
+// Files that arrived bigger than they were reserved for, which FileRules removes; null: every account's.
+async function oversized(userId: string | null): Promise<{ kind: FileKind; path: string }[]> {
   const rows = await sql`select bucket_id, name from public.storage_oversized(${userId}::uuid)`;
   return rows.map((r) => ({ kind: r.bucket_id === BUCKETS.audio ? 'audio' : 'image', path: r.name as string }));
 }
 const files = new FileRules(store, new SupabaseBucket(storage), Date.now, quota, reserve, oversized);
+
+// The scheduled job (*_storage_sweep_job.sql) sends the key it keeps in the vault; compared as digests, in constant time.
+async function sweep(key: string): Promise<boolean> {
+  const [r] = await sql`select decrypted_secret as key from vault.decrypted_secrets where name = 'storage_sweep_key'`;
+  if (!r?.key) return false;
+  const digest = async (s: string) => new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+  const [a, b] = await Promise.all([digest(key), digest(r.key as string)]);
+  if (a.reduce((diff, x, i) => diff | (x ^ b[i]), 0) !== 0) return false;
+  await files.sweepOversized();
+  return true;
+}
 
 /** The signed-in user's id from a verified access token; anything else is no one. */
 async function verify(jwt: string): Promise<string | null> {
@@ -58,4 +69,4 @@ async function notify(userId: string, from: string): Promise<void> {
 const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://app.voicenote.cloud,http://localhost:3000').split(',');
 
 // storage: the same numbers, for the app's storage bar and its 80% / full notices.
-Deno.serve((req) => handle(req, { verify, core, files, storage: quota, notify, origins }));
+Deno.serve((req) => handle(req, { verify, core, files, storage: quota, notify, sweep, origins }));
