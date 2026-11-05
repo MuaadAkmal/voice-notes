@@ -26,6 +26,8 @@ const core = missing.length
   ? null
   : new CommandsCore({
       chat: groqChat({ apiKey, model: Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-20b', fetch }),
+      // The language learner writes scripts and translations, which the small model gets wrong.
+      learnChat: groqChat({ apiKey, model: Deno.env.get('GROQ_LEARN_MODEL') || 'openai/gpt-oss-120b', fetch }),
       usage: new RestUsageStore({ url: SUPABASE_URL, serviceKey, fetch }),
       dailyLimit: Number(Deno.env.get('COMMANDS_DAILY_LIMIT')) || 200,
       now: Date.now,

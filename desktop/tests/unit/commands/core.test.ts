@@ -139,6 +139,28 @@ ${LEARN_RULE}`);
   expect(LEARN_RULE).toMatch(/^- Exception to the rules above/); // or the model may refuse to translate
 });
 
+it('the learner rule covers the ways people say it, and never lets a part go blank', () => {
+  for (const said of ['I learned', 'add the word', 'remember', 'how do you say', 'meaning']) expect(LEARN_RULE).toContain(said);
+  expect(LEARN_RULE).toContain('English letters'); // a word heard in Latin letters still gets its script
+  expect(LEARN_RULE).toContain('translated'); // an English word becomes the language's word
+  expect(LEARN_RULE).toContain('never "?"');
+});
+
+it('with learn, asks the learner model when there is one; otherwise the usual one', async () => {
+  const chat = vi.fn(async () => '{"page": 2, "items": ["x"]}');
+  const learnChat = vi.fn(async () => '{"page": 2, "items": ["جوان · jawaan · young"]}');
+  const c = new CommandsCore({ chat, learnChat, usage: new MemoryUsageStore(), dailyLimit: 200, now: () => NOW });
+  expect(await c.resolve('u', { text: 'add the word jawaan to Arabic', pages: PAGES, learn: true })).toEqual({
+    action: 'append',
+    pageId: 'a',
+    items: ['جوان · jawaan · young'],
+  });
+  expect(chat).not.toHaveBeenCalled();
+  await c.resolve('u', { text: 'add milk to groceries', pages: PAGES });
+  expect(chat).toHaveBeenCalledTimes(1);
+  expect(learnChat).toHaveBeenCalledTimes(1);
+});
+
 it('without learn, the prompt is as before', async () => {
   const { chat, core: c } = core('{"page": 1, "items": ["x"]}');
   await c.resolve('u', { text: 'x', pages: PAGES, learn: 'yes' as unknown as true });

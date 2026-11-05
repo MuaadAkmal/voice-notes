@@ -24,7 +24,13 @@ Rules:
 export const HERE_RULE = `- If "here" is true and the user means what they are looking at ("this", "this video", "this page", "this file", "it", or the same in their language), use exactly "@this" as that item. It can sit among other items: "add this and milk" gives ["@this", "milk"].`;
 
 /** Added while the app's language learner is on (`learn`). */
-export const LEARN_RULE = `- Exception to the rules above, for words being learned: if the user says they learned, or want to remember, a word or phrase in a language ("I learned a new word in Tamil, vanakkam"), the page is the one named for that language, and the item is exactly one string: "<the word in that language's own script> · <how it sounds, in English letters> · <its meaning in English>" ("வணக்கம் · vanakkam · hello"). If unsure of the script, write the word as spoken. Keep it on one line.`;
+export const LEARN_RULE = `- Exception to the rules above, for words being learned: when the command puts a word or phrase on a page named for a language, however it is said ("I learned a new word in Tamil, vanakkam", "add the word jawaan to Arabic", "remember cómo estás in Spanish", "how do you say secret in Tamil", "mashhoor meaning famous to Arabic"), the page is the one named for that language and the item is exactly one string per word or phrase: "<it in that language's own script> · <how it sounds, in English letters> · <its meaning in English>".
+  Examples: "வணக்கம் · vanakkam · hello", "مشهور · mashhoor · famous", "cómo estás · KOH-moh ehs-TAHS · how are you".
+  - The word may arrive in English letters, spelled by sound ("jawaan", "shukran"): write it in that language's script anyway ("جوان", "شكرا").
+  - An English word to learn in that language ("secret" in Tamil) is translated: "ரகசியம் · ragasiyam · secret".
+  - A meaning the user says ("meaning famous") is the meaning.
+  - Leave out the command words ("I learned a new word in", "called", "meaning", "the word").
+  - Always give your best guess for all three parts, never "?" or "???". Keep each item on one line.`;
 
 export const REMIND_PROMPT = `You set reminders from voice commands.
 You get the current local time ("now", with its UTC offset), the time zone and the command. Reply with JSON only:
@@ -40,6 +46,8 @@ const YEAR_MS = 365 * 86_400_000;
 
 export type CommandsDeps = {
   chat: Chat;
+  /** Used instead of `chat` while the language learner is on: scripts and translations need a stronger model. */
+  learnChat?: Chat;
   usage: UsageStore;
   dailyLimit: number;
   now(): number;
@@ -66,7 +74,7 @@ export class CommandsCore {
     const timed = <T>(name: string, p: Promise<T>) => p.finally(() => (times[name] = this.d.now() - t0));
     const [count, content] = await Promise.all([
       timed('usage', this.d.usage.increment(userId, day)),
-      timed('llm', this.d.chat([SYSTEM_PROMPT, ...(req.here ? [HERE_RULE] : []), ...(req.learn ? [LEARN_RULE] : [])].join('\n'), user)),
+      timed('llm', (req.learn ? (this.d.learnChat ?? this.d.chat) : this.d.chat)([SYSTEM_PROMPT, ...(req.here ? [HERE_RULE] : []), ...(req.learn ? [LEARN_RULE] : [])].join('\n'), user)),
     ]);
     this.d.timing?.(times);
     if (count > this.d.dailyLimit) throw new LimitReached();
