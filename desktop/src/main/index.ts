@@ -982,7 +982,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
   // A new account's first launch, decided once per boot after the first sync brought the account's rows in.
   // Left unfinished before a restart: shown again at once, no need to wait for a sync.
-  let onboarding = settings.onboardingPending && !settings.onboarded;
+  // VOICE_NOTES_SHOW_ONBOARDING=1 (dev runs only) shows it anyway, to look at it without a new account.
+  let onboarding = (settings.onboardingPending && !settings.onboarded) || (!app.isPackaged && process.env.VOICE_NOTES_SHOW_ONBOARDING === '1');
   let firstRunDecided = false;
   const decideFirstRun = () => {
     if (firstRunDecided) return;
