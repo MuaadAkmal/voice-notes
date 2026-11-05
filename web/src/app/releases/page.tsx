@@ -40,7 +40,8 @@ export default function Releases() {
     <Prose title="What's new" updated={RELEASES[0].date}>
       <p>Voice Notes updates itself in the background. Here&apos;s what changed in each version.</p>
       {RELEASES.map((r) => (
-        <section key={r.version}>
+        // id: the app's "What's new" link opens /releases#<version>; scroll-mt keeps it clear of the sticky header.
+        <section key={r.version} id={r.version} className="scroll-mt-24">
           <h2>
             {r.version} <span className="text-base font-normal text-muted-foreground">· {r.date}</span>
           </h2>
