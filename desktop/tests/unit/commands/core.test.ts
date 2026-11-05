@@ -144,6 +144,7 @@ it('the learner rule covers the ways people say it, and never lets a part go bla
   expect(LEARN_RULE).toContain('English letters'); // a word heard in Latin letters still gets its script
   expect(LEARN_RULE).toContain('translated'); // an English word becomes the language's word
   expect(LEARN_RULE).toContain('never "?"');
+  expect(LEARN_RULE).toContain('real word it most likely is'); // "towil" → طويل, not a letter-by-letter copy
 });
 
 it('with learn, asks the learner model when there is one; otherwise the usual one', async () => {

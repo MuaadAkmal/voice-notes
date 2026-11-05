@@ -27,6 +27,7 @@ export const HERE_RULE = `- If "here" is true and the user means what they are l
 export const LEARN_RULE = `- Exception to the rules above, for words being learned: when the command puts a word or phrase on a page named for a language, however it is said ("I learned a new word in Tamil, vanakkam", "add the word jawaan to Arabic", "remember cómo estás in Spanish", "how do you say secret in Tamil", "mashhoor meaning famous to Arabic"), the page is the one named for that language and the item is exactly one string per word or phrase: "<it in that language's own script> · <how it sounds, in English letters> · <its meaning in English>".
   Examples: "வணக்கம் · vanakkam · hello", "مشهور · mashhoor · famous", "cómo estás · KOH-moh ehs-TAHS · how are you".
   - The word may arrive in English letters, spelled by sound ("jawaan", "shukran"): write it in that language's script anyway ("جوان", "شكرا").
+  - Those sound spellings are often a little off ("towil" for taweel): write the real word it most likely is, with its correct spelling and the usual English-letter form, using the meaning to choose when one is given ("towil, meaning long" gives "طويل · taweel · long"). Never copy the sound letter by letter.
   - An English word to learn in that language ("secret" in Tamil) is translated: "ரகசியம் · ragasiyam · secret".
   - A meaning the user says ("meaning famous") is the meaning.
   - Leave out the command words ("I learned a new word in", "called", "meaning", "the word").
