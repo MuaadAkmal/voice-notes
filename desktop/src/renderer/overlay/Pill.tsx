@@ -132,7 +132,8 @@ function UndoPill({ message, undo, shell, hover }: { message: string; undo: Undo
     api.cancelMove();
   };
   return (
-    <div {...hover} data-morph className={`${shell} w-64 flex-col items-stretch gap-1 rounded-2xl p-2 text-sm`}>
+    // The shell's rounded-full would win over rounded-2xl and turn the box into a circle.
+    <div {...hover} data-morph className={`${shell.replace('rounded-full', 'rounded-2xl')} w-64 flex-col items-stretch gap-1 p-2 text-sm`}>
       <input
         ref={input}
         value={query}
