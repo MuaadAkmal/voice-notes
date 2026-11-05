@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { GoogleCalendarCard } from './GoogleCalendarCard';
 import { useConnectors } from './useConnectors';
-import { DEFAULT_WAKE_WORDS, MAX_WAKE_WORDS } from '../../shared/note-command';
+import { DEFAULT_WAKE_WORDS, MAX_WAKE_WORDS, wakeWordRisk } from '../../shared/note-command';
 
 const api = window.dashboardApi;
 
@@ -120,6 +120,14 @@ function VoiceToLists() {
             A name to start with, or several separated by commas. “Hey” in front works too. Empty means{' '}
             {DEFAULT_WAKE_WORDS[0]}.
           </span>
+          {words
+            .filter((w) => wakeWordRisk(w))
+            .map((w) => (
+              <span key={w} className="text-xs text-amber-600 dark:text-amber-400">
+                “{w}” sounds like an everyday word, so dictation that starts with it may be taken as a command instead of
+                pasted. A less common name works better.
+              </span>
+            ))}
         </label>
       )}
     </div>

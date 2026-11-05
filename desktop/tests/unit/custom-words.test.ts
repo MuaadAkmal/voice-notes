@@ -1,5 +1,13 @@
 import { expect, it } from 'vitest';
-import { glossaryPrompt, MAX_WORDS, normalizeWords } from '../../src/shared/custom-words';
+import { dictationWords, glossaryPrompt, MAX_WORDS, normalizeWords } from '../../src/shared/custom-words';
+
+it('a dictation listens for the wake words first, so a full list never drops them', () => {
+  const full = Array.from({ length: MAX_WORDS }, (_, i) => `word${i}`);
+  expect(dictationWords(full, ['Pixie'])[0]).toBe('Pixie');
+  expect(dictationWords(full, ['Pixie'])).toHaveLength(MAX_WORDS);
+  expect(dictationWords(['pixie', 'Supabase'], ['Pixie'])).toEqual(['Pixie', 'Supabase']);
+  expect(dictationWords(['Supabase'], [])).toEqual(['Supabase']);
+});
 
 it('trims, strips characters Scribe refuses and dedupes ignoring case', () => {
   expect(normalizeWords(['  Muaad ', 'supabase', 'Supabase', '', 'a{b}c'])).toEqual(['Muaad', 'supabase', 'abc']);

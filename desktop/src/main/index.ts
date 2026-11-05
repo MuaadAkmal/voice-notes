@@ -11,7 +11,7 @@ import { acceptsDrops } from '../shared/later';
 import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
-import { glossaryPrompt } from '../shared/custom-words';
+import { dictationWords, glossaryPrompt } from '../shared/custom-words';
 import { cleanTranscript } from '../shared/transcription';
 import { OFF as POMODORO_OFF, type Pomodoro } from '../shared/pomodoro';
 import { DictationController } from './dictation/controller';
@@ -534,12 +534,14 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     getCapture: captureWindow,
     transcribe: async (audio, signal) => {
       const { transcription, transcribeLanguage } = settings;
+      // While voice to lists is on, the wake words are listened for too, so "Pixie" isn't heard as "Dixie".
+      const words = dictationWords(settings.customWords, settings.voiceToLists ? settings.noteWakeWords : []);
       const ep = await endpoint();
       try {
         const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
         if (ep.cloud) {
           const t0 = Date.now();
-          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), settings.customWords).catch((e: unknown) => {
+          const r = await cloudAsr.transcribe(audio, language, signal, cleanupOn(settings), words).catch((e: unknown) => {
             if (e instanceof CloudQuotaExceeded) minutesRefused(e.resetsAt); // after the dictation's own error
             throw e;
           });
@@ -554,7 +556,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
           language: transcribeLanguage === 'auto' ? null : transcribeLanguage,
           audio,
           filename: 'dictation.wav',
-          prompt: glossaryPrompt(settings.customWords) ?? undefined,
+          prompt: glossaryPrompt(words) ?? undefined,
           // The built-in engine may still be loading its model on a slow CPU.
           timeoutMs: transcription.provider === 'local' ? 120_000 : 30_000,
           signal,
@@ -609,6 +611,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     list: {
       enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
       wakeWords: () => settings.noteWakeWords,
+      pageTitles: () => store.pages.list().map((p) => p.title),
       add: async (text, capture) => {
         const r = await listCommands.add(text, capture);
         const undo = r.undo ? listUndo.offer(r.undo) : null;

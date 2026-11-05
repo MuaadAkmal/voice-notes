@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseNoteCommand, soundKey } from '../../src/shared/note-command';
+import { parseNoteCommand, soundKey, wakeWordRisk } from '../../src/shared/note-command';
 
 const q = (s: string, words?: string[]) => parseNoteCommand(s, words)?.text ?? null;
 
@@ -44,4 +44,37 @@ it('soundKey folds common spellings together', () => {
   expect(soundKey('Ziggy')).toBe(soundKey('Ziggie'));
   expect(soundKey('Koda')).toBe(soundKey('Coda'));
   expect(soundKey('Pixel')).not.toBe(soundKey('Pixie'));
+});
+
+const near = (s: string, words?: string[], pageTitles: string[] = ['Spanish', 'Arabic', 'Grocery list']) =>
+  parseNoteCommand(s, words, { pageTitles })?.text ?? null;
+
+it('a name one sound off counts when the rest is a command (heard as Dixie for Pixie)', () => {
+  expect(near('Dixie, add the word "cómo estás" to Spanish.')).toBe('add the word "cómo estás" to Spanish');
+  expect(near('Dixie, I learned a new word in Arabic called "jawaan".')).toBe('I learned a new word in Arabic called "jawaan');
+  expect(near('Bixie milk and eggs for the grocery list')).toBe('milk and eggs for the grocery list');
+});
+
+it('a near miss followed by ordinary speech still pastes', () => {
+  expect(near('Dixie Chicks were great last night')).toBeNull();
+  expect(near('Fixing I learned a new word')).toBeNull();
+  expect(near('If you add this page to Reddit')).toBeNull();
+  expect(near('Pixel phones add a lot of value')).toBeNull(); // two sounds off
+});
+
+it('short names only ever match exactly', () => {
+  expect(near('Sir, add milk to the grocery list', ['Siri'])).toBeNull();
+  expect(near('Siri, add milk to the grocery list', ['Siri'])).toBe('add milk to the grocery list');
+});
+
+it('without page titles there is no near match', () => {
+  expect(q('Dixie, add milk')).toBeNull();
+});
+
+it('warns about wake words that sound like everyday words', () => {
+  expect(wakeWordRisk('Pixie')).toBeNull();
+  expect(wakeWordRisk('Captain Mango')).toBeNull();
+  expect(wakeWordRisk('Max')).toBe('common');
+  expect(wakeWordRisk('Will')).toBe('common');
+  expect(wakeWordRisk('Sorrey')).toBe('common');
 });

@@ -43,6 +43,8 @@ export type DictationPorts = {
     enabled(): boolean;
     /** The names that start a command ("Pixie, …"). */
     wakeWords(): string[];
+    /** The page titles, so a misheard name ("Dixie, add … to Spanish") still counts when the rest is clearly a command. */
+    pageTitles?(): string[];
     /** The message is fit for the pill ("Added · blueberry → Groceries" or why not); undo: what Undo / Move to… may take back. */
     add(text: string, capture: Capture | null): Promise<{ ok: boolean; message: string; undo?: UndoOffer }>;
   };
@@ -219,15 +221,16 @@ export class DictationController {
   /** What the transcript asks for instead of a paste, if anything. A reminder, then the calendar trigger, then lists. */
   private command(text: string): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string; undo?: UndoOffer }> } | null {
     const { calendar, list, reminder } = this.p;
+    const listCommand = () => parseNoteCommand(text, list?.wakeWords() ?? [], { pageTitles: list?.pageTitles?.() ?? [] });
     if (reminder?.enabled()) {
-      const asked = [text, parseNoteCommand(text, list?.wakeWords() ?? [])?.text, afterCalendarTrigger(text)]
+      const asked = [text, listCommand()?.text, afterCalendarTrigger(text)]
         .map((t) => t?.trim().replace(/[\s.!?]+$/, ''))
         .find((t) => t && isReminder(t));
       if (asked) return { mark: '⏰', busy: 'Setting reminder…', failed: "Couldn't set the reminder", add: () => reminder.add(asked) };
     }
     const event = calendar?.enabled() ? parseCalendarCommand(text) : null;
     if (event && calendar) return { mark: '📅', busy: 'Adding to calendar…', failed: "Couldn't add the event.", add: () => calendar.add(event.text) };
-    const items = list?.enabled() ? parseNoteCommand(text, list.wakeWords()) : null;
+    const items = list?.enabled() ? listCommand() : null;
     if (items && list) return { mark: '📝', busy: 'Saving note…', failed: "Couldn't save the note", add: () => list.add(items.text, this.capture) };
     return null;
   }

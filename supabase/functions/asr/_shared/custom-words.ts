@@ -21,6 +21,11 @@ export function normalizeWords(words: readonly string[]): string[] {
   return out;
 }
 
+/** A dictation's words: the wake words first (so the cap never drops them), then the user's own. */
+export function dictationWords(customWords: readonly string[], wakeWords: readonly string[]): string[] {
+  return normalizeWords([...wakeWords, ...customWords]);
+}
+
 /** Whisper's prompt for the list, or null when there is nothing to send. */
 export function glossaryPrompt(words: readonly string[]): string | null {
   return words.length ? `Glossary: ${words.join(', ')}.` : null;
