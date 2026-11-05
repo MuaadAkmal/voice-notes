@@ -98,6 +98,7 @@ export type Settings = {
   languageLearner: boolean; // a "Pixie, I learned … in Tamil" word is written with pronunciation and meaning
   onboarded: boolean; // the account has seen (or skipped) the first-run screen, or had data before it existed (synced)
   onboardingPending: boolean; // this PC started the first-run screen and it isn't finished yet (survives a restart)
+  newLines: Record<string, number>; // page id → lines voice commands added since it was last opened (the "new" dot; this PC only)
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -246,6 +247,7 @@ export const Ch = {
   PagesStar: 'pages:star', // { ids, starred }
   PagesAppendEntry: 'pages:append-entry', // { id, text }
   PagesSetTask: 'pages:set-task', // { id, line, checked }
+  PagesSeen: 'pages:seen', // page id: it was opened, so its "new" dot goes
   PagesDeleteMany: 'pages:delete-many', // string[]
   PagesSaveImage: 'pages:save-image', // { bytes, ext } → vn-image:// url
   OpenExternal: 'app:open-external', // http(s)/mailto url

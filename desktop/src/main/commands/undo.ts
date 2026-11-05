@@ -23,11 +23,14 @@ export class ListUndo {
       pages: { get(id: string): Page | undefined; list(): Page[]; setBody(id: string, body: string): Page; appendLine(id: string, text: string): Page };
       pagesChanged(): void;
       now(): number;
+      /** The pages' "new" counts, kept in step with what was added, undone and moved. */
+      newLines?: { add(pageId: string, n: number): void; remove(pageId: string, n: number): void };
     },
   ) {}
 
   /** Registers lines just appended to `pageId`; returns the id the pill's buttons send back. */
   remember(pageId: string, lines: string[]): string {
+    this.d.newLines?.add(pageId, lines.length);
     const id = `u${++this.seq}`;
     this.actions = [...this.live(), { id, pageId, lines, at: this.d.now() }].slice(-KEEP);
     return id;
@@ -59,6 +62,7 @@ export class ListUndo {
     const lines = this.takeBack(a);
     if (!lines.length) return GONE;
     for (const line of lines) this.d.pages.appendLine(pageId, line);
+    this.d.newLines?.add(pageId, lines.length);
     this.d.pagesChanged();
     return `Moved → ${target.title || 'Untitled'}`;
   }
@@ -70,6 +74,7 @@ export class ListUndo {
     const { body, removed } = removeLastLines(page.body, a.lines);
     if (!removed.length) return [];
     this.d.pages.setBody(a.pageId, body);
+    this.d.newLines?.remove(a.pageId, removed.length);
     this.d.pagesChanged();
     return removed;
   }

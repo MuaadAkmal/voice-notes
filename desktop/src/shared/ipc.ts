@@ -95,6 +95,7 @@ export const SettingsFieldSchemas = {
   languageLearner: z.boolean(),
   onboarded: z.boolean(),
   onboardingPending: z.boolean(),
+  newLines: z.record(z.string().max(64), z.number().int().min(1).max(999)),
 } satisfies { [K in keyof Settings]: z.ZodType<Settings[K]> };
 
 export const SettingsPatchSchema = z.object(SettingsFieldSchemas).partial().strict();

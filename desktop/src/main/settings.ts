@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   languageLearner: false,
   onboarded: false,
   onboardingPending: false,
+  newLines: {},
 };
 
 function readRaw(file: string): Record<string, unknown> {

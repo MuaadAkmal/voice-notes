@@ -6,6 +6,7 @@ import { DebouncedSaver } from '../../shared/debounced-saver';
 import { cleanIpcError } from '../../shared/format';
 import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { MarkdownEditor } from './editor/MarkdownEditor';
+import { useNewLines } from './NewLines';
 import { shouldTakeRemoteBody } from '../../shared/sync/page-refresh';
 import { useToast } from './Toast';
 import { HOME_FULL, useHomeWidgets } from './useHomeWidgets';
@@ -87,6 +88,12 @@ export function PageView({ page, fresh, onBack }: Props) {
   useEffect(() => {
     if (fresh) titleInput.current?.select(); // select() also focuses
   }, [fresh]);
+
+  // Open, so nothing here is "new": clears the dot now and for lines that arrive while it's open.
+  const newCount = useNewLines()[shown.id] ?? 0;
+  useEffect(() => {
+    if (newCount > 0) void api.markPageSeen(shown.id);
+  }, [shown.id, newCount]);
 
   // Changed on another PC: show it, unless you're working in the page (your text wins locally, and the
   // server's keep-both rule settles it when your save syncs).

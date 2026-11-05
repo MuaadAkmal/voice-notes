@@ -74,6 +74,7 @@ import { applyCloudDefault } from './transcription/cloud-default';
 import { QuotaWatch } from './transcription/quota-watch';
 import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
+import { NewLines } from './commands/new-lines';
 import { ListUndo } from './commands/undo';
 import { addStarterPages, firstRun, micTestAllowed } from './first-run';
 import { orphanBlocks, referencedNotes } from '../shared/audio-blocks';
@@ -1098,7 +1099,13 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     });
   let commandsClient = makeCommandsClient(SUPABASE_URL);
   // Undo / Move to… on the pill for what a voice-to-lists command just wrote.
-  const listUndo = new ListUndo({ pages: store.pages, pagesChanged: () => toDashboard(Ch.PagesChanged), now: Date.now });
+  // The "new" dot on a page that voice commands added to, until it's opened.
+  const newLines = new NewLines({
+    get: () => settings.newLines,
+    set: (next) => updateSettings({ newLines: next }),
+    exists: (id) => !!store.pages.get(id),
+  });
+  const listUndo = new ListUndo({ pages: store.pages, pagesChanged: () => toDashboard(Ch.PagesChanged), now: Date.now, newLines });
   const listCommands = new ListCommands({
     remember: (pageId, lines) => listUndo.remember(pageId, lines),
     learn: () => settings.languageLearner,
@@ -1228,6 +1235,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     notesChanged: () => toDashboard(Ch.NotesChanged),
     foldersChanged: () => toDashboard(Ch.FoldersChanged),
     pagesChanged: () => toDashboard(Ch.PagesChanged),
+    pageSeen: (id) => newLines.seen(id),
     dictationsChanged: () => toDashboard(Ch.DictationsChanged),
     openedExternal,
     transcription,

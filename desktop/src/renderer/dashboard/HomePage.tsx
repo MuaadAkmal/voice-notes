@@ -21,6 +21,7 @@ import { QuickAddWidget } from './widgets/QuickAddWidget';
 import { CalendarWidget } from './widgets/CalendarWidget';
 import { RemindersWidget } from './widgets/RemindersWidget';
 import { todayTitle } from '../../shared/calendar-format';
+import { NewDot, useNewLines } from './NewLines';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -60,6 +61,7 @@ type Props = {
 
 export function HomePage({ pages, onOpenPage, onOpenConnectors, onOpenReminders }: Props) {
   const { widgets, save, run } = useHomeWidgets();
+  const newLines = useNewLines();
   // The card a widget is being dragged over.
   const [dropId, setDropId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{
@@ -192,6 +194,7 @@ export function HomePage({ pages, onOpenPage, onOpenConnectors, onOpenReminders 
               dropProps={dropProps(widget.id)}
               // A card is named by its page, the same name voice commands use.
               title={page?.title ?? (widget.type === 'reminders' ? 'Upcoming reminders' : todayTitle(new Date()))}
+              newCount={page ? newLines[page.id] : undefined}
               onTitleClick={page ? () => onOpenPage(page.id) : undefined}
               onOpenPage={page ? () => onOpenPage(page.id) : undefined}
               onRemove={widget.locked ? undefined : () => run((cur) => removeWidget(cur, widget.id))}
@@ -229,6 +232,8 @@ type CardProps = {
   dropping: boolean;
   dropProps: React.HTMLAttributes<HTMLElement>;
   title: string;
+  /** Lines voice commands added to the card's page since it was opened. */
+  newCount?: number;
   /** Page widgets: the title opens the page. */
   onTitleClick?: () => void;
   /** Absent for the calendar card, which has no page. */
@@ -246,6 +251,7 @@ function WidgetCard({
   dropping,
   dropProps,
   title,
+  newCount,
   onTitleClick,
   onOpenPage,
   onRemove,
@@ -325,6 +331,7 @@ function WidgetCard({
             title
           )}
         </h2>
+        <NewDot count={newCount} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button

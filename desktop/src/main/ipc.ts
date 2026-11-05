@@ -228,6 +228,8 @@ type DashboardDeps = {
   notesChanged: () => void;
   foldersChanged: () => void;
   pagesChanged: () => void;
+  /** A page was opened: its "new" count goes. */
+  pageSeen: (id: string) => void;
   dictationsChanged: () => void;
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
@@ -363,6 +365,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     d.pagesChanged();
     return page;
   });
+  handle(Ch.PagesSeen, IdSchema, (id) => d.pageSeen(id));
   handle(Ch.PagesSetTask, SetTaskSchema, ({ id, line, checked }) => {
     const page = pages.setTask(id, line, checked);
     d.pagesChanged();

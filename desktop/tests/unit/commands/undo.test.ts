@@ -31,9 +31,27 @@ function setup() {
     },
     pagesChanged,
     now: () => t,
+    newLines: { add: (id, n) => counts.set(id, (counts.get(id) ?? 0) + n), remove: (id, n) => counts.set(id, (counts.get(id) ?? 0) - n) },
   });
-  return { undo, pages, pagesChanged, later: (ms: number) => (t += ms) };
+  return { undo, pages, pagesChanged, counts, later: (ms: number) => (t += ms) };
 }
+
+const counts = new Map<string, number>();
+
+it('keeps the pages’ new-line counts in step with add, undo and move', () => {
+  counts.clear();
+  const { undo, pages } = setup();
+  pages.set('g', { ...pages.get('g')!, body: '- eggs\n- milk\n- bread\n- jam\n' });
+  const a = undo.remember('g', ['bread', 'jam']);
+  expect(counts.get('g')).toBe(2);
+  undo.undo(a);
+  expect(counts.get('g')).toBe(0);
+  pages.set('g', { ...pages.get('g')!, body: '- eggs\n- milk\n- secret\n' });
+  const b = undo.remember('g', ['secret']);
+  undo.move(b, 't');
+  expect(counts.get('g')).toBe(0);
+  expect(counts.get('t')).toBe(1);
+});
 
 it('undoes once, then says it already changed', () => {
   const { undo, pages, pagesChanged } = setup();

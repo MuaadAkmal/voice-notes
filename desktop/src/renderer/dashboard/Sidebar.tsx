@@ -11,6 +11,7 @@ import { AccountChip } from './AccountChip';
 import { useConnectors } from './useConnectors';
 import { useHomeWidgets } from './useHomeWidgets';
 import { useBuiltInPages } from './useBuiltInPages';
+import { NewDot, useNewLines } from './NewLines';
 import type { View } from './App';
 import {
   ContextMenu,
@@ -74,6 +75,7 @@ export function Sidebar({ view, onSelect, folders, pages, counts, onNewPage, onO
   const [dropKey, setDropKey] = useState<DropKey | null>(null);
   const tree = buildTree(folders);
   const home = useHomeWidgets();
+  const newLines = useNewLines();
   const builtIns = useBuiltInPages();
   // Pages per folder ('' = root), in name order like a file browser.
   const pagesIn = new Map<string, Page[]>();
@@ -363,6 +365,7 @@ export function Sidebar({ view, onSelect, folders, pages, counts, onNewPage, onO
                 >
                   <FileText className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.8} />
                   <span className="truncate">{pageName(page)}</span>
+                  {!active && <NewDot count={newLines[page.id]} />}
                 </button>
               )}
               <DropdownMenu>
