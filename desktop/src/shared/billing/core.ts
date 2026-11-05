@@ -137,7 +137,6 @@ export class BillingCore {
       throw new BadSignature();
     let event: {
       event?: unknown;
-      created_at?: unknown;
       payload?: { subscription?: { entity?: RazorpaySubscription } };
     };
     try {
@@ -152,11 +151,10 @@ export class BillingCore {
       return;
     const entity = event.payload?.subscription?.entity;
     if (!entity?.id) return;
-    const at =
-      typeof event.created_at === 'number'
-        ? event.created_at * 1000
-        : this.d.now();
-    await this.apply(entity, new Date(at).toISOString());
+    // Razorpay stamps events in whole seconds and doesn't promise their order, so an event only says
+    // which subscription changed: its state is read from Razorpay now, never older than the event.
+    const sub = await this.d.razorpay.fetch(entity.id);
+    await this.apply(sub, new Date(this.d.now()).toISOString());
   }
 
   private async apply(

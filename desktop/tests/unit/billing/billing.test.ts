@@ -13,6 +13,7 @@ import {
 import { handleBilling } from '../../../src/shared/billing/handler';
 import {
   type Razorpay,
+  RazorpayFailed,
   type RazorpaySubscription,
   hmacHex,
 } from '../../../src/shared/billing/razorpay';
@@ -43,6 +44,7 @@ beforeAll(async () => {
     '20261103065658_plan_limits.sql',
     '20261103065700_subscriptions.sql',
     '20261105092013_billing_storage_races.sql',
+    '20261105093825_billing_status_rank.sql',
   ])
     await pg.exec(migration(m));
 }, 60_000);
@@ -69,7 +71,9 @@ class FakeRazorpay implements Razorpay {
     return sub;
   }
   async fetch(id: string) {
-    return this.subs.get(id)!;
+    const sub = this.subs.get(id);
+    if (!sub) throw new RazorpayFailed(`GET /subscriptions/${id} 404`);
+    return sub;
   }
   async cancelAtCycleEnd(id: string) {
     this.cancelled.push(id);
@@ -86,12 +90,14 @@ class FakeRazorpay implements Razorpay {
 let rzp: FakeRazorpay;
 let core: BillingCore;
 let store: BillingStore;
+let clock: number;
 
 beforeEach(async () => {
   await pg.exec(
     'truncate public.subscriptions, public.account_plans, public.asr_usage, storage.objects, public.billing_checkouts, public.storage_reservations',
   );
   rzp = new FakeRazorpay();
+  clock = NOW;
   store = new BillingStore(pgBillingDb(pg));
   core = new BillingCore({
     store,
@@ -100,15 +106,30 @@ beforeEach(async () => {
     keySecret: KEY_SECRET,
     webhookSecret: HOOK_SECRET,
     plans: PLANS,
-    now: () => NOW,
+    now: () => clock,
   });
 });
 
+/**
+ * A webhook arriving a moment after the last one. Razorpay's state becomes the event's, unless the
+ * event is `late`: one Razorpay sent before the subscription moved on.
+ */
 async function hook(
   sub: Partial<RazorpaySubscription> & { id: string },
   event: string,
   at: number,
+  { late = false } = {},
 ) {
+  clock += 1;
+  if (!late)
+    rzp.subs.set(sub.id, {
+      plan_id: 'plan_sm',
+      status: 'created',
+      current_end: null,
+      notes: { user_id: A },
+      ...rzp.subs.get(sub.id),
+      ...sub,
+    });
   const raw = JSON.stringify({
     event,
     created_at: at,
@@ -178,18 +199,61 @@ describe('billing', () => {
       { id: 'sub_1', plan_id: 'plan_pm', status: 'active' },
       'subscription.activated',
       T,
+      { late: true },
     );
     expect(await plan(A)).toBe('free');
   });
 
-  it('in the same second, an earlier state of the subscription never replaces a later one', async () => {
+  it('in the same second, a webhook saves what Razorpay has now, whatever the event said', async () => {
     await core.checkout(A, { plan: 'standard', period: 'monthly' });
     await hook({ id: 'sub_1', status: 'active' }, 'subscription.activated', T);
-    await hook({ id: 'sub_1', status: 'authenticated' }, 'subscription.authenticated', T);
+    await hook({ id: 'sub_1', status: 'authenticated' }, 'subscription.authenticated', T, { late: true });
     expect(await plan(A)).toBe('standard');
     await hook({ id: 'sub_1', status: 'cancelled' }, 'subscription.cancelled', T + 5);
-    await hook({ id: 'sub_1', status: 'active' }, 'subscription.charged', T + 5);
+    await hook({ id: 'sub_1', status: 'active' }, 'subscription.charged', T + 5, { late: true });
     expect(await plan(A)).toBe('free');
+  });
+
+  it('a subscription back from pending or halted in the same second gets its plan back', async () => {
+    await hook({ id: 'sub_9', status: 'active' }, 'subscription.activated', T);
+    await hook({ id: 'sub_9', status: 'halted' }, 'subscription.halted', T + 9);
+    expect(await plan(A)).toBe('free');
+    await hook({ id: 'sub_9', status: 'active' }, 'subscription.charged', T + 9);
+    expect(await plan(A)).toBe('standard');
+    await hook({ id: 'sub_9', status: 'pending' }, 'subscription.pending', T + 20);
+    await hook({ id: 'sub_9', status: 'active' }, 'subscription.charged', T + 20);
+    expect((await core.status(A)).subscription?.status).toBe('active');
+  });
+
+  it('saves at the same moment: active and halted go both ways; only the start and the end are ordered', async () => {
+    const save = (status: string) =>
+      store.save({
+        id: 'sub_t',
+        userId: A,
+        razorpayPlanId: 'plan_sm',
+        plan: 'standard',
+        status,
+        currentEnd: null,
+        eventAt: new Date(NOW).toISOString(),
+      });
+    await save('active');
+    await save('halted');
+    expect(await plan(A)).toBe('free');
+    await save('active');
+    expect(await plan(A)).toBe('standard');
+    await save('authenticated');
+    expect(await plan(A)).toBe('standard');
+    await save('cancelled');
+    await save('active');
+    expect(await plan(A)).toBe('free');
+  });
+
+  it('a webhook whose subscription Razorpay does not answer for fails, so Razorpay sends it again', async () => {
+    const raw = JSON.stringify({
+      event: 'subscription.activated',
+      payload: { subscription: { entity: { id: 'sub_missing' } } },
+    });
+    await expect(core.webhook(raw, await hmacHex(HOOK_SECRET, raw))).rejects.toBeInstanceOf(RazorpayFailed);
   });
 
   it('the same event twice is harmless', async () => {
