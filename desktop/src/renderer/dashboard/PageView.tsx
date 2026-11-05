@@ -95,16 +95,34 @@ export function PageView({ page, fresh, onBack }: Props) {
     if (newCount > 0) void api.markPageSeen(shown.id);
   }, [shown.id, newCount]);
 
-  // Changed on another PC: show it, unless you're working in the page (your text wins locally, and the
-  // server's keep-both rule settles it when your save syncs).
-  useEffect(() => {
-    const focused = !!editorHost.current?.contains(document.activeElement);
-    if (shouldTakeRemoteBody({ dirty: saver.pending, focused, localBody: localBody.current, remoteBody: shown.body })) {
-      localBody.current = shown.body;
-      baseBody.current = shown.body;
+  // Changed elsewhere (another PC, or a voice command on this one): show it, unless you're working in the
+  // page (your text wins locally, and the server's keep-both rule settles it when your save syncs).
+  // Only while this window has focus does the cursor count: dictating "Pixie, …" in another app leaves
+  // the cursor in the editor, and the new lines must still show.
+  const remoteBody = useRef(shown.body);
+  remoteBody.current = shown.body;
+  const takeRemote = (windowFocused: boolean) => {
+    const focused = windowFocused && !!editorHost.current?.contains(document.activeElement);
+    if (shouldTakeRemoteBody({ dirty: saver.pending, focused, localBody: localBody.current, remoteBody: remoteBody.current })) {
+      localBody.current = remoteBody.current;
+      baseBody.current = remoteBody.current;
       setEditorKey((k) => k + 1);
     }
-  }, [shown.body, saver]);
+  };
+  const takeRemoteRef = useRef(takeRemote);
+  takeRemoteRef.current = takeRemote;
+  useEffect(() => takeRemote(document.hasFocus()), [shown.body, saver]);
+  // A change that arrived while you were in this window shows once you leave it, or on coming back if a
+  // save was still going when you left.
+  useEffect(() => {
+    const check = () => takeRemoteRef.current(false);
+    window.addEventListener('blur', check);
+    window.addEventListener('focus', check);
+    return () => {
+      window.removeEventListener('blur', check);
+      window.removeEventListener('focus', check);
+    };
+  }, []);
 
   // Renamed elsewhere (e.g. from the list): follow, unless the title is being edited here.
   useEffect(() => {
