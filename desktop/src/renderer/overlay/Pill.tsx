@@ -82,6 +82,18 @@ type Hover = { onMouseEnter: () => void; onMouseLeave: () => void };
 
 /** "Saved ✓ · Add title": click to type the phrase or its meaning into the note's title. */
 type UndoOffer = NonNullable<Extract<OverlayState, { kind: 'done' }>['undo']>;
+
+/** "Added · item → Page" on one line: the item shortens first, so where it went stays readable. */
+function DoneText({ message }: { message: string }) {
+  const at = message.lastIndexOf(' → ');
+  if (at < 0) return <span className="min-w-0 truncate" title={message}>{message}</span>;
+  return (
+    <span className="flex min-w-0 items-baseline" title={message}>
+      <span className="min-w-0 truncate">{message.slice(0, at)}</span>
+      <span className="ml-1 max-w-[60%] shrink-0 truncate font-medium">{message.slice(at + 1)}</span>
+    </span>
+  );
+}
 const PICKER_ROWS = 6;
 
 /** "Added · milk → Groceries" with Undo and Move to…; the picker lists other pages to move it to. */
@@ -104,9 +116,7 @@ function UndoPill({ message, undo, shell, hover }: { message: string; undo: Undo
   if (!picking) {
     return (
       <div {...hover} data-morph className={`${shell} h-10 max-w-full gap-2 bg-emerald-600/95 pl-4 pr-2 text-sm`}>
-        <span className="min-w-0 truncate" title={message}>
-          {message}
-        </span>
+        <DoneText message={message} />
         <button className={btn} onClick={() => api.undo(undo.id)}>
           Undo
         </button>
@@ -424,7 +434,7 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
       if (state.undo) return <UndoPill message={state.message} undo={state.undo} shell={shell} hover={hover} />;
       return (
         <div data-morph className={`${shell} h-10 max-w-full bg-emerald-600/95 px-5 text-sm`}>
-          <span className="min-w-0 truncate">{state.message}</span>
+          <DoneText message={state.message} />
         </div>
       );
     case 'notice':
