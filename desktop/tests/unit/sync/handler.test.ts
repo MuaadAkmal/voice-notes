@@ -31,6 +31,26 @@ function setup(
 const folder = { id: 'f', name: 'F', parentId: null, createdAt: 1, updatedAt: 1 };
 const push = (mutations: unknown[]) => ({ clientId: 'A', deviceName: 'PC-A', mutations });
 
+describe('storage', () => {
+  const request = (token: string | null) =>
+    new Request(`${BASE}/storage`, { method: 'POST', headers: token ? { authorization: `Bearer ${token}` } : {}, body: '{}' });
+  const base = { verify: async (jwt: string) => (jwt === 'good' ? USER : null), core: new SyncCore(new MemoryStore()) };
+
+  it("answers the signed-in account's bytes against its plan", async () => {
+    const asked: string[] = [];
+    const storage = async (userId: string) => (asked.push(userId), { used: 180, limit: 250 });
+    const res = await handle(request('good'), { ...base, storage });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ used: 180, limit: 250 });
+    expect(asked).toEqual([USER]);
+  });
+
+  it('needs a token, and is 404 without the storage dep', async () => {
+    expect((await handle(request(null), { ...base, storage: async () => ({ used: 0, limit: 1 }) })).status).toBe(401);
+    expect((await handle(request('good'), base)).status).toBe(404);
+  });
+});
+
 it('no token, or a token that does not verify, is 401', async () => {
   const { call } = setup();
   expect((await call('pull', { clientId: 'A', cursor: 0 }, null)).status).toBe(401);

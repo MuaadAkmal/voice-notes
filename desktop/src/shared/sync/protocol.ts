@@ -36,6 +36,8 @@ export type FileKind = 'audio' | 'image';
 export type UploadRequest = { kind: FileKind; name: string; size: number; full?: boolean };
 /** `storage-full`: the account's plan has no room for this file; try again later. */
 export type UploadResponse = { status: 'ok'; url: string } | { status: 'not-yet' | 'gone' | 'too-large' | 'storage-full' };
+/** The account's synced audio and images against its plan's cap, in bytes (`storage` route). */
+export type StorageResponse = { used: number; limit: number };
 export type DownloadRequest = { kind: FileKind; name: string };
 export type DownloadResponse = { status: 'ok'; url: string } | { status: 'not-uploaded' };
 export const FILE_LIMITS: Record<FileKind, number> = { audio: 50 * 1024 * 1024, image: 20 * 1024 * 1024 };

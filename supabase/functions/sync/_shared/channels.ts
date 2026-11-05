@@ -99,6 +99,7 @@ export type Settings = {
   onboarded: boolean; // the account has seen (or skipped) the first-run screen, or had data before it existed (synced)
   onboardingPending: boolean; // this PC started the first-run screen and it isn't finished yet (survives a restart)
   newLines: Record<string, number>; // page id → lines voice commands added since it was last opened (the "new" dot; this PC only)
+  storageWarned: 'low' | 'full' | null; // the cloud storage notice last shown; cleared when usage drops under 80%
 };
 
 /** Overlay window top-left, relative to that display's work area. */
@@ -343,8 +344,11 @@ export type KeyInfo = { saved: boolean; last4: string };
 /** Bringing a remote note's audio to this PC: why it didn't work, for the toast. */
 export type FetchAudioResult = { ok: true } | { ok: false; reason: 'not-uploaded' | 'offline' | 'sync-off' | 'error' };
 
-/** filesWaiting: audio and images not uploaded yet; storageFull: the account refused the last upload for space. */
-export type SyncView = { status: SyncStatus; filesWaiting: number; storageFull: boolean };
+/**
+ * filesWaiting: audio and images not uploaded yet; storageFull: the account refused the last upload for space.
+ * storage: the account's synced bytes against its plan, once known (null before, or from a server without the route).
+ */
+export type SyncView = { status: SyncStatus; filesWaiting: number; storageFull: boolean; storage?: { used: number; limit: number } | null };
 
 /** This PC's sync, as the Account page shows it. */
 export type SyncStatus =

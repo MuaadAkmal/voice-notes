@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { planName, quotaState, usageText } from '../../src/shared/cloud-usage';
+import { planName, quotaState, storageText, usageText } from '../../src/shared/cloud-usage';
+
+describe('storageText', () => {
+  const MB = 1024 * 1024;
+  it('reads in MB on the Free plan, GB on the bigger ones', () => {
+    expect(storageText({ used: 180 * MB, limit: 250 * MB })).toBe('180 MB of 250 MB');
+    expect(storageText({ used: 0, limit: 250 * MB })).toBe('0 MB of 250 MB');
+    expect(storageText({ used: 1229 * MB, limit: 5 * 1024 * MB })).toBe('1.2 GB of 5 GB');
+    expect(storageText({ used: 20 * 1024 * MB, limit: 20 * 1024 * MB })).toBe('20 GB of 20 GB');
+  });
+});
 
 describe('usageText', () => {
   const resetsAt = new Date(2026, 10, 1, 12).toISOString();

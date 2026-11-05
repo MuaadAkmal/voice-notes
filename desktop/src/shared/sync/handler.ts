@@ -1,7 +1,7 @@
 import { SYNCED_KEYS, type SyncOp } from '../sync-ops';
 import { IMAGE_FILE_RE } from '../page-images';
 import type { FileRules } from './file-rules';
-import { AUDIO_FILE_RE, type DownloadRequest, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type UploadRequest } from './protocol';
+import { AUDIO_FILE_RE, type DownloadRequest, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type StorageResponse, type UploadRequest } from './protocol';
 import type { SyncCore } from './server-core';
 
 // The `sync` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
@@ -13,6 +13,8 @@ export type HandlerDeps = {
   core: Pick<SyncCore, 'push' | 'pull'>;
   /** Signed URLs for audio and images; without it the file routes are 404. */
   files?: Pick<FileRules, 'upload' | 'download' | 'afterPush'>;
+  /** The account's storage against its plan; without it the `storage` route is 404. */
+  storage?(userId: string): Promise<StorageResponse>;
   /** Tells the account's other PCs to sync now (a Realtime broadcast); `from` is the pushing PC. */
   notify?(userId: string, from: string): Promise<void>;
   /** Browser origins allowed to call (the web app); a request without an Origin is unaffected. */
@@ -51,7 +53,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   const parts = new URL(req.url).pathname.split('/');
   const last = parts[parts.length - 1];
   const route = parts[parts.length - 2] === 'files' ? `files/${last}` : last;
-  const routes = deps.files ? ['push', 'pull', 'files/upload', 'files/download'] : ['push', 'pull'];
+  const routes = [...(deps.files ? ['push', 'pull', 'files/upload', 'files/download'] : ['push', 'pull']), ...(deps.storage ? ['storage'] : [])];
   if (req.method !== 'POST' || !routes.includes(route)) return reply(404, { error: 'Not found' });
 
   const auth = req.headers.get('authorization') ?? '';
@@ -81,6 +83,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
     }
     if (route === 'files/upload') return reply(200, await deps.files!.upload(userId, readUpload(body)));
     if (route === 'files/download') return reply(200, await deps.files!.download(userId, readDownload(body)));
+    if (route === 'storage') return reply(200, await deps.storage!(userId));
     return reply(200, await deps.core.pull(userId, readPull(body)));
   } catch (err) {
     if (err instanceof BadRequest) return reply(400, { error: err.message });

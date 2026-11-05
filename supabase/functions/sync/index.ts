@@ -46,4 +46,5 @@ async function notify(userId: string, from: string): Promise<void> {
 // The web app's origins (CORS); the PCs send no Origin and are unaffected.
 const origins = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://app.voicenote.cloud,http://localhost:3000').split(',');
 
-Deno.serve((req) => handle(req, { verify, core, files, notify, origins }));
+// storage: the same numbers, for the app's storage bar and its 80% / full notices.
+Deno.serve((req) => handle(req, { verify, core, files, storage: quota, notify, origins }));

@@ -19,7 +19,19 @@ export function usageText(u: { used: number; limit: number; resetsAt: string }):
   return `${amount} this month · resets ${resets}`;
 }
 
-/** Where the month's Cloud minutes stand: low from 80% (time to warn), out at the limit. */
+const MB = 1024 * 1024;
+const GB = 1024 * MB;
+
+/** "180 MB of 250 MB", or in GB once the plan is 1 GB or more: "1.2 GB of 5 GB". */
+export function storageText(u: { used: number; limit: number }): string {
+  if (u.limit >= GB) {
+    const gb = (b: number) => `${Math.round((b / GB) * 10) / 10}`;
+    return `${gb(u.used)} GB of ${gb(u.limit)} GB`;
+  }
+  return `${Math.round(u.used / MB)} MB of ${Math.round(u.limit / MB)} MB`;
+}
+
+/** Where the month's Cloud minutes (or the account's storage) stand: low from 80% (time to warn), out at the limit. */
 export function quotaState(u: { used: number; limit: number }): 'ok' | 'low' | 'out' {
   if (!Number.isFinite(u.used) || !Number.isFinite(u.limit) || u.limit <= 0) return 'ok';
   if (u.used >= u.limit) return 'out';

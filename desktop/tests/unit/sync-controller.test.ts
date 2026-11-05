@@ -68,7 +68,7 @@ afterEach(() => {
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
 it('is off until bound to the profile', () => {
-  expect(ctl.view()).toEqual({ status: { mode: 'off' }, filesWaiting: 0, storageFull: false });
+  expect(ctl.view()).toEqual({ status: { mode: 'off' }, filesWaiting: 0, storageFull: false, storage: null });
   expect(engine.sync).not.toHaveBeenCalled();
 });
 
@@ -78,10 +78,49 @@ it('bind sets the account, enables once and syncs', async () => {
   expect(state.account).toBe('u1');
   expect(engine.enable).toHaveBeenCalledTimes(1);
   expect(engine.sync).toHaveBeenCalledTimes(1);
-  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, filesWaiting: 0, storageFull: false });
+  expect(last()).toEqual({ status: { mode: 'idle', lastSyncedAt: 1_000_000 }, filesWaiting: 0, storageFull: false, storage: null });
   ctl.bind('u1');
   await flush();
   expect(engine.enable).toHaveBeenCalledTimes(1);
+});
+
+it('asks for the storage numbers after a sync, again after files move, and shrugs off a failure', async () => {
+  ctl.stop();
+  const seen: { used: number; limit: number }[] = [];
+  let answer: () => Promise<{ used: number; limit: number }> = async () => ({ used: 180, limit: 250 });
+  const storage = vi.fn(() => answer());
+  ctl = new SyncController({
+    pings,
+    engine,
+    state,
+    settings: () => DEFAULT_SETTINGS,
+    currentUser: () => user,
+    refreshSession: async () => undefined,
+    onView: (v) => views.push(v),
+    onChanged: () => undefined,
+    files,
+    storage,
+    onStorage: (u) => seen.push(u),
+  });
+  ctl.start();
+  ctl.bind('u1');
+  await flush();
+  expect(last().storage).toEqual({ used: 180, limit: 250 });
+  expect(seen).toEqual([{ used: 180, limit: 250 }]);
+
+  // Nothing moved and it's been under 30 min: not asked again.
+  ctl.syncNow();
+  await flush();
+  expect(storage).toHaveBeenCalledTimes(1);
+
+  // Files uploaded: asked again. A failure keeps the last numbers.
+  files.left = 2;
+  files.drain.mockImplementationOnce(async () => ((files.left = 0), { storageFull: false }));
+  answer = async () => Promise.reject(new Offline());
+  ctl.syncNow();
+  await flush();
+  expect(storage).toHaveBeenCalledTimes(2);
+  expect(last().storage).toEqual({ used: 180, limit: 250 });
 });
 
 it('says when a sync went through, and not when it failed', async () => {

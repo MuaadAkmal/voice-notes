@@ -56,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onboarded: false,
   onboardingPending: false,
   newLines: {},
+  storageWarned: null,
 };
 
 function readRaw(file: string): Record<string, unknown> {

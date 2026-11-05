@@ -5,6 +5,7 @@ import type {
   PullResponse,
   PushRequest,
   PushResponse,
+  StorageResponse,
   SyncServer,
   UploadRequest,
   UploadResponse,
@@ -46,7 +47,7 @@ type Deps = {
   transferTimeoutMs?: number;
 };
 
-type Route = 'push' | 'pull' | 'files/upload' | 'files/download';
+type Route = 'push' | 'pull' | 'files/upload' | 'files/download' | 'storage';
 /** Storage refusing a file for size or quota: keep it on this PC and try again later. */
 const STORAGE_FULL = /quota|exceeded|too large|maximum allowed size/i;
 
@@ -67,6 +68,11 @@ export class HttpSyncServer implements SyncServer {
 
   downloadUrl(req: DownloadRequest): Promise<DownloadResponse> {
     return this.call<DownloadResponse>('files/download', req);
+  }
+
+  /** The account's storage against its plan. A server from before this route answers 404 (ServerError). */
+  storage(): Promise<StorageResponse> {
+    return this.call<StorageResponse>('storage', {});
   }
 
   /** Uploads to a signed URL (no auth header: the URL carries its own short-lived token). */

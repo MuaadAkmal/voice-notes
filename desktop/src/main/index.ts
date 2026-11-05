@@ -73,6 +73,7 @@ import { sessionUserId } from './profiles/session-user';
 import { startSignIn } from './signin-mode';
 import { applyCloudDefault } from './transcription/cloud-default';
 import { QuotaWatch } from './transcription/quota-watch';
+import { StorageWatch } from './sync/storage-watch';
 import { PillNotice } from './transcription/pill-notice';
 import { AutoTranscribe } from './transcription/auto';
 import { NewLines } from './commands/new-lines';
@@ -392,7 +393,18 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   };
   // Cloud minutes: a heads-up at 80% and a clear word at the limit, once a month each, with Upgrade.
   const quota = new QuotaWatch({ getSettings: () => settings, save: (p) => updateSettings(p), now: Date.now });
-  const pillNotice = new PillNotice({ state: () => overlayState, set: setOverlayState, idle: idleState, shown: (n, period) => quota.shown(n, period) });
+  // Cloud storage: the same heads-up at 80% and when full, once each time it gets there.
+  const storageWatch = new StorageWatch({ getSettings: () => settings, save: (p) => updateSettings(p) });
+  const pillNotice = new PillNotice({
+    state: () => overlayState,
+    set: setOverlayState,
+    idle: idleState,
+    shown: (n, period) => (n === 'storage-low' || n === 'storage-full' ? storageWatch.shown(n) : quota.shown(n, period)),
+  });
+  const storageSeen = (u: { used: number; limit: number }) => {
+    const notice = storageWatch.observe(u);
+    if (notice) pillNotice.show(notice, '');
+  };
   // Remembered for the month only once on screen: a notice the busy pill never showed comes back with the next result.
   const usageSeen = (u: CloudUsage) => {
     const notice = quota.observe(u, { mark: false });
@@ -1026,6 +1038,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       decideFirstRun();
       sweepBlocks();
     },
+    storage: () => syncServer.storage(),
+    onStorage: storageSeen,
     onChanged: (changes) => {
       // Settings arrive through updateSettings, which already tells both windows.
       if (changes.notes) toDashboard(Ch.NotesChanged);

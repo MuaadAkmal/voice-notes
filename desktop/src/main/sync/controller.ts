@@ -30,7 +30,13 @@ type Deps = {
   files: { drain(shouldYield?: () => boolean): Promise<{ storageFull: boolean }>; waiting(): number };
   /** Realtime pings from the account's other PCs (sync/pings.ts): listened to only while this PC syncs. */
   pings: { update(userId: string | null): void };
+  /** The account's storage against its plan (the `storage` route); asked after syncs that moved files, and every 30 min. */
+  storage?(): Promise<{ used: number; limit: number }>;
+  /** New storage numbers arrived (for the pill's 80% / full notices). */
+  onStorage?(u: { used: number; limit: number }): void;
 };
+
+const STORAGE_EVERY_MS = 30 * 60_000;
 
 const DEBOUNCE_MS = 3000;
 const TICK_MS = 5 * 60_000;
@@ -44,6 +50,8 @@ export class SyncController {
   private tick: ReturnType<typeof setInterval> | null = null;
   private failures = 0;
   private storageFull = false;
+  private storage: { used: number; limit: number } | null = null;
+  private storageAskedAt = 0;
   private running: Promise<void> | null = null;
   /** A sync was asked for while one ran (an edit, Turn on, Sync now): run again right after. */
   private rerun = false;
@@ -65,7 +73,7 @@ export class SyncController {
   }
 
   view(): SyncView {
-    return { status: this.status, filesWaiting: this.d.files.waiting(), storageFull: this.storageFull };
+    return { status: this.status, filesWaiting: this.d.files.waiting(), storageFull: this.storageFull, storage: this.storage };
   }
 
   /**
@@ -204,12 +212,28 @@ export class SyncController {
    */
   private async drainFiles(): Promise<void> {
     if (!this.canSync()) return;
+    const before = this.d.files.waiting();
     try {
       ({ storageFull: this.storageFull } = await this.d.files.drain(() => this.rerun));
     } catch (err) {
       console.warn('[sync] files', err instanceof Error ? err.message : err);
     }
+    const moved = this.d.files.waiting() !== before;
+    await this.askStorage(moved || this.storageFull);
     this.emit();
+  }
+
+  /** The account's storage: at the first sync, after files moved or were refused, else every 30 min. Never a sync error. */
+  private async askStorage(changed: boolean): Promise<void> {
+    if (!this.d.storage) return;
+    if (!changed && this.storage && Date.now() - this.storageAskedAt < STORAGE_EVERY_MS) return;
+    this.storageAskedAt = Date.now();
+    try {
+      this.storage = await this.d.storage();
+      this.d.onStorage?.(this.storage);
+    } catch {
+      // Offline, or a server from before the route: the bar just doesn't show.
+    }
   }
 
   private scheduleRetry(): void {
