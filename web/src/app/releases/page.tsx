@@ -9,6 +9,11 @@ export const metadata: Metadata = {
 /** Newest first. Installed apps update on their own within the hour, so each entry is what people already have. */
 const RELEASES: { version: string; date: string; items: string[] }[] = [
   {
+    version: "3.8.2",
+    date: "5 November 2026",
+    items: ["A What’s new link, in the update bar and in Settings, opens these notes for the version you’re getting."],
+  },
+  {
     version: "3.8.1",
     date: "5 November 2026",
     items: [
