@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { LaterSitesCard } from './LaterSitesCard';
 import { Kbd } from './NotesPage';
 import { useToast } from './Toast';
-import { readyText, useRestartToUpdate, useUpdates } from './UpdateBanner';
+import { readyText, useRestartToUpdate, useUpdates, WhatsNewButton } from './UpdateBanner';
 
 const api = window.dashboardApi;
 const THEMES: { value: Theme; label: string; Icon: typeof Monitor }[] = [
@@ -42,6 +42,8 @@ function UpdatesRow() {
   }[status.state];
   return (
     <Row title={`Version ${status.version}`} hint={hint}>
+      {/* The notes for the version waiting to install, else the one running. */}
+      <WhatsNewButton version={status.state === 'ready' && status.newVersion ? status.newVersion : status.version} />
       {status.state === 'ready' ? (
         <Button size="sm" onClick={restart}>
           Restart now

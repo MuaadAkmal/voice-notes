@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { UpdateStatus } from '../../shared/channels';
+import { cleanIpcError } from '../../shared/format';
+import { releaseNotesUrl } from '../../shared/releases';
 import { Button } from '@/components/ui/button';
 import { useToast } from './Toast';
 
@@ -26,6 +28,16 @@ export function useRestartToUpdate(): () => void {
 
 export const readyText = (s: UpdateStatus) => (s.newVersion ? `Version ${s.newVersion} is ready` : 'A new version is ready');
 
+/** Opens the website's notes for `version` in the browser. */
+export function WhatsNewButton({ version }: { version?: string | null }) {
+  const toast = useToast();
+  return (
+    <Button variant="ghost" size="sm" onClick={() => api.openExternal(releaseNotesUrl(version)).catch((e) => toast(cleanIpcError(e)))}>
+      What&apos;s new
+    </Button>
+  );
+}
+
 /** The bar above the dashboard once an update has downloaded. Later hides it until the next launch. */
 export function UpdateBanner() {
   const status = useUpdates();
@@ -35,6 +47,7 @@ export function UpdateBanner() {
   return (
     <div role="status" className="flex shrink-0 items-center gap-3 border-b bg-card px-5 py-2 text-sm">
       <span className="flex-1">{readyText(status)}. Restart to update; your notes stay as they are.</span>
+      <WhatsNewButton version={status.newVersion} />
       <Button variant="ghost" size="sm" onClick={() => setLater(true)}>
         Later
       </Button>

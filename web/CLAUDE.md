@@ -23,3 +23,4 @@ The public site at `https://voicenote.cloud`: a landing page for language learne
 - `src/app/globals.css`: tokens and the shared glass, shadow and button styles. Off-white by default; `ThemeToggle.tsx` switches `data-theme` on `<html>` and remembers the choice in `localStorage`.
 - `src/components/Reveal.tsx`: scroll reveals with Motion. Anything Motion starts hidden is shown without JavaScript by the `<noscript>` rule in `layout.tsx`.
 - `src/app/privacy/page.tsx`: must change when the app starts sending data somewhere new.
+- `src/app/releases/page.tsx`: "What's new", one entry per desktop release at the top of `RELEASES`, in plain language. The app's update banner and Settings link to `/releases#<version>` (`desktop/src/shared/releases.ts`), so add the entry and deploy the site with each release.
