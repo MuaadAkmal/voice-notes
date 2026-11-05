@@ -45,7 +45,7 @@ beforeAll(async () => {
     '20261103065700_subscriptions.sql',
     '20261105092013_billing_storage_races.sql',
     '20261105093825_billing_status_rank.sql',
-    '20261105100000_storage_oversized_sweep.sql',
+    '20261105094831_storage_oversized_sweep.sql',
   ])
     await pg.exec(migration(m));
 }, 60_000);
