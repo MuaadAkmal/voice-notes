@@ -13,6 +13,9 @@ export function Footer() {
           <Link href="/#pricing" className="transition-colors hover:text-foreground">
             Pricing
           </Link>
+          <Link href="/releases" className="transition-colors hover:text-foreground">
+            What&apos;s new
+          </Link>
           <Link href="/privacy" className="transition-colors hover:text-foreground">
             Privacy
           </Link>
