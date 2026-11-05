@@ -7,7 +7,8 @@ export function Prose({ title, updated, children }: { title: string; updated: st
   return (
     <>
       <Header />
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-12 pb-16 sm:px-6">
+      {/* Same width and side padding as the header, so the card lines up with the navbar. */}
+      <main className="mx-auto w-full max-w-5xl flex-1 px-3 pt-12 pb-16 sm:px-6">
         <div className="glass rounded-3xl px-6 py-10 sm:px-12 sm:py-14">
           <h1 className="text-4xl font-semibold sm:text-5xl">{title}</h1>
           <p className="mt-3 text-sm text-muted-foreground">Last updated {updated}</p>
