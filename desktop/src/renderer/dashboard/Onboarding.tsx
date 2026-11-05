@@ -38,7 +38,7 @@ export function Onboarding({ onDone }: { onDone: (openTranscription: boolean) =>
     if (at === STEPS.length - 1) finish();
     else setStep(STEPS[at + 1]);
   };
-  const wake = settings.noteWakeWords[0] || DEFAULT_WAKE_WORDS[0];
+  const wake = DEFAULT_WAKE_WORDS[0];
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground" role="dialog" aria-label="Welcome to Voice Notes">

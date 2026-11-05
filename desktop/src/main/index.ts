@@ -12,6 +12,7 @@ import { keepExisting } from '../shared/home-widgets';
 import { showFromTitle } from '../shared/show';
 import { DICTATION_TTL_MS } from '../shared/dictation';
 import { dictationWords, glossaryPrompt } from '../shared/custom-words';
+import { DEFAULT_WAKE_WORDS } from '../shared/note-command';
 import { cleanTranscript } from '../shared/transcription';
 import { OFF as POMODORO_OFF, type Pomodoro } from '../shared/pomodoro';
 import { DictationController } from './dictation/controller';
@@ -536,7 +537,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     transcribe: async (audio, signal) => {
       const { transcription, transcribeLanguage } = settings;
       // While voice to lists is on, the wake words are listened for too, so "Pixie" isn't heard as "Dixie".
-      const words = dictationWords(settings.customWords, settings.voiceToLists ? settings.noteWakeWords : []);
+      const words = dictationWords(settings.customWords, settings.voiceToLists ? DEFAULT_WAKE_WORDS : []);
       const ep = await endpoint();
       try {
         const language = transcribeLanguage === 'auto' ? null : transcribeLanguage;
@@ -611,7 +612,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     },
     list: {
       enabled: () => settings.voiceToLists, // signed out, it still lands in Quick notes
-      wakeWords: () => settings.noteWakeWords,
+      wakeWords: () => DEFAULT_WAKE_WORDS,
       pageTitles: () => store.pages.list().map((p) => p.title),
       add: async (text, capture) => {
         const r = await listCommands.add(text, capture);
@@ -1197,7 +1198,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     if (!settings.voiceToFolders || !settings.transcription.provider || note.kind !== 'note' || note.source !== 'mic') return;
     try {
       const head = await transcription.peek(note.id, PEEK_SECONDS);
-      const folder = matchFolderCommand(head, settings.noteWakeWords, store.folders.list());
+      const folder = matchFolderCommand(head, DEFAULT_WAKE_WORDS, store.folders.list());
       if (!folder) return;
       store.moveNotes([note.id], folder.id);
       filed(note, folder);

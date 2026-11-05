@@ -1,6 +1,7 @@
 import type { Folder, Note, Settings } from '../../shared/channels';
 import { matchFolderCommand } from '../../shared/folder-command';
 import { defaultTitle } from '../../shared/format';
+import { DEFAULT_WAKE_WORDS } from '../../shared/note-command';
 import type { TranscribeLanguage } from '../../shared/transcription';
 
 // New notes recorded on this PC are transcribed without asking (synced ones are left to the PC that
@@ -18,7 +19,7 @@ export const isDefaultTitle = (n: Pick<Note, 'title' | 'createdAt'>): boolean =>
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean);
 
 export type AutoDeps = {
-  settings(): Pick<Settings, 'autoTranscribe' | 'autoTitle' | 'transcription' | 'transcribeLanguage' | 'voiceToFolders' | 'noteWakeWords'>;
+  settings(): Pick<Settings, 'autoTranscribe' | 'autoTitle' | 'transcription' | 'transcribeLanguage' | 'voiceToFolders'>;
   store: {
     get(id: string): Note | null | undefined;
     rename(id: string, title: string): Note;
@@ -64,7 +65,7 @@ export class AutoTranscribe {
     const s = this.d.settings();
     if (!s.voiceToFolders || note.kind !== 'note' || note.source !== 'mic' || note.pageId || !note.transcript) return;
     const head = words(note.transcript).slice(0, FOLDER_WORDS).join(' ');
-    const folder = matchFolderCommand(head, s.noteWakeWords, this.d.store.folders.list());
+    const folder = matchFolderCommand(head, DEFAULT_WAKE_WORDS, this.d.store.folders.list());
     if (!folder) return;
     this.d.store.moveNotes([note.id], folder.id);
     this.d.onFiled(note, folder);

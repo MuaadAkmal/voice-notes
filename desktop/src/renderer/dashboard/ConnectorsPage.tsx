@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { GoogleCalendarCard } from './GoogleCalendarCard';
 import { useConnectors } from './useConnectors';
-import { DEFAULT_WAKE_WORDS, MAX_WAKE_WORDS, wakeWordRisk } from '../../shared/note-command';
+import { DEFAULT_WAKE_WORDS } from '../../shared/note-command';
 
 const api = window.dashboardApi;
 
@@ -27,29 +27,19 @@ function VoiceToLists() {
   const [on, setOn] = useState<boolean | null>(null);
   const [folders, setFolders] = useState(true);
   const [reminders, setReminders] = useState(true);
-  const [words, setWords] = useState<string[]>([]);
-  const [draft, setDraft] = useState('');
   useEffect(() => {
     const load = () =>
       api.getSettings().then((s) => {
         setOn(s.voiceToLists);
         setFolders(s.voiceToFolders);
         setReminders(s.voiceReminders);
-        setWords(s.noteWakeWords);
-        setDraft(s.noteWakeWords.join(', '));
       });
     load();
     return api.onSettingsChanged(load);
   }, []);
   if (on === null) return null;
 
-  const name = words[0] || DEFAULT_WAKE_WORDS[0];
-  const saveWords = () => {
-    const next = [...new Set(draft.split(',').map((w) => w.trim()).filter(Boolean))].slice(0, MAX_WAKE_WORDS).map((w) => w.slice(0, 40));
-    const list = next.length ? next : DEFAULT_WAKE_WORDS;
-    setDraft(list.join(', '));
-    if (list.join('\n') !== words.join('\n')) void api.setSettings({ noteWakeWords: list });
-  };
+  const name = DEFAULT_WAKE_WORDS[0];
 
   return (
     <div className="flex flex-col gap-4 rounded-2xl border bg-card p-5">
@@ -105,31 +95,6 @@ function VoiceToLists() {
           }}
         />
       </div>
-      {(on || folders) && (
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Wake words</span>
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={saveWords}
-            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-            placeholder={DEFAULT_WAKE_WORDS[0]}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-          />
-          <span className="text-xs text-muted-foreground">
-            A name to start with, or several separated by commas. “Hey” in front works too. Empty means{' '}
-            {DEFAULT_WAKE_WORDS[0]}.
-          </span>
-          {words
-            .filter((w) => wakeWordRisk(w))
-            .map((w) => (
-              <span key={w} className="text-xs text-amber-600 dark:text-amber-400">
-                “{w}” sounds like an everyday word, so dictation that starts with it may be taken as a command instead of
-                pasted. A less common name works better.
-              </span>
-            ))}
-        </label>
-      )}
     </div>
   );
 }
@@ -137,17 +102,13 @@ function VoiceToLists() {
 /** "Pixie, I learned a new word in Tamil, vanakkam" goes on the Tamil page with how it sounds and what it means. Per PC. */
 function LanguageLearner() {
   const [on, setOn] = useState<boolean | null>(null);
-  const [name, setName] = useState(DEFAULT_WAKE_WORDS[0]);
   useEffect(() => {
-    const load = () =>
-      api.getSettings().then((s) => {
-        setOn(s.languageLearner);
-        setName(s.noteWakeWords[0] || DEFAULT_WAKE_WORDS[0]);
-      });
+    const load = () => api.getSettings().then((s) => setOn(s.languageLearner));
     load();
     return api.onSettingsChanged(load);
   }, []);
   if (on === null) return null;
+  const name = DEFAULT_WAKE_WORDS[0];
 
   return (
     <div className="flex items-center gap-4 rounded-2xl border bg-card p-5">

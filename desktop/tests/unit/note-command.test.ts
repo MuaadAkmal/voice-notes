@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { parseNoteCommand, soundKey, wakeWordRisk } from '../../src/shared/note-command';
+import { parseNoteCommand, soundKey } from '../../src/shared/note-command';
 
 const q = (s: string, words?: string[]) => parseNoteCommand(s, words)?.text ?? null;
 
@@ -69,12 +69,4 @@ it('short names only ever match exactly', () => {
 
 it('without page titles there is no near match', () => {
   expect(q('Dixie, add milk')).toBeNull();
-});
-
-it('warns about wake words that sound like everyday words', () => {
-  expect(wakeWordRisk('Pixie')).toBeNull();
-  expect(wakeWordRisk('Captain Mango')).toBeNull();
-  expect(wakeWordRisk('Max')).toBe('common');
-  expect(wakeWordRisk('Will')).toBe('common');
-  expect(wakeWordRisk('Sorrey')).toBe('common');
 });

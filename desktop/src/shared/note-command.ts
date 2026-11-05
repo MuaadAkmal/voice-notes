@@ -1,9 +1,8 @@
-// Voice to lists: a dictation that starts with one of the user's wake words (a name, "Pixie" unless
-// changed) goes to the `commands` function, which picks the page and the items (no match: Quick notes).
-// A name, not a word like "Note", so ordinary dictation ("note this down…") is never caught.
+// Voice to lists: a dictation that starts with the wake word "Pixie" goes to the `commands` function,
+// which picks the page and the items (no match: Quick notes). A name, not a word like "Note", so
+// ordinary dictation ("note this down…") is never caught. It's fixed: not a setting.
 
 export const DEFAULT_WAKE_WORDS = ['Pixie'];
-export const MAX_WAKE_WORDS = 10;
 
 /**
  * How a name sounds, roughly, so Whisper's spellings of it compare equal: "Pixie", "Pixy" and "Pixi"
@@ -84,20 +83,3 @@ export function parseNoteCommand(text: string, words: readonly string[] = DEFAUL
   return null;
 }
 
-/** Everyday words a wake word shouldn't sound like (they start ordinary sentences). */
-const COMMON_WORDS = [
-  'about', 'after', 'again', 'alright', 'also', 'always', 'and', 'another', 'anyway', 'are', 'because', 'before', 'besides', 'but',
-  'can', 'could', 'did', 'does', 'done', 'every', 'first', 'fixing', 'for', 'from', 'good', 'great', 'have', 'here', 'how', 'just',
-  'later', 'let', 'like', 'listen', 'look', 'make', 'maybe', 'mark', 'max', 'more', 'most', 'never', 'next', 'nice', 'nothing', 'now',
-  'okay', 'once', 'only', 'other', 'please', 'pretty', 'quick', 'quickly', 'really', 'right', 'same', 'see', 'should', 'since', 'sir',
-  'sixty', 'some', 'something', 'sorry', 'still', 'sure', 'thanks', 'that', 'then', 'there', 'these', 'they', 'thing', 'think', 'this',
-  'those', 'today', 'tomorrow', 'twenty', 'very', 'wait', 'want', 'well', 'what', 'when', 'where', 'which', 'while', 'who', 'why',
-  'will', 'with', 'would', 'yeah', 'yes', 'yesterday', 'you', 'your',
-].map(soundKey);
-
-/** Why a wake word may catch ordinary dictation, for a warning in Settings; null when it looks fine. */
-export function wakeWordRisk(word: string): 'common' | null {
-  const key = word.trim().split(/\s+/).map(soundKey).join('');
-  if (!key) return null;
-  return COMMON_WORDS.some((c) => c === key || (key.length >= NEAR_MIN_LETTERS && oneApart(c, key))) ? 'common' : null;
-}

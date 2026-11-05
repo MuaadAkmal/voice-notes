@@ -88,7 +88,7 @@ export type Settings = {
   voiceReminders: boolean; // "Remind me to … in 10 min" dictations become reminders on this PC (+ Google Calendar while connected)
   voiceToLists: boolean; // "List, …" dictations add to a page (via the `commands` function) while signed in
   voiceToFolders: boolean; // a voice note starting "Pixie, <folder>" is filed there (its first seconds are transcribed)
-  noteWakeWords: string[]; // the names that start a voice-to-lists command ("Pixie, …"); empty = Pixie
+  noteWakeWords: string[]; // no longer read: the wake word is always "Pixie" (DEFAULT_WAKE_WORDS); kept so older pc.json files and apps still validate
   pomodoro: PomodoroSettings;
   autoTranscribe: boolean; // new notes recorded on this PC are transcribed without asking
   autoTitle: boolean; // a transcribed note still on its default title gets one written by AI (the `commands` function)
