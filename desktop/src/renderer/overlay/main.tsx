@@ -55,9 +55,10 @@ function Overlay() {
   useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, undoing, drop, later.phase.kind]);
 
   return (
-    <div className="flex h-screen w-screen items-end justify-center pb-2">
+    <div className="flex h-screen w-screen items-end justify-center px-2 pb-2">
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
-      <div {...drag} ref={pill} className="touch-none" data-testid="pill">
+      {/* max-w-full: a long message shortens inside the window instead of the pill spilling past both edges */}
+      <div {...drag} ref={pill} className="max-w-full touch-none" data-testid="pill">
         {drop !== 'none' ? (
           <DropPill phase={drop} />
         ) : later.phase.kind !== 'none' && state.kind === 'idle' ? (

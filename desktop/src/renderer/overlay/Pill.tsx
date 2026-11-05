@@ -100,11 +100,13 @@ function UndoPill({ message, undo, shell, hover }: { message: string; undo: Undo
     return () => window.removeEventListener('focus', focus);
   }, [picking]);
 
-  const btn = 'cursor-pointer rounded-full bg-white/20 px-3 py-1 font-medium hover:bg-white/30';
+  const btn = 'shrink-0 cursor-pointer rounded-full bg-white/20 px-3 py-1 font-medium hover:bg-white/30';
   if (!picking) {
     return (
-      <div {...hover} data-morph className={`${shell} h-10 gap-2 bg-emerald-600/95 pl-5 pr-2 text-sm`}>
-        <span className="truncate">{message}</span>
+      <div {...hover} data-morph className={`${shell} h-10 max-w-full gap-2 bg-emerald-600/95 pl-4 pr-2 text-sm`}>
+        <span className="min-w-0 truncate" title={message}>
+          {message}
+        </span>
         <button className={btn} onClick={() => api.undo(undo.id)}>
           Undo
         </button>
@@ -419,7 +421,11 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
       );
     case 'done':
       if (state.undo) return <UndoPill message={state.message} undo={state.undo} shell={shell} hover={hover} />;
-      return <div data-morph className={`${shell} h-10 bg-emerald-600/95 px-5 text-sm`}>{state.message}</div>;
+      return (
+        <div data-morph className={`${shell} h-10 max-w-full bg-emerald-600/95 px-5 text-sm`}>
+          <span className="min-w-0 truncate">{state.message}</span>
+        </div>
+      );
     case 'notice':
       return (
         <div {...hover} data-morph className={`${shell} h-10 gap-3 bg-amber-600/95 pl-5 pr-2 text-sm`}>
