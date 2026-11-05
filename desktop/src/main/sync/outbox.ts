@@ -6,7 +6,7 @@ import type { SyncState } from './state';
 export type OutboxEntry = { seq: number; mutationId: string; entityId: string; op: SyncOp; baseVersion: number; inFlight: boolean };
 export type Entity = 'note' | 'page' | 'folder';
 
-type Raw = { seq: number; mutation_id: string; entity_id: string; payload: string; base_version: number; in_flight: number };
+type Raw = { seq: number; mutation_id: string; op: string; entity_id: string; payload: string; base_version: number; in_flight: number };
 
 const TABLES: Record<Entity, string> = { note: 'notes', page: 'pages', folder: 'folders' };
 const entityOf = (op: SyncOp): Entity | null => (op.op === 'prefs.set' ? null : (op.op.split('.')[0] as Entity));
@@ -73,14 +73,36 @@ export class Outbox {
     return rows.map(toEntry);
   }
 
-  /** The next changes to push, marked as being sent so nothing merges into them meanwhile. */
-  takeBatch(max = 100): OutboxEntry[] {
+  /**
+   * The next changes to push, at most `max` of them and `maxBytes` of encoded mutations, marked as being
+   * sent so nothing merges into them meanwhile. A change too big to ever send stays here and holds back
+   * the later changes to its row so their order holds; a page body like that is dropped once a newer body
+   * of the page waits behind it (the server can't have applied it: no request could carry it).
+   */
+  takeBatch(max = 100, maxBytes = Infinity): OutboxEntry[] {
     return this.sqlite.transaction(() => {
-      const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE in_flight = 0 ORDER BY seq LIMIT ?').all(max) as Raw[];
+      const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE in_flight = 0 ORDER BY seq').all() as Raw[];
+      const drop = this.sqlite.prepare('DELETE FROM outbox WHERE seq = ?');
+      const batch: Raw[] = [];
+      const held = new Set<string>();
+      let bytes = 0;
+      for (const [i, r] of rows.entries()) {
+        if (held.has(r.entity_id)) continue;
+        const size = mutationBytes(r);
+        if (size > maxBytes) {
+          const body = r.op === 'page.setBody';
+          if (body && rows.slice(i + 1).some((n) => n.entity_id === r.entity_id && n.op === 'page.setBody')) drop.run(r.seq);
+          else held.add(r.entity_id);
+          continue;
+        }
+        if (batch.length >= max || bytes + size > maxBytes) break;
+        batch.push(r);
+        bytes += size;
+      }
       // sent stays set after a failure: the server may have applied it, so its id must keep meaning this payload.
       const mark = this.sqlite.prepare('UPDATE outbox SET in_flight = 1, sent = 1 WHERE seq = ?');
-      for (const r of rows) mark.run(r.seq);
-      return rows.map((r) => ({ ...toEntry(r), inFlight: true }));
+      for (const r of batch) mark.run(r.seq);
+      return batch.map((r) => ({ ...toEntry(r), inFlight: true }));
     })();
   }
 
@@ -118,6 +140,11 @@ export class Outbox {
     const rows = this.sqlite.prepare('SELECT * FROM outbox WHERE entity_id = ? AND sent = 0 ORDER BY seq').all(entityId) as Raw[];
     return rows.map(toEntry);
   }
+}
+
+/** A row's size on the wire, as the push request encodes it. */
+function mutationBytes(r: Raw): number {
+  return Buffer.byteLength(JSON.stringify({ id: r.mutation_id, op: JSON.parse(r.payload), baseVersion: r.base_version }));
 }
 
 /** `next` folded into `prev`, or null when they must stay separate changes. */

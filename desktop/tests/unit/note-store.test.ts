@@ -109,6 +109,15 @@ it('reconcile adopts orphan files', async () => {
   expect(store.get(id)).toMatchObject({ durationMs: 0, sizeBytes: 6, createdAt: mtime.getTime(), status: 'ok' });
 });
 
+it('a recording adopted after a crash is queued for sync like a new one', async () => {
+  store.sync.state.setEnabled(true);
+  const id = randomUUID();
+  fs.writeFileSync(path.join(store.recordingsDir, `${id}.webm`), 'orphan');
+  await store.reconcile();
+  expect(store.sync.outbox.pending(id)).toMatchObject([{ op: { op: 'note.create', id } }]);
+  expect(store.sync.files.count()).toBe(1);
+});
+
 it('reconcile removes stale tmp files', async () => {
   const tmp = path.join(store.recordingsDir, 'x.webm.tmp');
   fs.writeFileSync(tmp, 'partial');

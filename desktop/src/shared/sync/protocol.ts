@@ -44,4 +44,6 @@ export const FILE_LIMITS: Record<FileKind, number> = { audio: 50 * 1024 * 1024, 
 export const AUDIO_FILE_RE = /^[0-9a-f-]{36}\.webm$/;
 
 export const PUSH_MAX_MUTATIONS = 100;
+/** The largest request body the server reads (UTF-8 bytes); a bigger one is refused with 413. */
+export const MAX_REQUEST_BYTES = 1024 * 1024;
 export const PULL_PAGE_SIZE = 500;

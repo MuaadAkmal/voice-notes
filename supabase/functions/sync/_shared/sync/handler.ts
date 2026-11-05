@@ -1,7 +1,7 @@
 import { SYNCED_KEYS, type SyncOp } from '../sync-ops.ts';
 import { IMAGE_FILE_RE } from '../page-images.ts';
 import type { FileRules } from './file-rules.ts';
-import { AUDIO_FILE_RE, type DownloadRequest, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type StorageResponse, type UploadRequest } from './protocol.ts';
+import { AUDIO_FILE_RE, type DownloadRequest, MAX_REQUEST_BYTES, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type StorageResponse, type UploadRequest } from './protocol.ts';
 import type { SyncCore } from './server-core.ts';
 
 // The `sync` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
@@ -21,7 +21,6 @@ export type HandlerDeps = {
   origins?: readonly string[];
 };
 
-const MAX_BODY_BYTES = 1024 * 1024;
 const MAX_ID = 200;
 
 type Headers = Record<string, string>;
@@ -62,7 +61,7 @@ export async function handle(req: Request, deps: HandlerDeps): Promise<Response>
   if (!userId) return reply(401, { error: 'Sign in again' });
 
   const text = await req.text();
-  if (new TextEncoder().encode(text).length > MAX_BODY_BYTES) return reply(413, { error: 'Too large' });
+  if (new TextEncoder().encode(text).length > MAX_REQUEST_BYTES) return reply(413, { error: 'Too large' });
 
   try {
     let body: unknown;

@@ -75,6 +75,8 @@ export class NoteStore {
     const sqlite = new Database(path.join(rootDir, 'voice-notes.sqlite'));
     sqlite.pragma('journal_mode = WAL');
     migrate(sqlite);
+    // A push the last run didn't finish (it quit or crashed mid-request) goes again; `sent` stays set.
+    sqlite.prepare('UPDATE outbox SET in_flight = 0').run();
     return new NoteStore(rootDir, sqlite, drizzle(sqlite), now, hostname);
   }
 
@@ -267,23 +269,28 @@ export class NoteStore {
       if (!UUID_RE.test(id) || known.has(id)) continue;
       const stat = await fs.promises.stat(path.join(this.recordingsDir, f));
       const createdAt = Math.round(stat.mtimeMs);
-      this.db
-        .insert(notes)
-        .values({
-          id,
-          title: defaultTitle(new Date(createdAt)),
-          filePath: `recordings/${f}`,
-          durationMs: 0,
-          sizeBytes: stat.size,
-          mimeType: ORPHAN_MIME,
-          status: 'ok',
-          createdAt,
-          updatedAt: createdAt,
-          syncedAt: null,
-          folderId: null,
-          source: 'mic',
-        })
-        .run();
+      // Queued like a new recording, in the same transaction, so a recovered note reaches the account too.
+      this.sqlite.transaction(() => {
+        this.db
+          .insert(notes)
+          .values({
+            id,
+            title: defaultTitle(new Date(createdAt)),
+            filePath: `recordings/${f}`,
+            durationMs: 0,
+            sizeBytes: stat.size,
+            mimeType: ORPHAN_MIME,
+            status: 'ok',
+            createdAt,
+            updatedAt: createdAt,
+            syncedAt: null,
+            folderId: null,
+            source: 'mic',
+          })
+          .run();
+        this.sync.outbox.record({ op: 'note.create', id, row: toRow(this.get(id)!) }, 0);
+        this.sync.files.record('audio', f);
+      })();
       result.adopted++;
     }
     return result;

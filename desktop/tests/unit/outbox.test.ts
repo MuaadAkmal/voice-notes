@@ -132,3 +132,28 @@ it('ack removes the sent changes and records the row version; release lets a fai
   expect(outbox.pending().map((e) => e.entityId)).toEqual(['p']);
   expect(outbox.rowVersion('note', note.id)).toBe(7);
 });
+
+it('a push cut off by a crash goes again when the database reopens, with the same id', () => {
+  outbox.record({ op: 'page.setBody', id: 'p', body: 'a' }, 0);
+  const [sent] = outbox.takeBatch();
+  store.close(); // quit mid-request: never acked, never released
+  store = NoteStore.open(root, () => 1000);
+  const [again] = store.sync.outbox.takeBatch();
+  expect(again).toMatchObject({ mutationId: sent.mutationId, op: { body: 'a' } });
+  store.sync.outbox.record({ op: 'page.setBody', id: 'p', body: 'ab' }, 0);
+  expect(store.sync.outbox.pending('p')).toHaveLength(2); // still sent once: a newer body doesn't replace it
+});
+
+it('batches stay under the byte limit; a change too big to send holds back only its own row', () => {
+  outbox.record({ op: 'page.setBody', id: 'big', body: 'x'.repeat(5000) }, 0);
+  outbox.record({ op: 'page.update', id: 'big', fields: { title: 't' } }, 0);
+  outbox.record({ op: 'page.setBody', id: 'a', body: 'é'.repeat(400) }, 0); // 800 bytes, 400 chars
+  outbox.record({ op: 'page.setBody', id: 'b', body: 'é'.repeat(400) }, 0);
+  expect(outbox.takeBatch(100, 1000).map((e) => e.entityId)).toEqual(['a']);
+  expect(outbox.takeBatch(100, 1000).map((e) => e.entityId)).toEqual(['b']);
+  expect(outbox.takeBatch(100, 1000)).toEqual([]);
+  expect(outbox.pending('big')).toHaveLength(2); // kept on this PC until a newer body replaces it
+  outbox.record({ op: 'page.setBody', id: 'big', body: 'short' }, 0);
+  expect(outbox.takeBatch(100, 1000).map((e) => e.op)).toMatchObject([{ op: 'page.update' }, { op: 'page.setBody', body: 'short' }]);
+  expect(outbox.pending('big')).toHaveLength(2); // the body too big to send is gone
+});

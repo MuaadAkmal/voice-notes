@@ -4,7 +4,7 @@ import { imageRefs } from '../../shared/page-images';
 import { MAX_HOME_WIDGETS } from '../../shared/home-widgets';
 import { type FolderRow, SYNCED_KEYS, type SyncedKey } from '../../shared/sync-ops';
 import { type NoteStore, toRow } from '../store/note-store';
-import type { PullResponse, SyncServer } from '../../shared/sync/protocol';
+import { MAX_REQUEST_BYTES, type PullResponse, type SyncServer } from '../../shared/sync/protocol';
 import { applyPull, type PullChanges } from './apply';
 
 export type { PullResponse, PushRequest, PushResponse, ServerRow, SyncServer } from '../../shared/sync/protocol';
@@ -18,6 +18,8 @@ export type SettingsPort = {
 };
 
 const PUSH_BATCH = 100;
+// The mutations' share of a push request; the rest is room for its ids and the JSON around them.
+const PUSH_BYTES = MAX_REQUEST_BYTES - 4096;
 const MAX_ROUNDS = 3; // push → pull → push again at most this often per run, so a bad merge can't spin
 
 /** Pushes this PC's waiting changes, then pulls everything new, one run at a time. */
@@ -104,7 +106,7 @@ export class SyncEngine {
 
   private async push(): Promise<void> {
     const { state, outbox } = this.store.sync;
-    for (let batch = outbox.takeBatch(PUSH_BATCH); batch.length; batch = outbox.takeBatch(PUSH_BATCH)) {
+    for (let batch = outbox.takeBatch(PUSH_BATCH, PUSH_BYTES); batch.length; batch = outbox.takeBatch(PUSH_BATCH, PUSH_BYTES)) {
       try {
         const res = await this.server.push({
           clientId: state.deviceId(),
