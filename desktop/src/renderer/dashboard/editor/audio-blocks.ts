@@ -99,6 +99,8 @@ const button = (label: string, cls: string) => {
  */
 const releases = new WeakMap<HTMLElement, () => void>();
 
+type Take = { stop: (() => void) | null; keep: boolean; opening: boolean; gone: boolean };
+
 class RecorderWidget extends WidgetType {
   constructor(
     readonly pageId: string,
@@ -125,10 +127,12 @@ class RecorderWidget extends WidgetType {
     status.className = 'cm-vb-status';
     wrap.append(rec, time, status, close);
 
-    // stop: ends a recording in progress; keep: whether what it recorded is saved.
-    const take = { stop: null as (() => void) | null, keep: false };
+    // stop: ends a recording in progress; keep: whether what it recorded is saved; opening: the mic
+    // is being asked for; gone: the widget was destroyed (a mic that opens after that is closed at once).
+    const take: Take = { stop: null, keep: false, opening: false, gone: false };
     releases.set(wrap, () => {
       take.keep = false; // cancelled or the page closed: dropped, and the mic released
+      take.gone = true;
       take.stop?.();
     });
     close.addEventListener('mousedown', (e) => {
@@ -142,6 +146,7 @@ class RecorderWidget extends WidgetType {
         take.stop();
         return;
       }
+      if (take.opening) return;
       void this.record(view, take, rec, time, status);
     });
     return wrap;
@@ -149,17 +154,25 @@ class RecorderWidget extends WidgetType {
 
   private async record(
     view: EditorView,
-    take: { stop: (() => void) | null; keep: boolean },
+    take: Take,
     rec: HTMLButtonElement,
     time: HTMLElement,
     status: HTMLElement,
   ) {
     let stream: MediaStream;
+    take.opening = true;
     try {
       const { micDeviceId } = await api.getSettings();
+      if (take.gone) return;
       stream = await navigator.mediaDevices.getUserMedia({ audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true });
     } catch {
       status.textContent = "Couldn't open the mic";
+      return;
+    } finally {
+      take.opening = false;
+    }
+    if (take.gone) {
+      stream.getTracks().forEach((t) => t.stop());
       return;
     }
     const recorder = new MediaRecorder(stream, { mimeType: MIME });
