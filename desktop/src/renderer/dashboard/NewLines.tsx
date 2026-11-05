@@ -6,7 +6,7 @@ const api = window.dashboardApi;
 export function useNewLines(): Record<string, number> {
   const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
-    const load = () => api.getSettings().then((s) => setCounts(s.newLines));
+    const load = () => api.getSettings().then((s) => setCounts(s.newLines ?? {})); // ?? {}: a main from before this setting
     load();
     return api.onSettingsChanged(load);
   }, []);
