@@ -99,7 +99,7 @@ function VoiceToLists() {
   );
 }
 
-/** "Pixie, I learned a new word in Tamil, vanakkam" goes on the Tamil page with how it sounds and what it means. Per PC. */
+/** "Pixie, I learned a new word in Arabic, shukran" goes on the Arabic page with how it sounds and what it means. Per PC. */
 function LanguageLearner() {
   const [on, setOn] = useState<boolean | null>(null);
   useEffect(() => {
@@ -115,7 +115,7 @@ function LanguageLearner() {
       <div className="min-w-0 flex-1">
         <div className="text-base font-medium">Language learner</div>
         <div className="mt-0.5 text-sm text-muted-foreground">
-          Say “{name}, I learned a new word in Tamil, vanakkam” and it's added to your Tamil page with how it sounds and what it
+          Say “{name}, I learned a new word in Arabic, shukran” and it's added to your Arabic page with how it sounds and what it
           means. Uses Voice to lists, so the page needs to exist.
         </div>
       </div>
