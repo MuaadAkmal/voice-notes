@@ -6,10 +6,10 @@ import { ThemeToggle } from "./ThemeToggle";
 export function Header() {
   return (
     <header className="sticky top-3 z-50 mx-auto w-full max-w-5xl px-3 sm:top-4 sm:px-6">
-      <div className="glass flex items-center justify-between rounded-full py-2 pr-2 pl-5">
+      <div className="nav-solid flex items-center justify-between rounded-full py-2 pr-2 pl-5">
         <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight">
           <Logo className="h-4.5 w-auto" />
-          Voice Notes
+          Voice Note
         </Link>
         <div className="flex items-center gap-1.5">
           <nav aria-label="Main" className="mr-2 hidden items-center gap-5 text-sm font-medium text-muted-foreground sm:flex">
