@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import log from 'electron-log/main';
 import type { Note, StatusMap, TestResult } from '../../shared/channels';
 import { glossaryPrompt } from '../../shared/custom-words';
 import { cleanTranscript, type TranscribeLanguage } from '../../shared/transcription';
@@ -34,15 +35,18 @@ export type ServiceDeps = {
   onQuotaExceeded?: (resetsAt: string) => void;
   /** A note's transcript was saved. */
   onTranscribed?: (id: string) => void;
+  /** Cloud voice notes cleaned up before they are saved: `enabled` read per job; `polish` answers null to keep the text. */
+  cleanup?: { enabled(): boolean; polish(text: string): Promise<string | null> };
 };
 
 /** Only set for the cloud, so requests to a server keep their exact shape. */
 const cloudFlag = (ep: Endpoint) => (ep.cloud ? { cloud: true } : {});
 
-type Request = Parameters<typeof realTranscribe>[0] & { cloud?: boolean; keyterms?: string[] };
+type Request = Parameters<typeof realTranscribe>[0] & { cloud?: boolean; keyterms?: string[]; clean?: boolean };
 
 const MISSING = 'Audio file is missing';
 const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
+const CLEANUP_MIN_WORDS = 6; // as dictation: a few words have nothing to tidy
 
 /** Voice note → WAV → the user's server → transcript on the note, one note at a time. */
 export class TranscriptionService {
@@ -58,10 +62,10 @@ export class TranscriptionService {
     const openai = this.transcribe;
     // Every request goes through here: the cloud client for `cloud`, else the OpenAI-shaped one.
     this.transcribe = (req) => {
-      const { cloud, keyterms, ...plain } = req;
+      const { cloud, keyterms, clean = false, ...plain } = req;
       if (!cloud) return openai(plain);
       if (!d.cloud) return Promise.reject(new Error('Set up transcription first'));
-      const call = keyterms ? d.cloud.transcribe(req.audio, req.language, req.signal, false, keyterms) : d.cloud.transcribe(req.audio, req.language);
+      const call = keyterms || clean ? d.cloud.transcribe(req.audio, req.language, req.signal, clean, keyterms) : d.cloud.transcribe(req.audio, req.language);
       return call.then(
         (r) => {
           if ('usage' in r && r.usage) d.onUsage?.(r.usage);
@@ -150,10 +154,13 @@ export class TranscriptionService {
     const audio = await this.d.toWav(await this.readAudio(note), note.mimeType);
     // Resolved when the job starts, so a fix made on the setup page applies to queued notes too.
     const ep = await this.d.endpoint();
+    // Cloud only: Scribe leaves out fillers (no_verbatim), then the text is tidied like a dictation.
+    const clean = ep.cloud && (this.d.cleanup?.enabled() ?? false);
     let result: Awaited<ReturnType<typeof realTranscribe>>;
     try {
       result = await this.transcribe({
         ...cloudFlag(ep),
+        ...(clean ? { clean: true } : {}),
         ...this.wordsFor(ep),
         baseUrl: ep.baseUrl,
         model: ep.model,
@@ -167,14 +174,27 @@ export class TranscriptionService {
     } finally {
       ep.release();
     }
+    let text = cleanTranscript(result.text);
+    if (clean) text = await this.tidy(text);
     try {
-      this.d.store.setTranscript(id, cleanTranscript(result.text), result.language);
+      this.d.store.setTranscript(id, text, result.language);
     } catch (e) {
       if (e instanceof Error && e.message === 'Note not found') return; // deleted mid-request
       throw e;
     }
     this.d.notesChanged();
     this.d.onTranscribed?.(id);
+  }
+
+  /** The text polished, or as it is when there's nothing to tidy or polish can't: a transcript is never lost to it. */
+  private async tidy(text: string): Promise<string> {
+    if (text.split(/\s+/).filter(Boolean).length < CLEANUP_MIN_WORDS) return text;
+    try {
+      return (await this.d.cleanup!.polish(text)) ?? text;
+    } catch (err) {
+      log.info('[transcription] saved without cleanup:', err instanceof Error ? err.message : String(err));
+      return text;
+    }
   }
 
   /** The custom words in the shape the endpoint takes: key terms for the cloud, a prompt for Whisper. */

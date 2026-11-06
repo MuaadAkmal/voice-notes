@@ -63,7 +63,7 @@ export class CloudAsrClient {
   constructor(private readonly d: Deps) {}
 
   /**
-   * clean: leave out filler words and false starts (dictation; voice notes stay word for word).
+   * clean: leave out filler words and false starts (dictation, and voice notes while "Clean up voice notes" is on).
    * keyterms: the user's custom words. `usage`: the month so far, when the function says.
    */
   async transcribe(

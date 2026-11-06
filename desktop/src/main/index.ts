@@ -1202,6 +1202,11 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onUsage: usageSeen,
     onQuotaExceeded: minutesRefused,
     onTranscribed: (id) => void auto.transcribed(id),
+    cleanup: {
+      enabled: () => settings.voiceNoteCleanup,
+      // Background jobs, so no dictation-style budget; a stalled call still can't hold the queue.
+      polish: (text) => commandsClient.polish(text, { signal: new AbortController().signal, timeoutMs: 30_000 }).then((r) => r.text),
+    },
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);

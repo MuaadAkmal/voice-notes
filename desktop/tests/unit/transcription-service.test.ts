@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Note, Settings } from '../../src/shared/channels';
 import { DEFAULT_SETTINGS } from '../../src/main/settings';
 import {
@@ -383,4 +383,78 @@ it('tells who wants to know once a transcript is saved', async () => {
   service.enqueue([ID], 'auto');
   await service.idle();
   expect(onTranscribed).toHaveBeenCalledWith(ID);
+});
+
+describe('cleanup of Cloud voice notes', () => {
+  const SAID = 'um so the plan is uh to ship friday';
+  function cloudSetup(o: { text?: string; polish?: (t: string) => Promise<string | null>; enabled?: () => boolean } = {}) {
+    const cloud = { transcribe: vi.fn(async () => ({ text: o.text ?? SAID, language: 'en' })) };
+    const cleanup = { enabled: vi.fn(o.enabled ?? (() => true)), polish: vi.fn(o.polish ?? (async () => 'The plan is to ship Friday.')) };
+    const s = setup({ cloud, cleanup });
+    s.setSettings(serverSettings({ provider: 'cloud', baseUrl: '' }));
+    return { ...s, cloud, cleanup };
+  }
+
+  it('a cloud note is asked clean, then polished, and the polished text is saved', async () => {
+    const { service, deps, cloud, cleanup } = cloudSetup();
+    service.enqueue([ID], 'auto');
+    await service.idle();
+    expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), null, undefined, true, []);
+    expect(cleanup.polish).toHaveBeenCalledWith(SAID);
+    expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, 'The plan is to ship Friday.', 'en');
+  });
+
+  it("keeps Scribe's text when polish gives nothing back or fails", async () => {
+    for (const polish of [async () => null, async () => Promise.reject(new Error('offline'))]) {
+      const { service, deps } = cloudSetup({ polish });
+      service.enqueue([ID], 'auto');
+      await service.idle();
+      expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, SAID, 'en');
+      expect(service.status()[ID]).not.toMatchObject({ state: 'failed' });
+    }
+  });
+
+  it('saves short or empty transcripts without polishing', async () => {
+    for (const text of ['ok thanks', '']) {
+      const { service, deps, cleanup } = cloudSetup({ text });
+      service.enqueue([ID], 'auto');
+      await service.idle();
+      expect(cleanup.polish).not.toHaveBeenCalled();
+      expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, text, 'en');
+    }
+  });
+
+  it('with the setting off, a cloud note is word for word', async () => {
+    const { service, cloud, cleanup } = cloudSetup({ enabled: () => false });
+    service.enqueue([ID], 'auto');
+    await service.idle();
+    expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), null, undefined, false, []);
+    expect(cleanup.polish).not.toHaveBeenCalled();
+  });
+
+  it('server and built-in notes are never cleaned', async () => {
+    const cleanup = { enabled: vi.fn(() => true), polish: vi.fn(async () => 'x') };
+    const { service, requests } = setup({ cleanup });
+    service.enqueue([ID], 'auto');
+    await service.idle();
+    expect(requests[0]).not.toHaveProperty('clean');
+    expect(cleanup.polish).not.toHaveBeenCalled();
+  });
+
+  it('peeks stay raw', async () => {
+    const { service, deps, cloud, cleanup } = cloudSetup();
+    (deps.toWav as ReturnType<typeof vi.fn>).mockResolvedValueOnce(silentWav(10));
+    expect(await service.peek(ID, 4)).toBe(SAID);
+    expect((cloud.transcribe.mock.calls[0] as unknown[])[3]).toBe(false);
+    expect(cleanup.polish).not.toHaveBeenCalled();
+  });
+
+  it('reads the setting when the job starts', async () => {
+    let on = false;
+    const { service, cleanup } = cloudSetup({ enabled: () => on });
+    service.enqueue([ID], 'auto');
+    on = true;
+    await service.idle();
+    expect(cleanup.polish).toHaveBeenCalled();
+  });
 });
