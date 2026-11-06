@@ -95,6 +95,7 @@ export const SettingsFieldSchemas = {
   cloudOutPeriod: z.string().max(40).nullable(),
   languageLearner: z.boolean(),
   onboarded: z.boolean(),
+  ttsVoice: z.string().max(100),
   onboardingPending: z.boolean(),
   newLines: z.record(z.string().max(64), z.number().int().min(1).max(999)),
   storageWarned: z.enum(['low', 'full']).nullable(),

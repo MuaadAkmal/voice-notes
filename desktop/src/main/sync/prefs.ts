@@ -8,7 +8,8 @@ import type { Outbox } from './outbox';
 /** Queues the account-wide settings in a patch; device settings (hotkeys, theme, …) never leave this PC. */
 export function recordPrefs(patch: Partial<Settings>, outbox: Outbox): void {
   for (const key of SYNCED_KEYS) {
-    if (key in patch) outbox.record({ op: 'prefs.set', key, value: patch[key] }, 0);
+    // An undefined value would travel without `value` and the server would refuse the change for good.
+    if (patch[key] !== undefined) outbox.record({ op: 'prefs.set', key, value: patch[key] }, 0);
   }
 }
 
@@ -54,6 +55,9 @@ export function applyRemotePrefs(prefs: { key: SyncedKey; value: unknown }[], d:
     } else if (key === 'customWords') {
       const words = SettingsFieldSchemas.customWords.safeParse(value);
       if (words.success) d.updateSettings({ customWords: words.data }, { record: false });
+    } else if (key === 'ttsVoice') {
+      const voice = SettingsFieldSchemas.ttsVoice.safeParse(value);
+      if (voice.success) d.updateSettings({ ttsVoice: voice.data }, { record: false });
     } else {
       d.updateSettings({ [key]: value } as Partial<Settings>, { record: false });
     }

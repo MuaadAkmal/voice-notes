@@ -152,7 +152,7 @@ export class SyncEngine {
           (w) => !w.locked && !account.some((a) => a.id === w.id || (a.type === w.type && a.pageId === w.pageId)),
         );
         if (ours.length) this.settings.update({ homeWidgets: [...account, ...ours].slice(0, MAX_HOME_WIDGETS + 1) });
-      } else if (!seen.has(key)) {
+      } else if (!seen.has(key) && local[key] !== undefined) {
         this.settings.update({ [key]: local[key] } as Partial<Settings>);
       }
     }

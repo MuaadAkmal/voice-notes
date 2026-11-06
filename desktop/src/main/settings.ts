@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { type Settings, SettingsFieldSchemas } from '../shared/ipc';
+import { STOCK_VOICES } from '../shared/asr/protocol';
 import { DEFAULT_LATER_SITES } from '../shared/later-routes';
 import { DEFAULT_WAKE_WORDS } from '../shared/note-command';
 import { DEFAULT_POMODORO } from '../shared/pomodoro';
@@ -55,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cloudOutPeriod: null,
   languageLearner: false,
   onboarded: false,
+  ttsVoice: STOCK_VOICES[0].id,
   onboardingPending: false,
   newLines: {},
   storageWarned: null,

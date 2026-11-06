@@ -144,3 +144,17 @@ it('Quick notes is created once and re-created when gone', async () => {
   await store.pages.deleteMany([patch.notesPageId!]);
   expect(ensureNotesPage(settings, store.pages)?.notesPageId).not.toBe(patch.notesPageId);
 });
+
+it('a setting with no value records nothing: the server would refuse it for good', () => {
+  recordPrefs({ ttsVoice: undefined, customWords: ['a'] }, store.sync.outbox);
+  expect(ops()).toEqual([{ op: 'prefs.set', key: 'customWords', value: ['a'] }]);
+});
+
+it('a pulled reading voice is applied; one that is not text is ignored', () => {
+  let s: Settings = { ...DEFAULT_SETTINGS };
+  const d = { getSettings: () => s, updateSettings: (p: Partial<Settings>) => (s = { ...s, ...p }), pages: store.pages, deviceName: 'PC-A' };
+  applyRemotePrefs([{ key: 'ttsVoice', value: 'clone' }], d);
+  expect(s.ttsVoice).toBe('clone');
+  applyRemotePrefs([{ key: 'ttsVoice', value: 5 }], d);
+  expect(s.ttsVoice).toBe('clone');
+});

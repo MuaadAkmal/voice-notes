@@ -297,3 +297,8 @@ it('clearing polishedAt removes the polished object; a note delete removes it wi
   expect(bucket.get('audio', `${USER}/${POLISHED}`)).toBeUndefined();
   expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeUndefined();
 });
+
+it('a name that only looks like a polished file is refused', async () => {
+  const { call } = setup();
+  expect((await call('files/download', { kind: 'audio', name: `${NOTE}xpolishedxmp3` })).status).toBe(400);
+});

@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS, loadSettings, normaliseLocal, saveSettings, type SettingsFiles, splitSettings } from '../../src/main/settings';
+import { STOCK_VOICES } from '../../src/shared/asr/protocol';
 
 let files: SettingsFiles;
 beforeEach(() => {
@@ -233,4 +234,9 @@ it('the language learner starts off and stays on this PC', () => {
 it('custom words are normalised on load', () => {
   writeBoth(JSON.stringify({ customWords: [' Muaad ', 'muaad', 'a[b]'] }));
   expect(loadSettings(files).customWords).toEqual(['Muaad', 'ab']);
+});
+
+it('the reading voice defaults to the first stock voice, and follows the account', () => {
+  expect(loadSettings(files).ttsVoice).toBe(STOCK_VOICES[0].id);
+  expect(splitSettings({ ttsVoice: 'clone' })).toEqual({ pc: {}, profile: { ttsVoice: 'clone' } });
 });

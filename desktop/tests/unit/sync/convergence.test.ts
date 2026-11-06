@@ -8,6 +8,7 @@ import { NoteStore, toRow } from '../../../src/main/store/note-store';
 import { SyncEngine } from '../../../src/main/sync/engine';
 import { applyRemotePrefs, recordPrefs } from '../../../src/main/sync/prefs';
 import type { Settings } from '../../../src/shared/channels';
+import type { PushRequest } from '../../../src/shared/sync/protocol';
 import { SYNCED_KEYS } from '../../../src/shared/sync-ops';
 import { ReferenceServer } from './reference-server';
 
@@ -16,13 +17,13 @@ const dirs: string[] = [];
 let ids = 0;
 const newId = () => `w${++ids}`;
 
-function pc(name: string, server: ReferenceServer, start: number): PC {
+function pc(name: string, server: ReferenceServer, start: number, initial: Partial<Settings> = {}): PC {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `vn-conv-${name}-`));
   dirs.push(dir);
   let clock = start;
   const store = NoteStore.open(dir, () => (clock += 1000), () => name);
   open.push(store);
-  let settings: Settings = { ...DEFAULT_SETTINGS };
+  let settings: Settings = { ...DEFAULT_SETTINGS, ...initial };
   const updateSettings = (patch: Partial<Settings>, opts: { record?: boolean } = {}) => {
     patch = guardWidgets(patch, settings, newId);
     settings = { ...settings, ...patch };
@@ -242,4 +243,19 @@ it('the outbox empties and the cursor advances', async () => {
   expect(a.store.sync.outbox.pending()).toEqual([]);
   expect(b.store.sync.state.cursor()).toBeGreaterThan(0);
   expect(b.store.pages.list()).toHaveLength(1);
+});
+
+it('a first sync from settings that lack a synced key queues no setting without a value', async () => {
+  const server = new ReferenceServer();
+  const pushed: PushRequest[] = [];
+  const push = server.push.bind(server);
+  server.push = async (req) => (pushed.push(req), push(req));
+  // As a profile saved before the key existed would load.
+  const a = pc('PC-A', server, 1_000_000, { ttsVoice: undefined } as unknown as Partial<Settings>);
+  enable(a);
+  await a.engine.sync();
+  const sent = pushed.flatMap((r) => r.mutations.map((m) => m.op)).filter((op) => op.op === 'prefs.set');
+  expect(sent.length).toBeGreaterThan(0);
+  expect(sent.every((op) => 'value' in op && op.value !== undefined)).toBe(true);
+  expect(a.store.sync.outbox.pending()).toEqual([]);
 });
