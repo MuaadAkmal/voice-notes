@@ -25,6 +25,8 @@
   --glass-bg: rgb(255 255 255 / 58%);
   --glass-border: rgb(255 255 255 / 85%);
   --glass-highlight: rgb(255 255 255 / 90%);
+  --nav-bg: #faf9f6;
+  --nav-border: #deddd8;
   --keycap-bg: #fff;
 }
 
@@ -51,6 +53,8 @@
   --glass-bg: rgb(255 255 255 / 6%);
   --glass-border: rgb(255 255 255 / 12%);
   --glass-highlight: rgb(255 255 255 / 10%);
+  --nav-bg: #17181e;
+  --nav-border: #2a2b33;
   --keycap-bg: rgb(255 255 255 / 10%);
 }
 
@@ -152,6 +156,13 @@ h3 {
   box-shadow: var(--shadow-soft), inset 0 1px 0 var(--glass-highlight);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+
+/* The header bar: solid, so the page never shows through it. */
+.nav-solid {
+  background: var(--nav-bg);
+  border: 1px solid var(--nav-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .glass-hover {
