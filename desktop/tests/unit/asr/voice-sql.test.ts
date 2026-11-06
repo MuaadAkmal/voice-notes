@@ -23,7 +23,7 @@ beforeAll(async () => {
     '20261030105023_asr_usage.sql',
     '20261103065658_plan_limits.sql',
     '20261103065700_subscriptions.sql',
-    '20261106120000_polished_audio.sql',
+    '20261106105248_polished_audio.sql',
   ])
     await pg.exec(migration(m));
 }, 60_000);
