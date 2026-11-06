@@ -26,7 +26,6 @@ export type CloneStore = {
 export type VoiceApi = {
   create(name: string, wav: Uint8Array): Promise<string>;
   remove(voiceId: string): Promise<void>;
-  preview(voiceId: string): Promise<string | null>;
 };
 
 export class VoiceCore {
@@ -41,13 +40,7 @@ export class VoiceCore {
     const [{ plan, paid }, id, stock] = await Promise.all([
       this.paid(user),
       this.d.clones.get(user),
-      Promise.all(
-        STOCK_VOICES.map(async (v) => ({
-          id: v.id,
-          name: v.name,
-          previewUrl: await this.d.api.preview(v.id).catch(() => null),
-        })),
-      ),
+      Promise.resolve(STOCK_VOICES.map((v) => ({ id: v.id, name: v.name }))),
     ]);
     // Replacing takes no new slot, so a full account with a clone can still clone again.
     const canClone = paid && (id !== null || (await this.d.clones.count()) < this.d.limit);

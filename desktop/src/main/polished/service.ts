@@ -27,6 +27,7 @@ type Deps = {
     voice(): Promise<VoiceState>;
     clone(wav: Uint8Array, consent: boolean): Promise<VoiceState>;
     removeClone(): Promise<VoiceState>;
+    sample(voiceId: string): Promise<Uint8Array>;
   };
   /** The commands function's polish route; null means keep the text. Gives up after 30 s. */
   polish(text: string): Promise<string | null>;
@@ -36,12 +37,11 @@ type Deps = {
   notesChanged(): void;
   /** A note's recording as 16 kHz mono WAV (the same conversion transcription uses). */
   toWav(note: Note): Promise<Uint8Array>;
-  /** A preview URL as a data: URL (main fetches it, so the window needs no web access); null when it can not be had. */
-  fetchSample(url: string): Promise<string | null>;
   log?(...a: unknown[]): void;
 };
 
 const VOICE_TTL_MS = 5 * 60_000;
+const SAMPLE_MAX_BYTES = 2 * 1024 * 1024;
 
 /** Cuts at the last whitespace within the limit; a text with none is cut hard. */
 function cutAtWord(text: string): string {
@@ -54,6 +54,7 @@ function cutAtWord(text: string): string {
 export class PolishedAudio {
   private readonly running = new Map<string, Promise<MakeResult>>();
   private voiceCache: { at: number; state: VoiceState } | null = null;
+  private readonly samples = new Map<string, string>(); // stock samples never change
 
   constructor(private readonly d: Deps) {}
 
@@ -105,12 +106,19 @@ export class PolishedAudio {
     }
   }
 
-  /** A stock voice's preview as a data: URL, or null. */
+  /** A stock voice's sample as a data: URL (the dashboard's CSP stays closed to the web), or null. */
   async sample(voiceId: string): Promise<string | null> {
+    if (!STOCK_VOICES.some((v) => v.id === voiceId)) return null;
+    const kept = this.samples.get(voiceId);
+    if (kept) return kept;
     try {
-      const url = (await this.state()).stock.find((v) => v.id === voiceId)?.previewUrl;
-      return url ? await this.d.fetchSample(url) : null;
-    } catch {
+      const mp3 = await this.d.client.sample(voiceId);
+      if (mp3.length === 0 || mp3.length > SAMPLE_MAX_BYTES) return null;
+      const url = `data:audio/mpeg;base64,${Buffer.from(mp3).toString('base64')}`;
+      this.samples.set(voiceId, url);
+      return url;
+    } catch (e) {
+      this.d.log?.('[polished] sample failed', voiceId, e);
       return null;
     }
   }

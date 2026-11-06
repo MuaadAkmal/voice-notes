@@ -36,7 +36,6 @@ function setup(opts: { limit?: number; paid?: boolean } = {}) {
   const api = {
     create: vi.fn(async (_n: string, _w: Uint8Array) => 'new-voice'),
     remove: vi.fn(async (_id: string) => {}),
-    preview: vi.fn(async (id: string) => `https://p/${id}.mp3`),
   } satisfies VoiceApi;
   const core = new VoiceCore({ store, clones, api, limit: opts.limit ?? 5, now: () => NOW });
   return { store, clones, api, core };
@@ -44,11 +43,11 @@ function setup(opts: { limit?: number; paid?: boolean } = {}) {
 const good = silentWav(40, 8000);
 
 describe('VoiceCore.state', () => {
-  it('lists the stock voices with previews', async () => {
+  it('lists the stock voices', async () => {
     const { core } = setup();
     const s = await core.state(A);
     expect(s.stock.map((v) => v.id)).toEqual(STOCK_VOICES.map((v) => v.id));
-    expect(s.stock[0].previewUrl).toBe(`https://p/${STOCK_VOICES[0].id}.mp3`);
+    expect(s.stock[0]).toEqual({ id: STOCK_VOICES[0].id, name: STOCK_VOICES[0].name });
   });
   it('Free: cannot clone, no clone', async () => {
     const { core } = setup({ paid: false });
@@ -73,11 +72,6 @@ describe('VoiceCore.state', () => {
     const { core, clones } = setup({ paid: false });
     clones.rows.set(A, 'mine');
     expect(await core.state(A)).toMatchObject({ clone: 'unusable', canClone: false });
-  });
-  it('a failed preview lookup leaves a null url', async () => {
-    const { core, api } = setup();
-    api.preview.mockRejectedValue(new Error('down'));
-    expect((await core.state(A)).stock[0].previewUrl).toBeNull();
   });
 });
 

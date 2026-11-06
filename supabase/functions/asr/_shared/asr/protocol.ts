@@ -40,7 +40,7 @@ export const CLONE_MAX_SECONDS = 180;
 
 /** `unusable`: a clone kept after dropping to Free (not deleted, not usable). */
 export type VoiceState = {
-  stock: { id: string; name: string; previewUrl: string | null }[];
+  stock: { id: string; name: string }[];
   clone: 'none' | 'ready' | 'unusable';
   /** Paid plan and room under the limit (or a clone to replace). */
   canClone: boolean;

@@ -197,3 +197,27 @@ it('speak waits 180 s, longer than the function takes', async () => {
     timeout.mockRestore();
   }
 });
+
+it('sample gets the MP3 with the bearer token', async () => {
+  const { client, f } = make(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } }));
+  expect(await client.sample('v 1')).toEqual(new Uint8Array([1, 2, 3]));
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice/sample/v%201');
+  const init = f.mock.calls[0][1]!;
+  expect(init.method).toBe('GET');
+  expect((init.headers as Record<string, string>).authorization).toBe('Bearer t');
+  expect((init.headers as Record<string, string>).apikey).toBe('pk');
+});
+
+it('sample refreshes the token once on 401', async () => {
+  let n = 0;
+  const { client, refresh } = make(async () => (n++ === 0 ? ok({}, 401) : new Response(new Uint8Array([7]))));
+  expect(await client.sample('v')).toEqual(new Uint8Array([7]));
+  expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+it('sample: 401 twice is signed out, 502 is ProviderFailed, 400 too, a dead network is Offline', async () => {
+  await expect(make(async () => ok({}, 401)).client.sample('v')).rejects.toBeInstanceOf(NotSignedIn);
+  await expect(make(async () => ok({}, 502)).client.sample('v')).rejects.toBeInstanceOf(ProviderFailed);
+  await expect(make(async () => ok({}, 400)).client.sample('v')).rejects.toBeInstanceOf(ProviderFailed);
+  await expect(make(async () => { throw new Error('x'); }).client.sample('v')).rejects.toBeInstanceOf(Offline);
+});

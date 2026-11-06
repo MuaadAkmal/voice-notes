@@ -167,7 +167,27 @@ export class CloudAsrClient {
     return this.call<VoiceState>('/voice/remove', { method: 'POST' });
   }
 
+  /** A stock voice's sample MP3 (made once by the server). */
+  async sample(voiceId: string): Promise<Uint8Array> {
+    const res = await this.ok(`/voice/sample/${encodeURIComponent(voiceId)}`, { method: 'GET' });
+    try {
+      return new Uint8Array(await res.arrayBuffer());
+    } catch {
+      throw new ProviderFailed();
+    }
+  }
+
   private async call<T>(path: string, o: CallOptions): Promise<T> {
+    const res = await this.ok(path, o);
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new ProviderFailed(); // a captive portal or proxy page
+    }
+  }
+
+  /** The reply to a request that succeeded; the others become typed errors. */
+  private async ok(path: string, o: CallOptions): Promise<Response> {
     let res = await this.send(path, o);
     if (res.status === 401) {
       await this.d.refresh().catch(() => undefined);
@@ -182,11 +202,7 @@ export class CloudAsrClient {
       const code = o.mapError ? (((await res.json().catch(() => ({}))) as { error?: unknown }).error ?? '') : '';
       throw o.mapError?.(res.status, String(code)) ?? (res.status === 413 ? new TooLarge() : new ProviderFailed());
     }
-    try {
-      return (await res.json()) as T;
-    } catch {
-      throw new ProviderFailed(); // a captive portal or proxy page
-    }
+    return res;
   }
 
   private async send(path: string, o: CallOptions): Promise<Response> {

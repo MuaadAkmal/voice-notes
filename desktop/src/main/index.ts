@@ -1226,6 +1226,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       voice: () => cloudClient.voice(),
       clone: (wav, consent) => cloudClient.clone(wav, consent),
       removeClone: () => cloudClient.removeClone(),
+      sample: (voiceId) => cloudClient.sample(voiceId),
     },
     polish: (text) => commandsClient.polish(text, { signal: new AbortController().signal, timeoutMs: 30_000 }).then((r) => r.text),
     settings: () => settings,
@@ -1233,7 +1234,6 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onUsage: usageSeen,
     notesChanged: () => toDashboard(Ch.NotesChanged),
     toWav: async (note) => toWav(await fs.promises.readFile(store.absolutePath(note)), note.mimeType),
-    fetchSample,
     log: (...a) => log.info(...a),
   });
   polishedHolder.service = polished;
@@ -1421,22 +1421,6 @@ if (!app.requestSingleInstanceLock()) {
     log.error('[boot] failed', err);
     app.quit();
   });
-}
-
-const SAMPLE_MAX_BYTES = 2 * 1024 * 1024;
-
-/** A voice preview as a data: URL (the dashboard's CSP stays closed to the web), or null. */
-async function fetchSample(url: string): Promise<string | null> {
-  try {
-    const res = await net.fetch(url, { signal: AbortSignal.timeout(8000) });
-    const type = res.headers.get('content-type') ?? '';
-    if (!res.ok || !type.startsWith('audio/')) return null;
-    const bytes = Buffer.from(await res.arrayBuffer());
-    if (bytes.length > SAMPLE_MAX_BYTES) return null;
-    return `data:audio/mpeg;base64,${bytes.toString('base64')}`;
-  } catch {
-    return null;
-  }
 }
 
 const AVATAR_MAX_BYTES = 1024 * 1024;

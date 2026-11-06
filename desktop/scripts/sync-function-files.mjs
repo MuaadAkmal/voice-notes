@@ -54,6 +54,7 @@ const FUNCTIONS = {
     'asr/elevenlabs.ts',
     'asr/speak.ts',
     'asr/voice.ts',
+    'asr/samples.ts',
     'asr/handler.ts',
   ],
   billing: [

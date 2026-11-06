@@ -9,6 +9,7 @@ import { AsrCore } from './_shared/asr/core.ts';
 import { elevenLabsSpeaker, elevenLabsTranscriber, elevenLabsVoices } from './_shared/asr/elevenlabs.ts';
 import { handleAsr } from './_shared/asr/handler.ts';
 import { RestAsrStore, RestCloneStore, RestSpeakFiles } from './_shared/asr/pg-store.ts';
+import { SampleCore } from './_shared/asr/samples.ts';
 import { SpeakCore } from './_shared/asr/speak.ts';
 import { VoiceCore } from './_shared/asr/voice.ts';
 
@@ -61,6 +62,27 @@ const speak =
         now: Date.now,
       });
 
+// Stock voice samples: made once with the speaker above, kept in Storage outside every <userId>/ folder
+// (so the per-user sweep and storage_reserve never see them), served from then on.
+const SAMPLE_PREFIX = '_samples/eleven_multilingual_v2';
+const samples =
+  missing.length || !storage
+    ? null
+    : new SampleCore({
+        speaker: elevenLabsSpeaker(apiKey, fetch),
+        store: {
+          async get(voiceId) {
+            const { data, error } = await storage.from('audio').download(`${SAMPLE_PREFIX}/${voiceId}.mp3`);
+            if (error || !data) return null; // not made yet (or unreadable: it is made again)
+            return new Uint8Array(await data.arrayBuffer());
+          },
+          async put(voiceId, mp3) {
+            const { error } = await storage.from('audio').upload(`${SAMPLE_PREFIX}/${voiceId}.mp3`, mp3, { contentType: 'audio/mpeg', upsert: true });
+            if (error) throw new Error(`upload: ${error.message}`);
+          },
+        },
+      });
+
 // The project's public signing keys, as the platform provides them; null if absent or unreadable.
 const localKeys = (() => {
   try {
@@ -85,4 +107,4 @@ async function verify(jwt: string): Promise<{ userId: string } | null> {
   return { userId: data.claims.sub as string };
 }
 
-Deno.serve((req) => handleAsr(req, { verify, core, speak, voice, missing }));
+Deno.serve((req) => handleAsr(req, { verify, core, speak, voice, samples, missing }));

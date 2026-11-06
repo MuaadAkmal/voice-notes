@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { AsrCore, periodOf } from '../../../src/shared/asr/core';
 import { handleAsr } from '../../../src/shared/asr/handler';
 import { MemoryAsrStore } from '../../../src/shared/asr/store';
+import { SampleCore } from '../../../src/shared/asr/samples';
 import { SpeakCore } from '../../../src/shared/asr/speak';
 import { VoiceCore } from '../../../src/shared/asr/voice';
 
@@ -34,7 +35,6 @@ export async function startAsrServer(user: { userId: string }): Promise<{
     now: Date.now,
   });
   // Polished audio and voices over memory: the speaker answers a fixed one-second "mp3", the voice API clones at once.
-  let base = '';
   const polished = new Map<string, Uint8Array>();
   let cloneId: string | null = null;
   const clones = {
@@ -54,26 +54,28 @@ export async function startAsrServer(user: { userId: string }): Promise<{
   const voiceCore = new VoiceCore({
     store,
     clones,
-    // Every voice previews with a few bytes served by this same server (main fetches it, and wants audio/*).
-    api: { create: async () => 'fake-clone', remove: async () => {}, preview: async () => `${base}/sample.mp3` },
+    api: { create: async () => 'fake-clone', remove: async () => {} },
     limit: 5,
     now: Date.now,
   });
+  const speaker = async () => new Uint8Array(16000);
+  // Samples: the fake speaker answers a few bytes, kept in memory like the function keeps them in Storage.
+  const kept = new Map<string, Uint8Array>();
+  const samples = new SampleCore({
+    store: { get: async (id) => kept.get(id) ?? null, put: async (id, mp3) => void kept.set(id, mp3) },
+    speaker: async () => new Uint8Array([0xff, 0xfb, 0x90, 0x00]),
+  });
   const speak = new SpeakCore({
     store,
-    speaker: async () => new Uint8Array(16000),
+    speaker,
     files: { owns: async () => true, reserve: async () => true, upload: async (path, mp3) => void polished.set(path, mp3) },
     clone: voiceCore.usableClone,
     now: Date.now,
   });
-  const deps = { verify: async () => user, core, speak, voice: voiceCore, missing: [] };
+  const deps = { verify: async () => user, core, speak, voice: voiceCore, samples, missing: [] };
 
   const seen: { path: string; headers: http.IncomingHttpHeaders }[] = [];
   const server = http.createServer(async (req, res) => {
-    if (req.url === '/sample.mp3') {
-      res.writeHead(200, { 'content-type': 'audio/mpeg' }).end(Buffer.from([0xff, 0xfb, 0x90, 0x00]));
-      return;
-    }
     seen.push({ path: new URL(req.url ?? '/', 'http://x').pathname, headers: req.headers });
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
@@ -83,11 +85,10 @@ export async function startAsrServer(user: { userId: string }): Promise<{
       deps,
     );
     res.writeHead(response.status, { 'content-type': response.headers.get('content-type') ?? 'application/json' });
-    res.end(await response.text());
+    res.end(Buffer.from(await response.arrayBuffer()));
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
-  base = `http://127.0.0.1:${port}`;
   return {
     url: `http://127.0.0.1:${port}`,
     setUsed: async (seconds) => {

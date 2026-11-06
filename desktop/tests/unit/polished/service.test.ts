@@ -218,13 +218,27 @@ describe('clone', () => {
 });
 
 describe('sample', () => {
-  it('fetches the preview of a stock voice through main', async () => {
+  it('asks the server for a stock voice and returns a data URL, kept for the session', async () => {
     const { d, svc } = setup();
-    d.client.voice.mockResolvedValue({ ...VOICE(), stock: [{ id: 'v1', name: 'A', previewUrl: 'https://p/1.mp3' }] });
-    const fetchSample = vi.fn(async (_: string) => 'data:audio/mpeg;base64,AA==');
-    (d as unknown as { fetchSample: typeof fetchSample }).fetchSample = fetchSample;
-    expect(await svc.sample('v1')).toBe('data:audio/mpeg;base64,AA==');
-    expect(fetchSample).toHaveBeenCalledWith('https://p/1.mp3');
-    expect(await svc.sample('other')).toBeNull();
+    const sample = vi.fn(async (_: string) => new Uint8Array([1, 2, 3]));
+    (d.client as unknown as { sample: typeof sample }).sample = sample;
+    expect(await svc.sample(STOCK_VOICES[0].id)).toBe('data:audio/mpeg;base64,AQID');
+    expect(await svc.sample(STOCK_VOICES[0].id)).toBe('data:audio/mpeg;base64,AQID');
+    expect(sample).toHaveBeenCalledTimes(1);
+    expect(sample).toHaveBeenCalledWith(STOCK_VOICES[0].id);
+  });
+  it('is null for an unknown voice, a failure, or a file over 2 MB (and tries again after a failure)', async () => {
+    const { d, svc } = setup();
+    const sample = vi.fn(async (_: string): Promise<Uint8Array> => {
+      throw new Error('down');
+    });
+    (d.client as unknown as { sample: typeof sample }).sample = sample;
+    expect(await svc.sample('nope')).toBeNull();
+    expect(sample).not.toHaveBeenCalled();
+    expect(await svc.sample(STOCK_VOICES[1].id)).toBeNull();
+    sample.mockResolvedValueOnce(new Uint8Array(2 * 1024 * 1024 + 1));
+    expect(await svc.sample(STOCK_VOICES[1].id)).toBeNull();
+    sample.mockResolvedValueOnce(new Uint8Array([1]));
+    expect(await svc.sample(STOCK_VOICES[1].id)).toBe('data:audio/mpeg;base64,AQ==');
   });
 });

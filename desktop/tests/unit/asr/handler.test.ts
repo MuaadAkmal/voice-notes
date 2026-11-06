@@ -3,13 +3,16 @@ import { BadAudio, ProviderFailed, QuotaExceeded, TooLarge, type AsrCore } from 
 import { handleAsr } from '../../../src/shared/asr/handler';
 import { MAX_BYTES } from '../../../src/shared/asr/protocol';
 import { BadSpeak, CloneUnavailable, NotYourNote, StorageFull } from '../../../src/shared/asr/speak';
+import { UnknownVoice } from '../../../src/shared/asr/samples';
 import { BadSamples, CloneUnavailableNow, NeedsPaidPlan, NoConsent } from '../../../src/shared/asr/voice';
 
 const ok = { transcribe: async (_u: string, _b: Uint8Array, lang: string | null) => ({ text: 't', language: lang, seconds: 1, used: 1, limit: 2, resetsAt: 'r' }), usage: async () => ({ used: 0, limit: 7200, resetsAt: 'r', plan: 'free' }) };
 const vstate = { stock: [], clone: 'none', canClone: true, plan: 'standard' };
 const speaks = { speak: async () => ({ seconds: 3, used: 3, limit: 100, resetsAt: 'r' }) };
 const voices = { state: async () => vstate, clone: async () => vstate, remove: async () => vstate };
-const mk = (core: Partial<typeof ok> | null, missing: string[] = [], extra: { speak?: object | null; voice?: object | null } = {}) => ({
+const samples = { sample: async () => new Uint8Array([1, 2, 3]) };
+const mk = (core: Partial<typeof ok> | null, missing: string[] = [], extra: { speak?: object | null; voice?: object | null; samples?: object | null } = {}) => ({
+  samples: (extra.samples === undefined ? samples : extra.samples) as never,
   core: core as unknown as AsrCore | null,
   speak: (extra.speak === undefined ? speaks : extra.speak) as never,
   voice: (extra.voice === undefined ? voices : extra.voice) as never,
@@ -179,4 +182,37 @@ it('404 on unknown voice routes and wrong methods', async () => {
 it('404 on an unknown route', async () => {
   expect((await handleAsr(req('nope', { method: 'POST' }), mk(ok))).status).toBe(404);
   expect((await handleAsr(req('transcribe', { method: 'GET' }), mk(ok))).status).toBe(404);
+});
+
+const sampleReq = (id = 'v1', token: string | null = 'good') => req(`voice/sample/${id}`, {}, token);
+
+it('serves a voice sample as audio/mpeg, cached for a day', async () => {
+  let seen = '';
+  const r = await handleAsr(sampleReq('abc'), mk(ok, [], { samples: { sample: async (id: string) => ((seen = id), new Uint8Array([1, 2, 3])) } }));
+  expect(r.status).toBe(200);
+  expect(r.headers.get('content-type')).toBe('audio/mpeg');
+  expect(r.headers.get('cache-control')).toBe('private, max-age=86400');
+  expect(new Uint8Array(await r.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  expect(seen).toBe('abc');
+});
+
+it('a voice sample needs a token, before anything is made', async () => {
+  let made = false;
+  const samples = { sample: async () => ((made = true), new Uint8Array(1)) };
+  expect((await handleAsr(sampleReq('v1', null), mk(ok, [], { samples }))).status).toBe(401);
+  expect(made).toBe(false);
+});
+
+it.each([
+  [new UnknownVoice('x'), 400, { error: 'bad_request' }],
+  [new ProviderFailed('s'), 502, { error: 'provider_failed' }],
+])('a voice sample maps %s', async (err, status, body) => {
+  const r = await handleAsr(sampleReq(), mk(ok, [], { samples: { sample: async () => { throw err; } } }));
+  expect(r.status).toBe(status);
+  expect(await r.json()).toEqual(body);
+});
+
+it('voice sample: 404 for POST, 500 when not wired', async () => {
+  expect((await handleAsr(req('voice/sample/v1', { method: 'POST' }), mk(ok))).status).toBe(404);
+  expect((await handleAsr(sampleReq(), mk(ok, ['X'], { samples: null }))).status).toBe(500);
 });

@@ -1,6 +1,7 @@
 import { type AsrCore, BadAudio, ProviderFailed, QuotaExceeded, TooLarge } from './core';
 import { normalizeWords } from '../custom-words';
 import { MAX_BYTES } from './protocol';
+import { UnknownVoice, type SampleCore } from './samples';
 import { BadSpeak, CloneUnavailable, NotYourNote, StorageFull, type SpeakCore } from './speak';
 import { BadSamples, CloneUnavailableNow, NeedsPaidPlan, NoConsent, type VoiceCore } from './voice';
 
@@ -17,6 +18,8 @@ export type AsrHandlerDeps = {
   speak: Pick<SpeakCore, 'speak'> | null;
   /** Null when a secret is missing. */
   voice: Pick<VoiceCore, 'state' | 'clone' | 'remove'> | null;
+  /** Null when a secret is missing. */
+  samples: Pick<SampleCore, 'sample'> | null;
   missing: string[];
 };
 
@@ -66,15 +69,16 @@ export async function handleAsr(req: Request, d: AsrHandlerDeps): Promise<Respon
   const url = new URL(req.url);
   const parts = url.pathname.split('/');
   const last = parts.pop();
-  const route = last && parts.at(-1) === 'voice' && (last === 'clone' || last === 'remove') ? `voice/${last}` : last;
+  const isSample = req.method === 'GET' && !!last && parts.at(-1) === 'sample' && parts.at(-2) === 'voice';
+  const route = isSample ? 'voice/sample' : last && parts.at(-1) === 'voice' && (last === 'clone' || last === 'remove') ? `voice/${last}` : last;
   const post = req.method === 'POST';
   const known =
     (post && ['transcribe', 'speak', 'voice/clone', 'voice/remove'].includes(route ?? '')) ||
-    (req.method === 'GET' && (route === 'usage' || route === 'voice'));
+    (req.method === 'GET' && (route === 'usage' || route === 'voice' || route === 'voice/sample'));
   if (!known) return json(404, { error: 'Not found' });
   const needsSpeak = route === 'speak';
   const needsVoice = route === 'voice' || route?.startsWith('voice/');
-  if ((needsSpeak && !d.speak) || (needsVoice && !d.voice)) {
+  if ((needsSpeak && !d.speak) || (needsVoice && !d.voice) || (isSample && !d.samples)) {
     console.error('[asr] missing secrets', d.missing.join(', '));
     return json(500, { error: 'misconfigured', missing: d.missing });
   }
@@ -87,6 +91,10 @@ export async function handleAsr(req: Request, d: AsrHandlerDeps): Promise<Respon
   try {
     if (route === 'usage') return json(200, await d.core.usage(user.userId));
     if (route === 'voice') return json(200, await d.voice!.state(user.userId));
+    if (isSample) {
+      const mp3 = await d.samples!.sample(decodeURIComponent(last!));
+      return new Response(mp3 as BodyInit, { status: 200, headers: { 'content-type': 'audio/mpeg', 'cache-control': 'private, max-age=86400' } });
+    }
     if (route === 'voice/remove') return json(200, await d.voice!.remove(user.userId));
     const declared = Number(req.headers.get('content-length'));
     if (Number.isFinite(declared) && declared > MAX_BYTES) return json(413, { error: 'too_large' });
@@ -111,7 +119,7 @@ export async function handleAsr(req: Request, d: AsrHandlerDeps): Promise<Respon
     if (err instanceof QuotaExceeded) return json(429, { error: 'quota_exceeded', resetsAt: err.resetsAt });
     if (err instanceof StorageFull) return json(413, { error: 'storage_full' });
     if (err instanceof NotYourNote) return json(404, { error: 'not_found' });
-    if (err instanceof BadSpeak || err instanceof BadSamples || err instanceof NoConsent) return json(400, { error: 'bad_request' });
+    if (err instanceof BadSpeak || err instanceof UnknownVoice || err instanceof BadSamples || err instanceof NoConsent) return json(400, { error: 'bad_request' });
     if (err instanceof CloneUnavailable || err instanceof NeedsPaidPlan) return json(403, { error: err instanceof NeedsPaidPlan ? 'needs_paid_plan' : 'clone_unavailable' });
     if (err instanceof CloneUnavailableNow) return json(409, { error: 'unavailable' });
     if (err instanceof ProviderFailed) {
