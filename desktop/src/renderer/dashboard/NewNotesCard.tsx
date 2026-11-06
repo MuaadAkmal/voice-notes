@@ -16,7 +16,7 @@ export function NewNotesCard({ settings, onChange }: { settings: Settings; onCha
         </Row>
         <Row
           title="Clean up voice notes"
-          hint="With Voice Notes Cloud, filler words and false starts are left out and the text is tidied. The transcript is sent to our server for that."
+          hint="With Voice Notes Cloud, filler words and false starts are left out and the text is tidied."
         >
           <Switch aria-label="Clean up voice notes" checked={settings.voiceNoteCleanup} onCheckedChange={(v) => onChange({ voiceNoteCleanup: v })} />
         </Row>
