@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { PgAsrStore, RestAsrStore } from '../../../src/shared/asr/pg-store';
+import { PgAsrStore, RestAsrStore, RestCloneStore, RestSpeakFiles } from '../../../src/shared/asr/pg-store';
 import { MemoryAsrStore, type AsrStore } from '../../../src/shared/asr/store';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -130,4 +130,44 @@ it('the REST store calls the functions with the service key', async () => {
   await expect(
     new RestAsrStore({ url: 'u', serviceKey: 'k', fetch: (async () => new Response('no', { status: 500 })) as never }).reserve(A, OCT, 1),
   ).rejects.toThrow('reserve_asr_seconds 500');
+});
+
+it('the REST clone store calls the voice_clone rpcs', async () => {
+  const fetch = vi.fn(async (url: string) =>
+    new Response(
+      url.endsWith('voice_clone_get') ? JSON.stringify([{ voice_id: 'v1' }])
+      : url.endsWith('voice_clone_count') ? JSON.stringify([{ n: 3 }])
+      : url.endsWith('voice_clone_put') ? JSON.stringify([{ old_voice_id: null }])
+      : '[]',
+    ),
+  );
+  const s = new RestCloneStore({ url: 'https://p.supabase.co', serviceKey: 'sk', fetch: fetch as never });
+  expect(await s.get(A)).toBe('v1');
+  expect(await s.count()).toBe(3);
+  expect(await s.put(A, 'v2')).toBeNull();
+  expect(await s.remove(A)).toBeNull();
+  const sent = (fetch.mock.calls as unknown as [string, RequestInit][]).map((c) => [c[0], JSON.parse(c[1].body as string)]);
+  expect(sent).toEqual([
+    ['https://p.supabase.co/rest/v1/rpc/voice_clone_get', { p_user: A }],
+    ['https://p.supabase.co/rest/v1/rpc/voice_clone_count', {}],
+    ['https://p.supabase.co/rest/v1/rpc/voice_clone_put', { p_user: A, p_voice_id: 'v2' }],
+    ['https://p.supabase.co/rest/v1/rpc/voice_clone_delete', { p_user: A }],
+  ]);
+  const gone = new RestCloneStore({ url: 'u', serviceKey: 'k', fetch: (async () => new Response('[{"voice_id":"old"}]')) as never });
+  expect(await gone.remove(A)).toBe('old');
+});
+
+it('REST speak files: owns reads sync_rows, reserve calls storage_reserve', async () => {
+  const fetch = vi.fn(async (url: string) =>
+    new Response(url.includes('/sync_rows') ? JSON.stringify([{ id: 'n' }]) : JSON.stringify([{ ok: false }])),
+  );
+  const f = new RestSpeakFiles({ url: 'https://p.supabase.co', serviceKey: 'sk', fetch: fetch as never });
+  expect(await f.owns(A, 'n')).toBe(true);
+  const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe(`https://p.supabase.co/rest/v1/sync_rows?user_id=eq.${A}&entity=eq.note&id=eq.n&deleted=eq.false&select=id`);
+  expect(init.headers).toMatchObject({ apikey: 'sk', authorization: 'Bearer sk' });
+  expect(await f.reserve(A, `${A}/n.polished.mp3`, 9)).toBe(false);
+  expect(JSON.parse((fetch.mock.calls[1] as unknown as [string, RequestInit])[1].body as string)).toEqual({ p_user: A, p_bucket: 'audio', p_name: `${A}/n.polished.mp3`, p_size: 9 });
+  const none = new RestSpeakFiles({ url: 'u', serviceKey: 'k', fetch: (async () => new Response('[]')) as never });
+  expect(await none.owns(A, 'n')).toBe(false);
 });

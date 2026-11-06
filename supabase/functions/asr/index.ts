@@ -6,9 +6,11 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import { createLocalJWKSet, jwtVerify } from 'npm:jose@5.9.6';
 import { AsrCore } from './_shared/asr/core.ts';
-import { elevenLabsTranscriber } from './_shared/asr/elevenlabs.ts';
+import { elevenLabsSpeaker, elevenLabsTranscriber, elevenLabsVoices } from './_shared/asr/elevenlabs.ts';
 import { handleAsr } from './_shared/asr/handler.ts';
-import { RestAsrStore } from './_shared/asr/pg-store.ts';
+import { RestAsrStore, RestCloneStore, RestSpeakFiles } from './_shared/asr/pg-store.ts';
+import { SpeakCore } from './_shared/asr/speak.ts';
+import { VoiceCore } from './_shared/asr/voice.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const apiKey = Deno.env.get('ELEVENLABS_API_KEY') ?? '';
@@ -19,13 +21,45 @@ const auth = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
   auth: { persistSession: false, autoRefreshToken: false },
 }).auth;
 
+const store = new RestAsrStore({ url: SUPABASE_URL, serviceKey, fetch });
 const core = missing.length
   ? null
   : new AsrCore({
-      store: new RestAsrStore({ url: SUPABASE_URL, serviceKey, fetch }),
+      store,
       transcribe: elevenLabsTranscriber(apiKey, fetch),
       now: Date.now,
     });
+
+// Polished audio and voice cloning. Cloning stays off until VOICE_CLONE_LIMIT (slots we pay for) is set.
+const rest = { url: SUPABASE_URL, serviceKey, fetch };
+const storage = missing.length ? null : createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } }).storage;
+const speakFiles = new RestSpeakFiles(rest);
+const voice = missing.length
+  ? null
+  : new VoiceCore({
+      store,
+      clones: new RestCloneStore(rest),
+      api: elevenLabsVoices(apiKey, fetch),
+      limit: Number(Deno.env.get('VOICE_CLONE_LIMIT')) || 0,
+      now: Date.now,
+    });
+const speak =
+  missing.length || !voice || !storage
+    ? null
+    : new SpeakCore({
+        store,
+        speaker: elevenLabsSpeaker(apiKey, fetch),
+        files: {
+          owns: (user, noteId) => speakFiles.owns(user, noteId),
+          reserve: (user, path, bytes) => speakFiles.reserve(user, path, bytes),
+          async upload(path, mp3) {
+            const { error } = await storage.from('audio').upload(path, mp3, { contentType: 'audio/mpeg', upsert: true });
+            if (error) throw new Error(`upload: ${error.message}`);
+          },
+        },
+        clone: voice.usableClone,
+        now: Date.now,
+      });
 
 // The project's public signing keys, as the platform provides them; null if absent or unreadable.
 const localKeys = (() => {
@@ -51,4 +85,4 @@ async function verify(jwt: string): Promise<{ userId: string } | null> {
   return { userId: data.claims.sub as string };
 }
 
-Deno.serve((req) => handleAsr(req, { verify, core, missing }));
+Deno.serve((req) => handleAsr(req, { verify, core, speak, voice, missing }));

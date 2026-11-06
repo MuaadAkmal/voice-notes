@@ -25,7 +25,7 @@ export async function startAsrServer(user: { userId: string }): Promise<{
     transcribe: async () => ({ text: ' hello world', language: 'en' }),
     now: Date.now,
   });
-  const deps = { verify: async () => user, core, missing: [] };
+  const deps = { verify: async () => user, core, speak: null, voice: null, missing: [] };
 
   const seen: { path: string; headers: http.IncomingHttpHeaders }[] = [];
   const server = http.createServer(async (req, res) => {

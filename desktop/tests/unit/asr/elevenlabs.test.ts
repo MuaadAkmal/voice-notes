@@ -1,6 +1,6 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { canonicalWav } from '../../../src/shared/asr/core';
-import { elevenLabsTranscriber } from '../../../src/shared/asr/elevenlabs';
+import { elevenLabsTranscriber, elevenLabsVoices } from '../../../src/shared/asr/elevenlabs';
 
 const pcm = new Uint8Array([1, 2, 3, 4]);
 const wav = canonicalWav(pcm, 44100, 2);
@@ -70,6 +70,28 @@ it('stops when cancelled', async () => {
   await elevenLabsTranscriber('K', f)(wav, null, { clean: false, keyterms: [], signal: cancel.signal });
   cancel.abort();
   expect(calls[0].init.signal?.aborted).toBe(true);
+});
+
+it('caches a preview url, and a failed lookup for 10 minutes', async () => {
+  vi.useFakeTimers();
+  try {
+    let n = 0;
+    let fail = false;
+    const f = (async () => (n++, fail ? new Response('down', { status: 503 }) : new Response(JSON.stringify({ preview_url: 'https://p/a.mp3' })))) as unknown as typeof fetch;
+    const api = elevenLabsVoices('K', f);
+    expect(await api.preview('a')).toBe('https://p/a.mp3');
+    expect(await api.preview('a')).toBe('https://p/a.mp3');
+    expect(n).toBe(1);
+    fail = true;
+    await expect(api.preview('b')).rejects.toThrow();
+    expect(await api.preview('b')).toBeNull(); // cached failure
+    expect(n).toBe(2);
+    vi.advanceTimersByTime(10 * 60_000 + 1);
+    await expect(api.preview('b')).rejects.toThrow();
+    expect(n).toBe(3);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('throws on a non-2xx reply', async () => {

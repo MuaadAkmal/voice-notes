@@ -56,9 +56,12 @@ export function elevenLabsSpeaker(apiKey: string, fetchFn: typeof globalThis.fet
 
 const VOICES_URL = 'https://api.elevenlabs.io/v1/voices';
 const VOICES_TIMEOUT_MS = 60_000;
+const PREVIEW_TIMEOUT_MS = 5000; // the voice list waits on six of these at once
+const PREVIEW_RETRY_MS = 10 * 60_000;
 
 export function elevenLabsVoices(apiKey: string, fetchFn: typeof globalThis.fetch): VoiceApi {
   const previews = new Map<string, string | null>(); // stock previews don't change
+  const failedAt = new Map<string, number>(); // a slow or down ElevenLabs is not asked again for a while
   const fail = async (res: Response) => `ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`;
   return {
     async create(name, wav) {
@@ -92,15 +95,21 @@ export function elevenLabsVoices(apiKey: string, fetchFn: typeof globalThis.fetc
     },
     async preview(voiceId) {
       if (previews.has(voiceId)) return previews.get(voiceId) ?? null;
-      const res = await fetchFn(`${VOICES_URL}/${encodeURIComponent(voiceId)}`, {
-        headers: { 'xi-api-key': apiKey },
-        signal: AbortSignal.timeout(VOICES_TIMEOUT_MS),
-      });
-      if (!res.ok) throw new Error(await fail(res));
-      const j = (await res.json()) as { preview_url?: unknown };
-      const url = typeof j.preview_url === 'string' ? j.preview_url : null;
-      previews.set(voiceId, url);
-      return url;
+      if (Date.now() - (failedAt.get(voiceId) ?? -Infinity) < PREVIEW_RETRY_MS) return null;
+      try {
+        const res = await fetchFn(`${VOICES_URL}/${encodeURIComponent(voiceId)}`, {
+          headers: { 'xi-api-key': apiKey },
+          signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(await fail(res));
+        const j = (await res.json()) as { preview_url?: unknown };
+        const url = typeof j.preview_url === 'string' ? j.preview_url : null;
+        previews.set(voiceId, url);
+        return url;
+      } catch (e) {
+        failedAt.set(voiceId, Date.now());
+        throw e;
+      }
     },
   };
 }
