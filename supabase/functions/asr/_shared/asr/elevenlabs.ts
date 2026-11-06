@@ -1,10 +1,13 @@
 import type { Transcriber } from './core.ts';
+import type { Speaker } from './speak.ts';
 
 // ElevenLabs Scribe speech-to-text. The key stays in the Edge Function.
 
 const STT_URL = 'https://api.elevenlabs.io/v1/speech-to-text';
 const HEADER_BYTES = 44; // canonicalWav's header
 const TIMEOUT_MS = 60_000;
+const TTS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
+const TTS_TIMEOUT_MS = 120_000;
 
 /** Dictation clips are 16 kHz mono: sent raw, ElevenLabs skips decoding them, which its docs say is faster. */
 const isPcm16k = (wav: Uint8Array) => {
@@ -34,5 +37,18 @@ export function elevenLabsTranscriber(apiKey: string, fetchFn: typeof globalThis
     if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
     const j = (await res.json()) as { text?: unknown; language_code?: unknown };
     return { text: typeof j.text === 'string' ? j.text : '', language: typeof j.language_code === 'string' ? j.language_code : null };
+  };
+}
+
+export function elevenLabsSpeaker(apiKey: string, fetchFn: typeof globalThis.fetch): Speaker {
+  return async (voiceId, text, signal) => {
+    const res = await fetchFn(`${TTS_URL}/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(TTS_TIMEOUT_MS)]),
+    });
+    if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+    return new Uint8Array(await res.arrayBuffer());
   };
 }

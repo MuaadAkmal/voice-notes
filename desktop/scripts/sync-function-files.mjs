@@ -52,6 +52,7 @@ const FUNCTIONS = {
     'asr/pg-store.ts',
     'asr/core.ts',
     'asr/elevenlabs.ts',
+    'asr/speak.ts',
     'asr/handler.ts',
   ],
   billing: [
