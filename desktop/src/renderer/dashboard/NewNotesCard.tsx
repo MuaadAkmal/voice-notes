@@ -2,7 +2,7 @@ import type { Settings } from '../../shared/channels';
 import { Switch } from '@/components/ui/switch';
 import { Row } from './SettingsPage';
 
-/** What happens to a note once it's recorded: transcribed by itself, and given a title. */
+/** What happens to a note once it's recorded: transcribed by itself, cleaned up, and given a title. */
 export function NewNotesCard({ settings, onChange }: { settings: Settings; onChange: (patch: Partial<Settings>) => void }) {
   return (
     <section className="mt-8">
@@ -13,6 +13,12 @@ export function NewNotesCard({ settings, onChange }: { settings: Settings; onCha
         </Row>
         <Row title="Give them a title" hint="Titles are written by AI from the transcript, so the transcript is sent to our server for that.">
           <Switch aria-label="Give them a title" checked={settings.autoTitle} onCheckedChange={(v) => onChange({ autoTitle: v })} />
+        </Row>
+        <Row
+          title="Clean up voice notes"
+          hint="With Voice Notes Cloud, filler words and false starts are left out and the text is tidied. The transcript is sent to our server for that."
+        >
+          <Switch aria-label="Clean up voice notes" checked={settings.voiceNoteCleanup} onCheckedChange={(v) => onChange({ voiceNoteCleanup: v })} />
         </Row>
       </div>
     </section>

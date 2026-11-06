@@ -213,6 +213,11 @@ it('custom words follow the account; the rest of these stay on the PC', () => {
   expect(pc).toEqual({ autoTranscribe: false, autoTitle: false, cloudWarnedPeriod: 'x' });
 });
 
+it('voice note cleanup starts on, and stays on the PC', () => {
+  expect(loadSettings(files).voiceNoteCleanup).toBe(true);
+  expect(splitSettings({ voiceNoteCleanup: false })).toEqual({ pc: { voiceNoteCleanup: false }, profile: {} });
+});
+
 it('onboarding is not done yet, and follows the account', () => {
   expect(loadSettings(files).onboarded).toBe(false);
   expect(loadSettings(files).onboardingPending).toBe(false);

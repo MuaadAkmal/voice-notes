@@ -89,6 +89,7 @@ export const SettingsFieldSchemas = {
   }),
   autoTranscribe: z.boolean(),
   autoTitle: z.boolean(),
+  voiceNoteCleanup: z.boolean(),
   customWords: z.array(z.string().max(200)).max(200).transform(normalizeWords),
   cloudWarnedPeriod: z.string().max(40).nullable(),
   cloudOutPeriod: z.string().max(40).nullable(),

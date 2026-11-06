@@ -92,6 +92,7 @@ export type Settings = {
   pomodoro: PomodoroSettings;
   autoTranscribe: boolean; // new notes recorded on this PC are transcribed without asking
   autoTitle: boolean; // a transcribed note still on its default title gets one written by AI (the `commands` function)
+  voiceNoteCleanup: boolean; // a Cloud voice note's transcript is cleaned up (no fillers, tidied) before it is saved
   customWords: string[]; // names and jargon every transcription is steered towards (synced)
   cloudWarnedPeriod: string | null; // the Cloud month (its resetsAt) the 80% notice was shown for
   cloudOutPeriod: string | null; // the Cloud month the minutes-used notice was shown for

@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pomodoro: DEFAULT_POMODORO,
   autoTranscribe: true,
   autoTitle: true,
+  voiceNoteCleanup: true,
   customWords: [],
   cloudWarnedPeriod: null,
   cloudOutPeriod: null,
