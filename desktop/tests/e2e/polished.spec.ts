@@ -62,6 +62,12 @@ test('the Voice tab lists six voices and saves the pick; Free is offered Upgrade
   await expect(group.getByRole('radio')).toHaveCount(6);
   for (const name of VOICES) await expect(group.getByRole('radio', { name })).toBeVisible();
   await expect(group.getByRole('radio', { name: 'My voice' })).toHaveCount(0);
+  for (const name of VOICES) await expect(page.getByRole('button', { name: `Play ${name} sample` })).toBeVisible();
+  // Main fetches the preview and hands the window a data: URL.
+  const sample = await page.evaluate((id) => window.dashboardApi.voiceSample(id), GEORGE);
+  expect(sample).toMatch(/^data:audio\//);
+  await page.getByRole('button', { name: 'Play George sample' }).click();
+  await expect(page.getByText('No sample available')).toHaveCount(0);
 
   await group.getByRole('radio', { name: 'George' }).click();
   await expect(group.getByRole('radio', { name: 'George' })).toBeChecked();
@@ -109,6 +115,8 @@ test('a note with a transcript can be made into polished audio, then played in e
   await expect(page.getByRole('radio', { name: 'Polished' })).toBeChecked();
   // The reading is not in the test bucket (the sync fixture isn't wired), so only the source is asserted.
   await expect.poll(() => audioSource(page)).toBe(`${id}?polished=1&v=${polishedAt}`);
+  await page.mouse.move(1100, 700); // off the row, so the hover cross-fade has settled
+  await page.waitForTimeout(400);
   await page.screenshot({ path: '.superpowers/shots/polished-note.png' });
 
   await page.getByRole('radio', { name: 'Original' }).click();

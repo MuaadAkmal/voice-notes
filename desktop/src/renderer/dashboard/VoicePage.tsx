@@ -73,7 +73,7 @@ export function VoicePage() {
   };
 
   const entries = [
-    ...voice.stock.map((v) => ({ id: v.id, name: v.name, hasSample: v.previewUrl !== null })),
+    ...voice.stock.map((v) => ({ id: v.id, name: v.name, hasSample: true })),
     ...(cloneReady ? [{ id: 'clone', name: 'My voice', hasSample: false }] : []),
   ];
 

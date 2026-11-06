@@ -34,6 +34,7 @@ export async function startAsrServer(user: { userId: string }): Promise<{
     now: Date.now,
   });
   // Polished audio and voices over memory: the speaker answers a fixed one-second "mp3", the voice API clones at once.
+  let base = '';
   const polished = new Map<string, Uint8Array>();
   let cloneId: string | null = null;
   const clones = {
@@ -53,7 +54,8 @@ export async function startAsrServer(user: { userId: string }): Promise<{
   const voiceCore = new VoiceCore({
     store,
     clones,
-    api: { create: async () => 'fake-clone', remove: async () => {}, preview: async () => null },
+    // Every voice previews with a few bytes served by this same server (main fetches it, and wants audio/*).
+    api: { create: async () => 'fake-clone', remove: async () => {}, preview: async () => `${base}/sample.mp3` },
     limit: 5,
     now: Date.now,
   });
@@ -68,6 +70,10 @@ export async function startAsrServer(user: { userId: string }): Promise<{
 
   const seen: { path: string; headers: http.IncomingHttpHeaders }[] = [];
   const server = http.createServer(async (req, res) => {
+    if (req.url === '/sample.mp3') {
+      res.writeHead(200, { 'content-type': 'audio/mpeg' }).end(Buffer.from([0xff, 0xfb, 0x90, 0x00]));
+      return;
+    }
     seen.push({ path: new URL(req.url ?? '/', 'http://x').pathname, headers: req.headers });
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
@@ -81,6 +87,7 @@ export async function startAsrServer(user: { userId: string }): Promise<{
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
+  base = `http://127.0.0.1:${port}`;
   return {
     url: `http://127.0.0.1:${port}`,
     setUsed: async (seconds) => {
