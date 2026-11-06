@@ -35,6 +35,12 @@ export class StorageFull extends Error {
     super('Storage full');
   }
 }
+/** The note is not on the server yet (it syncs first). */
+export class NotSynced extends Error {
+  constructor() {
+    super('Note not synced');
+  }
+}
 /** The server has cloning switched off, or the account's copies are all used. */
 export class CloneUnavailable extends Error {
   constructor() {
@@ -88,11 +94,14 @@ type CallOptions = {
   contentType?: string;
   signal?: AbortSignal;
   /** The error for a refused request, by status and the reply's `error` code; undefined: the default. */
+  /** Overrides the client's timeout. */
+  timeoutMs?: number;
   mapError?: (status: number, code: string) => Error | undefined;
 };
 
 function speakError(status: number, code: string): Error | undefined {
   if (status === 413) return code === 'storage_full' ? new StorageFull() : new TooLarge();
+  if (status === 404) return new NotSynced();
   if (status === 403 && code === 'clone_unavailable') return new CloneUnavailable();
   return undefined;
 }
@@ -102,6 +111,9 @@ function cloneError(status: number, code: string): Error | undefined {
   if (status === 403) return code === 'needs_paid_plan' ? new NeedsPaidPlan() : new CloneUnavailable();
   return undefined;
 }
+
+/** Longer than the function's own 120 s text-to-speech wait, which is followed by storage work. */
+const SPEAK_TIMEOUT_MS = 180_000;
 
 export class CloudAsrClient {
   constructor(private readonly d: Deps) {}
@@ -133,7 +145,13 @@ export class CloudAsrClient {
 
   /** Reads a note aloud; the function stores the MP3 beside the recording. */
   speak(req: SpeakRequest): Promise<SpeakResponse> {
-    return this.call<SpeakResponse>('/speak', { method: 'POST', body: JSON.stringify(req), contentType: 'application/json', mapError: speakError });
+    return this.call<SpeakResponse>('/speak', {
+      method: 'POST',
+      body: JSON.stringify(req),
+      contentType: 'application/json',
+      mapError: speakError,
+      timeoutMs: SPEAK_TIMEOUT_MS,
+    });
   }
 
   voice(): Promise<VoiceState> {
@@ -174,7 +192,7 @@ export class CloudAsrClient {
   private async send(path: string, o: CallOptions): Promise<Response> {
     const token = await this.d.token();
     if (!token) throw new CloudNotSignedIn();
-    const timeout = AbortSignal.timeout(this.d.timeoutMs ?? 120_000);
+    const timeout = AbortSignal.timeout(o.timeoutMs ?? this.d.timeoutMs ?? 120_000);
     try {
       return await this.d.fetch(`${this.d.baseUrl}${path}`, {
         method: o.method,

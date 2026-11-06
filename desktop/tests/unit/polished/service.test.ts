@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PolishedAudio } from '../../../src/main/polished/service';
-import { CloneUnavailable, CloudNotSignedIn, QuotaExceeded, StorageFull } from '../../../src/main/transcription/cloud-client';
+import { CloneUnavailable, CloudNotSignedIn, NotSynced, QuotaExceeded, StorageFull } from '../../../src/main/transcription/cloud-client';
 import { Offline } from '../../../src/main/sync/http-server';
 import { STOCK_VOICES, type VoiceState } from '../../../src/shared/asr/protocol';
 import type { Note } from '../../../src/shared/channels';
@@ -57,6 +57,27 @@ describe('make', () => {
     expect(d.files.fetchPolished).toHaveBeenCalledWith('n1');
     expect(d.onUsage).toHaveBeenCalledWith({ used: 10, limit: 60, resetsAt: 'r' });
     expect(d.notesChanged).toHaveBeenCalled();
+  });
+
+  it('still succeeds when the download fails (the next play fetches it)', async () => {
+    const { d, svc } = setup();
+    d.files.fetchPolished.mockRejectedValue(new Error('net'));
+    expect(await svc.make('n1')).toEqual({ ok: true });
+  });
+
+  it('fails quietly when the note was deleted while the reading was made', async () => {
+    const { d, svc } = setup();
+    d.store.setPolished.mockImplementation(() => {
+      throw new Error('Note not found');
+    });
+    expect(await svc.make('n1')).toEqual({ ok: false, reason: 'failed' });
+    expect(d.log).toHaveBeenCalled();
+  });
+
+  it('reads in the first stock voice when ttsVoice is not a real voice', async () => {
+    const { d, svc } = setup({ voice: 'nonsense' });
+    await svc.make('n1');
+    expect((d.client.speak.mock.calls[0][0] as { voice: string }).voice).toBe(STOCK_VOICES[0].id);
   });
 
   it('speaks the transcript when polishing fails', async () => {
@@ -134,6 +155,7 @@ describe('make', () => {
     [new Offline(), { ok: false, reason: 'offline' }],
     [new QuotaExceeded('2026-12-01'), { ok: false, reason: 'quota', resetsAt: '2026-12-01' }],
     [new StorageFull(), { ok: false, reason: 'storage-full' }],
+    [new NotSynced(), { ok: false, reason: 'not-synced' }],
     [new Error('boom'), { ok: false, reason: 'failed' }],
   ])('maps %s', async (err, want) => {
     const { d, svc } = setup();

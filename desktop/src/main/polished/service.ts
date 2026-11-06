@@ -6,6 +6,7 @@ import {
   CloneUnavailableNow,
   type CloudUsage,
   NeedsPaidPlan,
+  NotSynced,
   QuotaExceeded,
   StorageFull,
 } from '../transcription/cloud-client';
@@ -145,7 +146,7 @@ export class PolishedAudio {
   /** The chosen voice, but 'clone' only while the copy is ready; else the first stock voice. */
   private async voice(): Promise<string> {
     const wanted = this.d.settings().ttsVoice;
-    if (wanted !== 'clone') return wanted;
+    if (wanted !== 'clone') return STOCK_VOICES.some((v) => v.id === wanted) ? wanted : STOCK_VOICES[0].id;
     try {
       if ((await this.state()).clone === 'ready') return 'clone';
     } catch {
@@ -175,7 +176,11 @@ export class PolishedAudio {
     } catch (e) {
       return this.failure(e);
     }
-    this.d.store.setPolished(noteId, this.d.now());
+    try {
+      this.d.store.setPolished(noteId, this.d.now()); // also drops any older local reading
+    } catch (e) {
+      return this.failure(e); // the note was deleted meanwhile
+    }
     // The file downloads on first play if this fails.
     await this.d.files.fetchPolished(noteId).catch((e) => this.d.log?.('[polished] download failed', noteId, e));
     this.d.notesChanged();
@@ -187,6 +192,7 @@ export class PolishedAudio {
     if (e instanceof Offline) return { ok: false, reason: 'offline' };
     if (e instanceof QuotaExceeded) return { ok: false, reason: 'quota', resetsAt: e.resetsAt };
     if (e instanceof StorageFull) return { ok: false, reason: 'storage-full' };
+    if (e instanceof NotSynced) return { ok: false, reason: 'not-synced' };
     this.d.log?.('[polished] make failed', e);
     return { ok: false, reason: 'failed' };
   }

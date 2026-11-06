@@ -196,17 +196,26 @@ export class NoteStore {
     })();
   }
 
-  /** The polished reading was made (at) or removed (null, file too). Not an edit of the note, so updatedAt stays. */
+  /**
+   * The polished reading was made (at) or removed (null). Not an edit of the note, so updatedAt stays.
+   * Whenever it changes the local file goes, so a failed download of the new reading can't leave the old one to play.
+   */
   setPolished(id: string, at: number | null): Note {
     const note = this.get(id);
     if (!note) throw new Error('Note not found');
-    if (at === null) fs.rmSync(this.polishedPath(note), { force: true });
-    return this.sqlite.transaction(() => {
-      const updated = this.db.update(notes).set({ polishedAt: at }).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
-      if (!updated) throw new Error('Note not found');
+    const updated = this.sqlite.transaction(() => {
+      const row = this.db.update(notes).set({ polishedAt: at }).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
+      if (!row) throw new Error('Note not found');
       this.recordUpdate(id, { polishedAt: at });
-      return updated;
+      return row;
     })();
+    try {
+      fs.rmSync(this.polishedPath(note), { force: true });
+    } catch (err) {
+      // Windows holds a playing file; the database is already right, and the next play or pull cleans up.
+      console.warn('[notes] could not remove', this.polishedPath(note), err);
+    }
+    return updated;
   }
 
   private recordUpdate(id: string, fields: NoteFields): void {

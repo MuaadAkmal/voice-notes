@@ -60,6 +60,13 @@ describe('SpeakCore', () => {
     expect(b.calls).toEqual([]);
   });
 
+  it('treats an empty reading as a provider failure and gives the minutes back', async () => {
+    const { core, store, calls } = setup({ bytes: 0 });
+    await expect(core.speak(A, { noteId: NOTE, text: text120, voice })).rejects.toBeInstanceOf(ProviderFailed);
+    expect((await store.usage(A, PERIOD)).used).toBe(0);
+    expect(calls).toEqual([]);
+  });
+
   it('gives the charged seconds back when the upload fails', async () => {
     const { core, store, files } = setup();
     files.upload = async () => {

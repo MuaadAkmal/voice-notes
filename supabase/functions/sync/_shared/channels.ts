@@ -421,6 +421,6 @@ export type TestResult = { ok: true; ms: number; language: string | null } | { o
 /** Making a note's polished audio: why not, when it did not work. */
 export type MakeResult =
   | { ok: true }
-  | { ok: false; reason: 'no-transcript' | 'signed-out' | 'offline' | 'quota' | 'storage-full' | 'failed'; resetsAt?: string };
+  | { ok: false; reason: 'no-transcript' | 'signed-out' | 'offline' | 'quota' | 'storage-full' | 'not-synced' | 'failed'; resetsAt?: string };
 /** Cloning the user's voice from their own notes on this PC. */
 export type CloneResult = VoiceState | { error: 'few-notes' | 'unavailable' | 'needs-paid-plan' | 'failed' };

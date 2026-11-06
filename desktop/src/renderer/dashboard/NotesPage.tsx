@@ -220,6 +220,7 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
       const upgrade = { label: 'Upgrade', onClick: () => void api.openExternal(PLAN_PAGE_URL).catch(() => undefined) };
       if (r.reason === 'quota') toast(transcriptionError({ kind: 'quota', resetsAt: r.resetsAt ?? '' }), upgrade);
       else if (r.reason === 'storage-full') toast('Storage full', upgrade);
+      else if (r.reason === 'not-synced') toast('Sync this note first, then try again');
       else if (r.reason === 'no-transcript') toast('Transcribe first');
       else if (r.reason === 'signed-out') toast('Sign in to use Cloud');
       else if (r.reason === 'offline') toast("Can't reach Voice Notes Cloud");

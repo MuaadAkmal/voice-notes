@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { NoteStore } from '../../src/main/store/note-store';
 import { MIGRATIONS } from '../../src/main/store/migrations';
@@ -354,4 +354,29 @@ it('polishedPath sits beside the recording; deleting the note removes the polish
   fs.writeFileSync(store.polishedPath(note), 'mp3');
   await store.delete(note.id);
   expect(fs.existsSync(store.polishedPath(note))).toBe(false);
+});
+
+it('setPolished removes the old reading whenever polishedAt changes', async () => {
+  const note = await store.create(audio());
+  fs.writeFileSync(store.polishedPath(note), 'old');
+  store.setPolished(note.id, 5);
+  expect(fs.existsSync(store.polishedPath(note))).toBe(false);
+  fs.writeFileSync(store.polishedPath(note), 'old');
+  store.setPolished(note.id, 9);
+  expect(fs.existsSync(store.polishedPath(note))).toBe(false);
+});
+
+it('setPolished(null) updates the database even when the file is held open', async () => {
+  const note = await store.create(audio());
+  store.setPolished(note.id, 5);
+  fs.writeFileSync(store.polishedPath(note), 'mp3');
+  const rm = vi.spyOn(fs, 'rmSync').mockImplementation(() => {
+    throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+  });
+  try {
+    expect(() => store.setPolished(note.id, null)).not.toThrow();
+  } finally {
+    rm.mockRestore();
+  }
+  expect(store.get(note.id)!.polishedAt).toBeNull();
 });

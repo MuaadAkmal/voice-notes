@@ -72,6 +72,10 @@ export class SpeakCore {
       await refund(estimate);
       throw new ProviderFailed(e instanceof Error ? e.message : 'provider failed');
     }
+    if (mp3.length === 0) {
+      await refund(estimate); // an empty 200 is no reading
+      throw new ProviderFailed('empty audio');
+    }
     const path = `${user}/${noteId}.polished.mp3`;
     let fits: boolean;
     try {

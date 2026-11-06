@@ -4,6 +4,7 @@ import {
   CloneUnavailableNow,
   CloudAsrClient,
   NeedsPaidPlan,
+  NotSynced,
   StorageFull,
   ProviderFailed,
   QuotaExceeded,
@@ -128,7 +129,7 @@ it.each([
   [413, { error: 'too_large' }, TooLarge],
   [403, { error: 'clone_unavailable' }, CloneUnavailable],
   [502, { error: 'provider' }, ProviderFailed],
-  [404, { error: 'not_found' }, ProviderFailed],
+  [404, { error: 'not_found' }, NotSynced],
 ])('speak maps %s %j', async (status, body, Err) => {
   const { client } = make(async () => ok(body, status));
   await expect(client.speak({ noteId: 'n', text: 't', voice: 'v' })).rejects.toBeInstanceOf(Err);
@@ -184,4 +185,15 @@ it.each([
 ])('stores a two-letter language: said %s, asked %s -> %s', async (said, asked, want) => {
   const { client } = make(async () => ok({ ...RESULT, language: said }));
   expect((await client.transcribe(silentWav(1), asked)).language).toBe(want);
+});
+
+it('speak waits 180 s, longer than the function takes', async () => {
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  try {
+    const { client } = make(async () => ok(SPOKEN));
+    await client.speak({ noteId: 'n', text: 't', voice: 'v' });
+    expect(timeout).toHaveBeenCalledWith(180_000);
+  } finally {
+    timeout.mockRestore();
+  }
 });
