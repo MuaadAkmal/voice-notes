@@ -21,6 +21,15 @@ describe('readPolish keeps only a tidied copy of what was said', () => {
     expect(readPolish(reply(list), said)).toBe(list);
   });
 
+  it('takes a cleaned version with an aside in brackets', () => {
+    const clean = 'The landing page (the one we redid last week) needs a new header.';
+    expect(readPolish(reply(clean), 'um the landing page the one we redid last week needs a new header')).toBe(clean);
+  });
+
+  it('asks for asides in brackets', () => {
+    expect(POLISH_PROMPT).toContain('in brackets');
+  });
+
   it('takes other languages and scripts', () => {
     const said = 'أريد أن أذهب إلى السوق غدا صباحا مع أخي';
     expect(readPolish(reply(`${said}.`), said)).toBe(`${said}.`);
