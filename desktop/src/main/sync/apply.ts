@@ -12,15 +12,15 @@ export type PullChanges = { notes: boolean; pages: boolean; folders: boolean; pr
 
 const UPSERT = {
   note: `INSERT INTO notes (id, title, file_path, duration_ms, size_bytes, mime_type, status, created_at, updated_at,
-           folder_id, source, kind, window_title, show, starred, transcript, transcript_lang, transcribed_at, version, deleted_at, page_id)
+           folder_id, source, kind, window_title, show, starred, transcript, transcript_lang, transcribed_at, version, deleted_at, page_id, polished_at)
          VALUES (@id, @title, @filePath, @durationMs, @sizeBytes, @mimeType, @status, @createdAt, @updatedAt,
-           @folderId, @source, @kind, @windowTitle, @show, @starred, @transcript, @transcriptLang, @transcribedAt, @version, NULL, @pageId)
+           @folderId, @source, @kind, @windowTitle, @show, @starred, @transcript, @transcriptLang, @transcribedAt, @version, NULL, @pageId, @polishedAt)
          ON CONFLICT(id) DO UPDATE SET title = excluded.title, duration_ms = excluded.duration_ms, size_bytes = excluded.size_bytes,
            mime_type = excluded.mime_type, created_at = excluded.created_at, updated_at = excluded.updated_at,
            folder_id = excluded.folder_id, source = excluded.source, kind = excluded.kind, window_title = excluded.window_title,
            show = excluded.show, starred = excluded.starred, transcript = excluded.transcript,
            transcript_lang = excluded.transcript_lang, transcribed_at = excluded.transcribed_at, version = excluded.version,
-           deleted_at = NULL, page_id = excluded.page_id`,
+           deleted_at = NULL, page_id = excluded.page_id, polished_at = excluded.polished_at`,
   page: `INSERT INTO pages (id, title, body, folder_id, starred, created_at, updated_at, version, deleted_at)
          VALUES (@id, @title, @body, @folderId, @starred, @createdAt, @updatedAt, @version, NULL)
          ON CONFLICT(id) DO UPDATE SET title = excluded.title, body = excluded.body, folder_id = excluded.folder_id,
@@ -102,8 +102,8 @@ function write(sqlite: ReturnType<NoteStore['syncAccess']>['sqlite'], row: Serve
     const filePath = `recordings/${n.id}.webm`;
     // A note from another PC: its audio downloads on first play (sync/files.ts).
     const status = fs.existsSync(path.join(rootDir, filePath)) ? 'ok' : 'remote';
-    // pageId: absent from rows older apps sent (a named parameter must be there).
-    sqlite.prepare(UPSERT.note).run({ pageId: null, ...n, filePath, status, starred: n.starred ? 1 : 0, version });
+    // pageId, polishedAt: absent from rows older apps sent (a named parameter must be there).
+    sqlite.prepare(UPSERT.note).run({ pageId: null, ...n, polishedAt: n.polishedAt ?? null, filePath, status, starred: n.starred ? 1 : 0, version });
   } else if (row.entity === 'page') {
     const p = data as PageRow;
     sqlite.prepare(UPSERT.page).run({ ...p, starred: p.starred ? 1 : 0, version });

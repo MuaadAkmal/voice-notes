@@ -23,6 +23,7 @@ export const notes = sqliteTable('notes', {
   deletedAt: integer('deleted_at'),
   version: integer('version').notNull().default(0),
   pageId: text('page_id'),
+  polishedAt: integer('polished_at'),
 });
 
 export const pages = sqliteTable('pages', {

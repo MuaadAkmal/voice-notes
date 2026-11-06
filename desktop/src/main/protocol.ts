@@ -6,7 +6,7 @@ import { IMAGE_FILE_RE } from '../shared/page-images';
 import type { NoteStore } from './store/note-store';
 
 /** Brings audio and images from the account when they aren't on this PC (sync/files.ts). */
-type Fetcher = { fetchAudio(id: string): Promise<void>; fetchImage(name: string): Promise<void> };
+type Fetcher = { fetchAudio(id: string): Promise<void>; fetchPolished(id: string): Promise<void>; fetchImage(name: string): Promise<void> };
 
 /** Must run before app 'ready'. */
 export function registerNoteScheme(): void {
@@ -20,7 +20,17 @@ export function registerNoteScheme(): void {
 /** note://<id> streams that note's audio file, so renderers never see filesystem paths. */
 export function registerNoteProtocol(store: NoteStore, files: Fetcher): void {
   protocol.handle('note', async (req) => {
-    const id = IdSchema.safeParse(new URL(req.url).hostname);
+    const url = new URL(req.url);
+    const id = IdSchema.safeParse(url.hostname);
+    if (url.searchParams.get('polished') === '1') {
+      const polished = id.success ? store.get(id.data) : undefined;
+      if (!polished?.polishedAt) return new Response('Not found', { status: 404 });
+      const file = store.polishedPath(polished);
+      // Made on another PC: download it first (a failure is a 404; the next play retries).
+      if (!fs.existsSync(file)) await files.fetchPolished(polished.id).catch(() => undefined);
+      if (!fs.existsSync(file)) return new Response('Not found', { status: 404 });
+      return net.fetch(pathToFileURL(file).toString(), { headers: req.headers });
+    }
     let note = id.success ? store.get(id.data) : undefined;
     // A note recorded on another PC: download its audio first (the dashboard shows why if this fails).
     if (note?.status === 'remote') {

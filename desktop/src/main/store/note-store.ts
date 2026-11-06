@@ -21,8 +21,7 @@ import type { NoteRow, SyncOp } from '../../shared/sync-ops';
 type NoteFields = Extract<SyncOp, { op: 'note.update' }>['fields'];
 import { liveColumns, notes } from './schema';
 
-// polishedAt has no column yet: reads as null until the local store keeps it
-const noteColumns = { ...liveColumns(getTableColumns(notes)), polishedAt: sql<number | null>`NULL`.as('polished_at') };
+const noteColumns = liveColumns(getTableColumns(notes));
 const live = isNull(notes.deletedAt);
 const TOMBSTONE_TTL_MS = 30 * 86_400_000;
 
@@ -197,6 +196,19 @@ export class NoteStore {
     })();
   }
 
+  /** The polished reading was made (at) or removed (null, file too). Not an edit of the note, so updatedAt stays. */
+  setPolished(id: string, at: number | null): Note {
+    const note = this.get(id);
+    if (!note) throw new Error('Note not found');
+    if (at === null) fs.rmSync(this.polishedPath(note), { force: true });
+    return this.sqlite.transaction(() => {
+      const updated = this.db.update(notes).set({ polishedAt: at }).where(and(eq(notes.id, id), live)).returning(noteColumns).get();
+      if (!updated) throw new Error('Note not found');
+      this.recordUpdate(id, { polishedAt: at });
+      return updated;
+    })();
+  }
+
   private recordUpdate(id: string, fields: NoteFields): void {
     this.sync.outbox.record({ op: 'note.update', id, fields }, this.sync.outbox.rowVersion('note', id));
   }
@@ -205,6 +217,7 @@ export class NoteStore {
     const note = this.get(id);
     if (!note) return;
     await fs.promises.rm(this.absolutePath(note), { force: true });
+    await fs.promises.rm(this.polishedPath(note), { force: true });
     // A tombstone, so the delete can reach other PCs; purgeTombstones() removes it later.
     this.sqlite.transaction(() => {
       this.db.update(notes).set({ deletedAt: this.now() }).where(eq(notes.id, id)).run();
@@ -318,6 +331,11 @@ export class NoteStore {
 
   absolutePath(note: Note): string {
     return path.join(this.rootDir, note.filePath);
+  }
+
+  /** Where the polished reading of this note sits on this PC (it may not be there). */
+  polishedPath(note: Note): string {
+    return path.join(this.recordingsDir, `${note.id}.polished.mp3`);
   }
 
   close(): void {

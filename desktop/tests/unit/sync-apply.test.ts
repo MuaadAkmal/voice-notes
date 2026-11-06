@@ -65,6 +65,22 @@ it('a pulled voice block keeps its page; an older app’s row without one is an 
   expect(toRow(store.get(plain.id)!)).toEqual(plain);
 });
 
+it('a pulled note keeps its polishedAt; a row without one stores null', () => {
+  const base = {
+    title: 'P', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
+    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null,
+    transcriptLang: null, transcribedAt: null,
+  };
+  const withIt = { ...base, id: '51111111-1111-4111-8111-111111111111', polishedAt: 99 };
+  const without = { ...base, id: '61111111-1111-4111-8111-111111111111' };
+  applyPull(store, pull([
+    { entity: 'note', id: withIt.id, version: 4, deleted: false, data: withIt },
+    { entity: 'note', id: without.id, version: 5, deleted: false, data: without },
+  ] as never), () => undefined);
+  expect(store.get(withIt.id)!.polishedAt).toBe(99);
+  expect(store.get(without.id)!.polishedAt).toBeNull();
+});
+
 it('a pulled delete hides the note, removes its audio and drops our waiting changes', async () => {
   const n = await store.create(audio());
   store.rename(n.id, 'mine');

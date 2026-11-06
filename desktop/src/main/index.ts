@@ -282,6 +282,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   const filesHolder: { files?: FileSync } = {};
   const fetcher = {
     fetchAudio: (id: string) => (filesHolder.files ? filesHolder.files.fetchAudio(id) : Promise.reject(new SyncOff())),
+    fetchPolished: (id: string) => (filesHolder.files ? filesHolder.files.fetchPolished(id) : Promise.reject(new SyncOff())),
     fetchImage: (name: string) => (filesHolder.files ? filesHolder.files.fetchImage(name) : Promise.reject(new SyncOff())),
   };
   registerNoteProtocol(store, fetcher);

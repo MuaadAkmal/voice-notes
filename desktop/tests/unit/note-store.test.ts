@@ -326,3 +326,32 @@ it('reconcile leaves remote notes remote, and a remote note whose file appears b
   expect(store.get(a.id)!.status).toBe('remote');
   expect(store.get(b.id)!.status).toBe('ok');
 });
+
+it('setPolished keeps the flag without touching updatedAt and records one note.update', async () => {
+  store.sync.state.setEnabled(true);
+  const note = await store.create(audio());
+  clock += 5000;
+  const before = store.sync.outbox.pending(note.id).length;
+  expect(store.setPolished(note.id, 5).polishedAt).toBe(5);
+  expect(store.get(note.id)).toMatchObject({ polishedAt: 5, updatedAt: T0 });
+  const ops = store.sync.outbox.pending(note.id).map((e) => e.op);
+  expect(ops).toHaveLength(before + 1);
+  expect(ops.at(-1)).toEqual({ op: 'note.update', id: note.id, fields: { polishedAt: 5 } });
+});
+
+it('setPolished(null) clears the flag and removes the polished file', async () => {
+  const note = await store.create(audio());
+  fs.writeFileSync(store.polishedPath(note), 'mp3');
+  store.setPolished(note.id, 5);
+  store.setPolished(note.id, null);
+  expect(store.get(note.id)!.polishedAt).toBeNull();
+  expect(fs.existsSync(store.polishedPath(note))).toBe(false);
+});
+
+it('polishedPath sits beside the recording; deleting the note removes the polished file', async () => {
+  const note = await store.create(audio());
+  expect(store.polishedPath(note)).toBe(path.join(root, 'recordings', `${note.id}.polished.mp3`));
+  fs.writeFileSync(store.polishedPath(note), 'mp3');
+  await store.delete(note.id);
+  expect(fs.existsSync(store.polishedPath(note))).toBe(false);
+});

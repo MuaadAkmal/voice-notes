@@ -201,6 +201,20 @@ it('fetchAudio is NotUploaded when the account has no object, SyncOff when sync 
   await expect(files.fetchAudio(note.id)).rejects.toBeInstanceOf(SyncOff);
 });
 
+it('fetchPolished writes the polished file, sharing one download; NotUploaded and SyncOff as fetchAudio', async () => {
+  const note = await store.create(audio());
+  server.objects.set(`blob:audio/${note.id}.polished.mp3`, new Uint8Array(Buffer.from('mp3')));
+  await Promise.all([files.fetchPolished(note.id), files.fetchPolished(note.id)]);
+  expect(fs.readFileSync(store.polishedPath(note), 'utf8')).toBe('mp3');
+  expect(server.gets).toBe(1);
+  expect(fs.readdirSync(path.join(root, 'recordings')).filter((f) => f.endsWith('.part'))).toEqual([]);
+  fs.rmSync(store.polishedPath(note));
+  server.objects.clear();
+  await expect(files.fetchPolished(note.id)).rejects.toBeInstanceOf(NotUploaded);
+  canSync = false;
+  await expect(files.fetchPolished(note.id)).rejects.toBeInstanceOf(SyncOff);
+});
+
 it('fetchImage downloads a missing page image', async () => {
   const name = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png';
   server.objects.set(`blob:image/${name}`, new Uint8Array([9, 9]));

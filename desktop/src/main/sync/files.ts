@@ -128,6 +128,16 @@ export class FileSync {
     });
   }
 
+  /** Brings a note's polished reading to this PC. Calls for the same note share one download. */
+  fetchPolished(noteId: string): Promise<void> {
+    return this.once(`polished:${noteId}`, async () => {
+      const { store } = this.d;
+      const note = store.get(noteId);
+      if (!note) throw new Error('Note not found');
+      await writeAtomic(store.polishedPath(note), await this.download('audio', `${noteId}.polished.mp3`));
+    });
+  }
+
   /** Brings a page image to this PC. */
   fetchImage(name: string): Promise<void> {
     return this.once(`image:${name}`, async () => {

@@ -139,6 +139,8 @@ export const MIGRATIONS: string[] = [
   // Safe to repeat: pulled rows are upserted and unsent local changes are laid back on top.
   `ALTER TABLE notes ADD COLUMN page_id TEXT;
    UPDATE sync_state SET value = '0' WHERE key = 'cursor';`,
+  // Polished audio: when this note's ElevenLabs reading was made (null = none). Its file sits beside the recording.
+  `ALTER TABLE notes ADD COLUMN polished_at INTEGER;`,
 ];
 
 export function migrate(db: Database.Database): void {
