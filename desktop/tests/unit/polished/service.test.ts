@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PolishedAudio } from '../../../src/main/polished/service';
-import { CloudNotSignedIn, QuotaExceeded, StorageFull } from '../../../src/main/transcription/cloud-client';
+import { CloneUnavailable, CloudNotSignedIn, QuotaExceeded, StorageFull } from '../../../src/main/transcription/cloud-client';
 import { Offline } from '../../../src/main/sync/http-server';
 import { STOCK_VOICES, type VoiceState } from '../../../src/shared/asr/protocol';
 import type { Note } from '../../../src/shared/channels';
@@ -119,6 +119,16 @@ describe('make', () => {
     expect(d.client.voice).toHaveBeenCalledTimes(3);
   });
 
+  it('retries in the stock voice when the server says the clone is not usable', async () => {
+    const { d, svc } = setup({ voice: 'clone', clone: 'ready' });
+    d.client.speak.mockRejectedValueOnce(new CloneUnavailable());
+    expect(await svc.make('n1')).toEqual({ ok: true });
+    expect(d.client.speak).toHaveBeenCalledTimes(2);
+    expect((d.client.speak.mock.calls[1][0] as { voice: string }).voice).toBe(STOCK_VOICES[0].id);
+    await svc.make('n1');
+    expect(d.client.voice).toHaveBeenCalledTimes(2); // the cache was dropped
+  });
+
   it.each([
     [new CloudNotSignedIn(), { ok: false, reason: 'signed-out' }],
     [new Offline(), { ok: false, reason: 'offline' }],
@@ -164,13 +174,13 @@ describe('clone', () => {
   it('says few-notes without calling the server when the samples are short', async () => {
     const { d, svc } = setup({ notes: [note({ id: 'a', durationMs: 10_000 })] });
     d.toWav.mockResolvedValue(silentWav(10));
-    expect(await svc.clone()).toEqual({ error: 'few-notes' });
+    expect(await svc.clone(true)).toEqual({ error: 'few-notes' });
     expect(d.client.clone).not.toHaveBeenCalled();
   });
 
   it('joins the samples and sends them', async () => {
     const { d, svc } = setup({ notes: [note({ id: 'a', durationMs: 20_000 }), note({ id: 'b', durationMs: 20_000 })] });
-    const r = await svc.clone();
+    const r = await svc.clone(true);
     expect(r).toMatchObject({ clone: 'ready' });
     const sent = d.client.clone.mock.calls[0][0];
     expect(sent.length).toBe(44 + 40 * 32000);
@@ -179,7 +189,7 @@ describe('clone', () => {
   it('forgets the cached state', async () => {
     const { d, svc } = setup({ clone: 'none', notes: [note({ id: 'a', durationMs: 20_000 }), note({ id: 'b', durationMs: 20_000 })] });
     await svc.voiceState();
-    await svc.clone();
+    await svc.clone(true);
     await svc.voiceState();
     expect(d.client.voice).toHaveBeenCalledTimes(2);
   });

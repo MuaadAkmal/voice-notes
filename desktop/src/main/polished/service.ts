@@ -24,7 +24,7 @@ type Deps = {
   client: {
     speak(req: SpeakRequest): Promise<SpeakResponse>;
     voice(): Promise<VoiceState>;
-    clone(wav: Uint8Array): Promise<VoiceState>;
+    clone(wav: Uint8Array, consent: boolean): Promise<VoiceState>;
     removeClone(): Promise<VoiceState>;
   };
   /** The commands function's polish route; null means keep the text. Gives up after 30 s. */
@@ -85,7 +85,8 @@ export class PolishedAudio {
     }
   }
 
-  async clone(): Promise<CloneResult> {
+  /** `consent`: the user ticked that the voice is their own; the server refuses without it. */
+  async clone(consent: true): Promise<CloneResult> {
     const wavs: Uint8Array[] = [];
     for (const note of pickSamples(this.d.store.list())) {
       try {
@@ -97,7 +98,7 @@ export class PolishedAudio {
     const wav = joinWavs(wavs);
     if ((wav.length - 44) / 32000 < CLONE_MIN_SECONDS) return { error: 'few-notes' };
     try {
-      return await this.changed(this.d.client.clone(wav));
+      return await this.changed(this.d.client.clone(wav, consent));
     } catch (e) {
       return this.cloneError(e);
     }
@@ -160,7 +161,16 @@ export class PolishedAudio {
       // Not stored whether Cloud already cleaned it up, so polish always (free); any failure reads the transcript.
       const polished = await this.d.polish(transcript).catch(() => null);
       const text = cutAtWord(polished?.trim() || transcript);
-      const r = await this.d.client.speak({ noteId, text, voice: await this.voice() });
+      const voice = await this.voice();
+      let r: SpeakResponse;
+      try {
+        r = await this.d.client.speak({ noteId, text, voice });
+      } catch (e) {
+        if (!(e instanceof CloneUnavailable) || voice !== 'clone') throw e;
+        // The cached state was stale (clone removed elsewhere, plan dropped): read it in the stock voice.
+        this.voiceCache = null;
+        r = await this.d.client.speak({ noteId, text, voice: STOCK_VOICES[0].id });
+      }
       this.d.onUsage({ used: r.used, limit: r.limit, resetsAt: r.resetsAt });
     } catch (e) {
       return this.failure(e);

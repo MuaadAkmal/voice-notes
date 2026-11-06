@@ -43,6 +43,7 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   VoiceIdSchema,
+  CloneVoiceSchema,
   WavReplySchema,
   UndoSchema,
   SaveAudioSchema,
@@ -431,7 +432,7 @@ export function registerDashboardIpc(d: DashboardDeps): void {
   handle(Ch.PolishedRemove, IdSchema, (id) => d.polished.remove(id));
   handle(Ch.VoiceState, none, () => d.polished.voiceState());
   handle(Ch.VoiceSample, VoiceIdSchema, (id) => d.polished.sample(id));
-  handle(Ch.VoiceClone, none, () => d.polished.clone());
+  handle(Ch.VoiceClone, CloneVoiceSchema, ({ consent }) => d.polished.clone(consent));
   handle(Ch.VoiceRemove, none, () => d.polished.removeVoice());
   handle(Ch.LocalStatus, none, () => d.localWhisper.status());
   handle(Ch.LocalInstall, LocalInstallSchema, ({ modelId }) => d.localWhisper.install(modelId));

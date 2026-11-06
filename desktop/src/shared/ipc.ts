@@ -113,6 +113,7 @@ export const AudioPayloadSchema = z.object({
 });
 
 export const IdSchema = z.uuid();
+export const CloneVoiceSchema = z.object({ consent: z.literal(true) });
 export const VoiceIdSchema = z.string().min(1).max(100);
 // About 1.9 MB of WAV per minute: 30 MB is a long dictation.
 export const DictationAudioSchema = z.object({

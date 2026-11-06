@@ -1224,7 +1224,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     client: {
       speak: (req) => cloudClient.speak(req),
       voice: () => cloudClient.voice(),
-      clone: (wav) => cloudClient.clone(wav),
+      clone: (wav, consent) => cloudClient.clone(wav, consent),
       removeClone: () => cloudClient.removeClone(),
     },
     polish: (text) => commandsClient.polish(text, { signal: new AbortController().signal, timeoutMs: 30_000 }).then((r) => r.text),

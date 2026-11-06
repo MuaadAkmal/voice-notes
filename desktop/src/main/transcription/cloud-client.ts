@@ -140,9 +140,9 @@ export class CloudAsrClient {
     return this.call<VoiceState>('/voice', { method: 'GET' });
   }
 
-  /** `wav`: 30-180 s of the user's own voice; callers ask for the consent first (`consent=1`). */
-  clone(wav: Uint8Array): Promise<VoiceState> {
-    return this.call<VoiceState>('/voice/clone?consent=1', { method: 'POST', body: wav, contentType: 'audio/wav', mapError: cloneError });
+  /** `wav`: 30-180 s of the user's own voice. `consent=1` is sent only for `true`; the server refuses without it. */
+  clone(wav: Uint8Array, consent: boolean): Promise<VoiceState> {
+    return this.call<VoiceState>(`/voice/clone${consent === true ? '?consent=1' : ''}`, { method: 'POST', body: wav, contentType: 'audio/wav', mapError: cloneError });
   }
 
   removeClone(): Promise<VoiceState> {

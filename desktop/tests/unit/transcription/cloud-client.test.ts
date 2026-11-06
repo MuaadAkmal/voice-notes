@@ -143,7 +143,7 @@ it('voice reads the state', async () => {
 
 it('clone sends the WAV with consent', async () => {
   const { client, f } = make(async () => ok(VOICE));
-  await client.clone(silentWav(1));
+  await client.clone(silentWav(1), true);
   expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice/clone?consent=1');
   expect((f.mock.calls[0][1]!.headers as Record<string, string>)['content-type']).toBe('audio/wav');
 });
@@ -155,7 +155,13 @@ it.each([
   [502, {}, ProviderFailed],
 ])('clone maps %s %j', async (status, body, Err) => {
   const { client } = make(async () => ok(body, status));
-  await expect(client.clone(silentWav(1))).rejects.toBeInstanceOf(Err);
+  await expect(client.clone(silentWav(1), true)).rejects.toBeInstanceOf(Err);
+});
+
+it('clone leaves consent out unless it is true', async () => {
+  const { client, f } = make(async () => ok(VOICE));
+  await client.clone(silentWav(1), false);
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice/clone');
 });
 
 it('removeClone posts to voice/remove', async () => {

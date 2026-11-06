@@ -269,7 +269,7 @@ export const Ch = {
   PolishedRemove: 'polished:remove', // id
   VoiceState: 'voice:state', // → VoiceState | { signedOut: true }
   VoiceSample: 'voice:sample', // voiceId → data: URL | null
-  VoiceClone: 'voice:clone', // → VoiceState | { error }
+  VoiceClone: 'voice:clone', // { consent: true } → → VoiceState | { error }
   VoiceRemove: 'voice:remove', // → VoiceState
   DictationsList: 'dictations:list', // → Dictation[]
   DictationsCopy: 'dictations:copy', // { id } main writes the clipboard

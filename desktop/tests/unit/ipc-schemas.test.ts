@@ -13,6 +13,7 @@ import {
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
   VoiceIdSchema,
+  CloneVoiceSchema,
   WavReplySchema,
   NewEventSchema,
   QuickAddSchema,
@@ -189,6 +190,15 @@ describe('reminder schemas', async () => {
     expect(ReminderUpdateSchema.safeParse({ id, dueAt: -1 }).success).toBe(false);
     expect(ReminderUpdateSchema.safeParse({ id, status: 'done' }).success).toBe(false);
     expect(ReminderUpdateSchema.safeParse({ id, text: 'a'.repeat(201) }).success).toBe(false);
+  });
+});
+
+describe('CloneVoiceSchema', () => {
+  it('needs consent: true', () => {
+    expect(CloneVoiceSchema.safeParse({ consent: true }).success).toBe(true);
+    expect(CloneVoiceSchema.safeParse({}).success).toBe(false);
+    expect(CloneVoiceSchema.safeParse({ consent: false }).success).toBe(false);
+    expect(CloneVoiceSchema.safeParse(undefined).success).toBe(false);
   });
 });
 
