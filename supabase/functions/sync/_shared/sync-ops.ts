@@ -11,11 +11,11 @@ export type PageRow = Page;
 export type FolderRow = Folder;
 
 /** Settings that follow the account; everything else in settings.json stays on this PC. */
-export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId', 'notesPageId', 'laterSites', 'customWords', 'onboarded'] as const;
+export const SYNCED_KEYS = ['homeWidgets', 'transcribeLanguage', 'laterPageId', 'notesPageId', 'laterSites', 'customWords', 'onboarded', 'ttsVoice'] as const;
 export type SyncedKey = (typeof SYNCED_KEYS)[number];
 
 // updatedAt travels with a change (the sender's clock; it only sorts lists, never orders changes).
-type NoteFields = Partial<Pick<NoteRow, 'title' | 'folderId' | 'starred' | 'show' | 'transcript' | 'transcriptLang' | 'transcribedAt' | 'updatedAt'>>;
+type NoteFields = Partial<Pick<NoteRow, 'title' | 'folderId' | 'starred' | 'show' | 'transcript' | 'transcriptLang' | 'transcribedAt' | 'polishedAt' | 'updatedAt'>>;
 type PageFields = Partial<Pick<PageRow, 'title' | 'folderId' | 'starred' | 'updatedAt'>>;
 type FolderFields = Partial<Pick<FolderRow, 'name' | 'parentId' | 'updatedAt'>>;
 

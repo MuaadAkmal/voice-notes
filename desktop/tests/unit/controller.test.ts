@@ -23,7 +23,7 @@ const fakeNote = (a: NewAudio): Note => ({
   starred: false,
   transcript: null,
   transcriptLang: null,
-  transcribedAt: null,
+  transcribedAt: null, polishedAt: null,
 });
 
 let calls: string[];

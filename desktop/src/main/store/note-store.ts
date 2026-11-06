@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { and, desc, eq, getTableColumns, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Note, NoteKind, RecordingSource } from '../../shared/ipc';
 import { defaultTitle } from '../../shared/format';
 import { FolderStore } from './folder-store';
@@ -21,7 +21,8 @@ import type { NoteRow, SyncOp } from '../../shared/sync-ops';
 type NoteFields = Extract<SyncOp, { op: 'note.update' }>['fields'];
 import { liveColumns, notes } from './schema';
 
-const noteColumns = liveColumns(getTableColumns(notes));
+// polishedAt has no column yet: reads as null until the local store keeps it
+const noteColumns = { ...liveColumns(getTableColumns(notes)), polishedAt: sql<number | null>`NULL`.as('polished_at') };
 const live = isNull(notes.deletedAt);
 const TOMBSTONE_TTL_MS = 30 * 86_400_000;
 
@@ -115,6 +116,7 @@ export class NoteStore {
       transcript: null,
       transcriptLang: null,
       transcribedAt: null,
+      polishedAt: null,
       pageId: audio.pageId ?? null,
     };
     this.sqlite.transaction(() => {

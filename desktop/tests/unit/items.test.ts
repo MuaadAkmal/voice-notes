@@ -35,7 +35,7 @@ const note = (
   starred: false,
   transcript: null,
   transcriptLang: null,
-  transcribedAt: null,
+  transcribedAt: null, polishedAt: null,
   ...over,
 });
 

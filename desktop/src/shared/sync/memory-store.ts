@@ -67,11 +67,12 @@ export class MemoryStore implements SyncStore {
     return (await this.liveFiles(userId)).images.has(name) ? 'live' : 'none';
   }
 
-  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }> {
+  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string>; polished: Set<string> }> {
     const live = [...this.account(userId).rows.values()].filter((s) => !s.deleted);
     return {
       audio: new Set(live.filter((s) => s.entity === 'note').map((s) => `${s.id}.webm`)),
       images: new Set(live.filter((s) => s.entity === 'page').flatMap((s) => [...imageRefs(String(s.data.body ?? ''))])),
+      polished: new Set(live.filter((s) => s.entity === 'note' && s.data.polishedAt != null).map((s) => `${s.id}.polished.mp3`)),
     };
   }
 

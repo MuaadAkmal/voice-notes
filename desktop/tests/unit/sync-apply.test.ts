@@ -38,7 +38,7 @@ it('a pulled note appears with its version, and the cursor moves', () => {
     starred: true,
     transcript: null,
     transcriptLang: null,
-    transcribedAt: null,
+    transcribedAt: null, polishedAt: null,
   };
   applyPull(store, pull([{ entity: 'note', id: row.id, version: 4, deleted: false, data: row }]), () => undefined);
   expect(toRow(store.get(row.id)!)).toEqual(row);
@@ -51,7 +51,7 @@ it('a pulled voice block keeps its page; an older app’s row without one is an 
   const base = {
     title: 'Block', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
     source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null,
-    transcriptLang: null, transcribedAt: null,
+    transcriptLang: null, transcribedAt: null, polishedAt: null,
   };
   const block = { ...base, id: '21111111-1111-4111-8111-111111111111', pageId: '31111111-1111-4111-8111-111111111111' };
   const plain = { ...base, id: '41111111-1111-4111-8111-111111111111' };
@@ -131,7 +131,7 @@ it('a pulled note without its file here is remote', () => {
   const id = '22222222-2222-4222-8222-222222222222';
   const row = {
     id, title: 'From B', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
-    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null,
+    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null, polishedAt: null,
   };
   applyPull(store, pull([{ entity: 'note', id, version: 4, deleted: false, data: row }]), () => undefined);
   expect(store.get(id)!.status).toBe('remote');

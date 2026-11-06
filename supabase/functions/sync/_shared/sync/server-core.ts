@@ -33,7 +33,7 @@ export interface SyncStore {
   /** Audio: its note row. Image: 'live' while a live page body references it (never 'deleted'). */
   fileOwner(userId: string, kind: FileKind, name: string): Promise<'live' | 'deleted' | 'none'>;
   /** Live notes' audio file names and the images live pages reference. */
-  liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }>;
+  liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string>; polished: Set<string> }>;
 }
 
 export class SyncCore {

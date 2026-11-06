@@ -1,7 +1,7 @@
 import { SYNCED_KEYS, type SyncOp } from '../sync-ops';
 import { IMAGE_FILE_RE } from '../page-images';
 import type { FileRules } from './file-rules';
-import { AUDIO_FILE_RE, type DownloadRequest, MAX_REQUEST_BYTES, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type StorageResponse, type UploadRequest } from './protocol';
+import { AUDIO_FILE_RE, type DownloadRequest, MAX_REQUEST_BYTES, POLISHED_FILE_RE, PUSH_MAX_MUTATIONS, type PullRequest, type PushRequest, type StorageResponse, type UploadRequest } from './protocol';
 import type { SyncCore } from './server-core';
 
 // The `sync` Edge Function's request handling, kept free of Deno so it is unit-tested in Node.
@@ -127,8 +127,9 @@ function readPull(b: unknown): PullRequest {
 const fileName = (kind: unknown, name: unknown) =>
   typeof name === 'string' && (kind === 'audio' ? AUDIO_FILE_RE.test(name) : kind === 'image' && IMAGE_FILE_RE.test(name));
 
+// Polished audio is made by the asr function, so it can be downloaded but not uploaded.
 function readDownload(b: unknown): DownloadRequest {
-  need(isObject(b) && fileName(b.kind, b.name), 'file');
+  need(isObject(b) && (fileName(b.kind, b.name) || (b.kind === 'audio' && typeof b.name === 'string' && POLISHED_FILE_RE.test(b.name))), 'file');
   return { kind: b.kind as DownloadRequest['kind'], name: b.name as string };
 }
 
@@ -153,7 +154,7 @@ function readPush(b: unknown): PushRequest {
 
 /** What each update may change: never ids, and a body only through setBody/append/appendLine/setTask (they carry the conflict rules). */
 const UPDATABLE: Record<string, readonly string[]> = {
-  'note.update': ['title', 'folderId', 'starred', 'show', 'transcript', 'transcriptLang', 'transcribedAt', 'updatedAt'],
+  'note.update': ['title', 'folderId', 'starred', 'show', 'transcript', 'transcriptLang', 'transcribedAt', 'polishedAt', 'updatedAt'],
   'page.update': ['title', 'folderId', 'starred', 'updatedAt'],
   'folder.update': ['name', 'parentId', 'updatedAt'],
 };

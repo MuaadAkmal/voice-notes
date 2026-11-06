@@ -147,7 +147,7 @@ it('a server error hides its details', async () => {
 });
 
 const NOTE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const noteRow = { id: NOTE, title: 'n', durationMs: 1, sizeBytes: 3, mimeType: 'audio/webm', createdAt: 1, updatedAt: 1, folderId: null, source: 'mic', kind: 'note', windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null };
+const noteRow = { id: NOTE, title: 'n', durationMs: 1, sizeBytes: 3, mimeType: 'audio/webm', createdAt: 1, updatedAt: 1, folderId: null, source: 'mic', kind: 'note', windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null, polishedAt: null };
 
 it('file routes need a token and a valid kind, name and size', async () => {
   const { call } = setup();
@@ -258,4 +258,42 @@ describe('CORS for the web app', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
+});
+
+const POLISHED = `${NOTE}.polished.mp3`;
+
+it('a note.update with polishedAt is accepted and pulled back with it; ttsVoice is a synced setting', async () => {
+  const { call } = setup();
+  await call('push', push([{ id: 'm1', op: { op: 'note.create', id: NOTE, row: noteRow }, baseVersion: 0 }]));
+  const res = await call('push', push([
+    { id: 'm2', op: { op: 'note.update', id: NOTE, fields: { polishedAt: 123 } }, baseVersion: 0 },
+    { id: 'm3', op: { op: 'prefs.set', key: 'ttsVoice', value: 'voice-1' }, baseVersion: 0 },
+  ]));
+  expect(res.status).toBe(200);
+  const pulled = await (await call('pull', { clientId: 'B', cursor: 0 })).json();
+  expect(pulled.rows).toMatchObject([{ entity: 'note', id: NOTE, data: { polishedAt: 123 } }]);
+  expect(pulled.prefs).toMatchObject([{ key: 'ttsVoice', value: 'voice-1' }]);
+});
+
+it('a polished name downloads, but never uploads', async () => {
+  const { call, bucket } = setup();
+  await call('push', push([{ id: 'm1', op: { op: 'note.create', id: NOTE, row: noteRow }, baseVersion: 0 }]));
+  bucket.put('audio', `${USER}/${POLISHED}`, new Uint8Array([1]));
+  const down = await call('files/download', { kind: 'audio', name: POLISHED });
+  expect(await down.json()).toEqual({ status: 'ok', url: `http://files/blob/audio/${USER}/${POLISHED}` });
+  expect((await call('files/upload', { kind: 'audio', name: POLISHED, size: 3 })).status).toBe(400);
+});
+
+it('clearing polishedAt removes the polished object; a note delete removes it with the original', async () => {
+  const { call, bucket } = setup();
+  await call('push', push([{ id: 'm1', op: { op: 'note.create', id: NOTE, row: { ...noteRow, polishedAt: 5 } }, baseVersion: 0 }]));
+  bucket.put('audio', `${USER}/${POLISHED}`, new Uint8Array([1]));
+  bucket.put('audio', `${USER}/${NOTE}.webm`, new Uint8Array([1]));
+  await call('push', push([{ id: 'm2', op: { op: 'note.update', id: NOTE, fields: { polishedAt: null } }, baseVersion: 0 }]));
+  expect(bucket.get('audio', `${USER}/${POLISHED}`)).toBeUndefined();
+  expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeDefined();
+  bucket.put('audio', `${USER}/${POLISHED}`, new Uint8Array([1]));
+  await call('push', push([{ id: 'm3', op: { op: 'note.delete', id: NOTE }, baseVersion: 0 }]));
+  expect(bucket.get('audio', `${USER}/${POLISHED}`)).toBeUndefined();
+  expect(bucket.get('audio', `${USER}/${NOTE}.webm`)).toBeUndefined();
 });

@@ -26,7 +26,7 @@ const note: NoteRow = {
   starred: false,
   transcript: null,
   transcriptLang: null,
-  transcribedAt: null,
+  transcribedAt: null, polishedAt: null,
 };
 const page: PageRow = { id: 'p1', title: 'P', body: 'a', folderId: null, starred: false, createdAt: 1, updatedAt: 1 };
 

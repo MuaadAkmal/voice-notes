@@ -26,6 +26,7 @@ const note = (id: string, folderId: string | null = null): NoteRow => ({
   transcript: null,
   transcriptLang: null,
   transcribedAt: null,
+  polishedAt: null,
 });
 
 
@@ -185,12 +186,14 @@ export function runContract(label: string, make: () => Promise<TestServer>, time
           m({ op: 'page.create', id: 'p2', row: page('p2', `vn-image://${I2}`) }),
         ],
       });
+      await s.push({ ...A, mutations: [m({ op: 'note.update', id: N1, fields: { polishedAt: 9 } }), m({ op: 'note.update', id: N2, fields: { polishedAt: 9 } })] });
       await s.push({ ...A, mutations: [m({ op: 'note.delete', id: N2 }), m({ op: 'page.delete', id: 'p2' })] });
       const live = await s.liveFiles();
       expect([...live.audio]).toEqual([`${N1}.webm`]);
       expect([...live.images]).toEqual([I1]);
+      expect([...live.polished]).toEqual([`${N1}.polished.mp3`]); // only live notes with polishedAt set
       const theirs = await s.liveFiles(OTHER);
-      expect(theirs.audio.size + theirs.images.size).toBe(0);
+      expect(theirs.audio.size + theirs.images.size + theirs.polished.size).toBe(0);
     });
   });
 }

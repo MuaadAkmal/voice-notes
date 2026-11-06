@@ -24,7 +24,7 @@ const note = (over: Partial<Note> = {}): Note => ({
   starred: false,
   transcript: 'buy milk and eggs for the weekend',
   transcriptLang: 'en',
-  transcribedAt: CREATED,
+  transcribedAt: CREATED, polishedAt: null,
   ...over,
 });
 const MOVIES: Folder = { id: 'f1', name: 'Movie lines', parentId: null, createdAt: 0, updatedAt: 0 };

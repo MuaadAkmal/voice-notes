@@ -20,6 +20,7 @@ export type Note = {
   transcript: string | null; // '' = transcribed, no speech
   transcriptLang: string | null;
   transcribedAt: number | null;
+  polishedAt: number | null; // when polished audio (<id>.polished.mp3 in the account) was made; null: none
   pageId?: string | null; // a voice block: the page that owns it (hidden from the note lists)
 };
 
@@ -99,6 +100,7 @@ export type Settings = {
   languageLearner: boolean; // a "Pixie, I learned … in Tamil" word is written with pronunciation and meaning
   onboarded: boolean; // the account has seen (or skipped) the first-run screen, or had data before it existed (synced)
   onboardingPending: boolean; // this PC started the first-run screen and it isn't finished yet (survives a restart)
+  ttsVoice?: string | null; // the voice that reads polished audio (synced)
   newLines: Record<string, number>; // page id → lines voice commands added since it was last opened (the "new" dot; this PC only)
   storageWarned: 'low' | 'full' | null; // the cloud storage notice last shown; cleared when usage drops under 80%
 };

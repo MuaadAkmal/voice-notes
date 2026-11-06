@@ -36,7 +36,7 @@ const note = (over: Partial<Note> = {}): Note => ({
   starred: false,
   transcript: null,
   transcriptLang: null,
-  transcribedAt: null,
+  transcribedAt: null, polishedAt: null,
   ...over,
 });
 

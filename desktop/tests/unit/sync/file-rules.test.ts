@@ -14,7 +14,7 @@ const HOUR = 3_600_000;
 
 const note = (id: string): NoteRow => ({
   id, title: 'n', durationMs: 1, sizeBytes: 3, mimeType: 'audio/webm', createdAt: 1, updatedAt: 1, folderId: null,
-  source: 'mic', kind: 'note', windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null,
+  source: 'mic', kind: 'note', windowTitle: null, show: null, starred: false, transcript: null, transcriptLang: null, transcribedAt: null, polishedAt: null,
 });
 const page = (id: string, body: string): PageRow => ({ id, title: 'P', body, folderId: null, starred: false, createdAt: 1, updatedAt: 1 });
 
@@ -200,4 +200,24 @@ it('files that arrived bigger than claimed are removed before the next upload', 
   await push(USER, { op: 'note.create', id: NOTE, row: note(NOTE) });
   await rules.upload(USER, { kind: 'audio', name: `${NOTE}.webm`, size: 5, full: true });
   expect((await bucket.list('audio', USER)).map((o) => o.name)).not.toContain('liar.webm');
+});
+
+it('the sweep keeps a polished file while polishedAt is set, and an unclaimed one for 24 h', async () => {
+  const { bucket, push, tick } = setup();
+  const CLAIMED = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const STRAY = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  await push(USER, { op: 'note.create', id: CLAIMED, row: { ...note(CLAIMED), polishedAt: 5 } });
+  bucket.put('audio', `${USER}/${CLAIMED}.polished.mp3`, new Uint8Array([1]));
+  bucket.put('audio', `${USER}/${STRAY}.polished.mp3`, new Uint8Array([1]));
+  bucket.put('audio', `${OTHER}/${STRAY}.polished.mp3`, new Uint8Array([1]));
+
+  tick(HOUR + 1);
+  await push(USER);
+  expect(bucket.get('audio', `${USER}/${CLAIMED}.polished.mp3`)).toBeDefined();
+  expect(bucket.get('audio', `${USER}/${STRAY}.polished.mp3`)).toBeDefined(); // an hour old: the PC may not have pushed yet
+  tick(24 * HOUR);
+  await push(USER);
+  expect(bucket.get('audio', `${USER}/${CLAIMED}.polished.mp3`)).toBeDefined();
+  expect(bucket.get('audio', `${USER}/${STRAY}.polished.mp3`)).toBeUndefined();
+  expect(bucket.get('audio', `${OTHER}/${STRAY}.polished.mp3`)).toBeDefined();
 });

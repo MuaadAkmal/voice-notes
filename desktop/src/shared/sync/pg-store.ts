@@ -169,14 +169,15 @@ export class PgStore implements SyncStore {
     return r ? 'live' : 'none';
   }
 
-  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string> }> {
-    const rows = await this.db.query<{ entity: Entity; id: string; body: string | null }>(
-      "select entity, id, data ->> 'body' as body from public.sync_rows where user_id = $1 and not deleted and entity in ('note', 'page')",
+  async liveFiles(userId: string): Promise<{ audio: Set<string>; images: Set<string>; polished: Set<string> }> {
+    const rows = await this.db.query<{ entity: Entity; id: string; body: string | null; polished: string | null }>(
+      "select entity, id, data ->> 'body' as body, data ->> 'polishedAt' as polished from public.sync_rows where user_id = $1 and not deleted and entity in ('note', 'page')",
       [userId],
     );
     return {
       audio: new Set(rows.filter((r) => r.entity === 'note').map((r) => `${r.id}.webm`)),
       images: new Set(rows.filter((r) => r.entity === 'page').flatMap((r) => [...imageRefs(r.body ?? '')])),
+      polished: new Set(rows.filter((r) => r.entity === 'note' && r.polished !== null).map((r) => `${r.id}.polished.mp3`)),
     };
   }
 

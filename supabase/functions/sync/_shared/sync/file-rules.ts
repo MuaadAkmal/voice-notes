@@ -1,5 +1,5 @@
 import type { FileBucket } from './file-bucket.ts';
-import { type DownloadRequest, type DownloadResponse, FILE_LIMITS, type FileKind, type PushRequest, type UploadRequest, type UploadResponse } from './protocol.ts';
+import { type DownloadRequest, type DownloadResponse, FILE_LIMITS, type FileKind, POLISHED_FILE_RE, type PushRequest, type UploadRequest, type UploadResponse } from './protocol.ts';
 import type { SyncStore } from './server-core.ts';
 
 // Who may upload or download which file, and removing files whose note or page is gone. A file may
@@ -8,6 +8,7 @@ import type { SyncStore } from './server-core.ts';
 
 const SWEEP_EVERY_MS = 3_600_000;
 const IMAGE_GRACE_MS = 24 * 3_600_000; // an image can arrive before the page body that references it
+const POLISHED_GRACE_MS = 24 * 3_600_000; // /speak stores the file before the PC pushes polishedAt
 
 /** Bytes the account's files take and its plan allows (`storage_usage_for`); null: no cap. */
 export type StorageQuota = (userId: string) => Promise<{ used: number; limit: number } | null>;
@@ -68,9 +69,13 @@ export class FileRules {
     return url ? { status: 'ok', url } : { status: 'not-uploaded' };
   }
 
-  /** After a push commits: remove the audio of notes it deleted, and sweep the account at most hourly. */
+  /** After a push commits: remove the audio of notes it deleted (and polished audio a note lost), and sweep the account at most hourly. */
   async afterPush(userId: string, req: PushRequest): Promise<void> {
-    const deleted = req.mutations.flatMap((m) => (m.op.op === 'note.delete' ? [`${userId}/${m.op.id}.webm`] : []));
+    const deleted = req.mutations.flatMap((m) => {
+      const op = m.op;
+      if (op.op === 'note.delete') return [`${userId}/${op.id}.webm`, `${userId}/${op.id}.polished.mp3`];
+      return op.op === 'note.update' && op.fields.polishedAt === null ? [`${userId}/${op.id}.polished.mp3`] : [];
+    });
     if (deleted.length) await this.bucket.remove('audio', deleted);
     const now = this.now();
     if (now - (this.lastSweep.get(userId) ?? -Infinity) < SWEEP_EVERY_MS) return;
@@ -81,7 +86,7 @@ export class FileRules {
     const listedAudio = await this.bucket.list('audio', userId);
     const listedImages = await this.bucket.list('image', userId);
     const live = await this.store.liveFiles(userId);
-    const audio = listedAudio.filter((o) => !live.audio.has(o.name));
+    const audio = listedAudio.filter((o) => (POLISHED_FILE_RE.test(o.name) ? !live.polished.has(o.name) && now - o.createdAt > POLISHED_GRACE_MS : !live.audio.has(o.name)));
     if (audio.length) await this.bucket.remove('audio', audio.map((o) => `${userId}/${o.name}`));
     const images = listedImages.filter((o) => !live.images.has(o.name) && now - o.createdAt > IMAGE_GRACE_MS);
     if (images.length) await this.bucket.remove('image', images.map((o) => `${userId}/${o.name}`));

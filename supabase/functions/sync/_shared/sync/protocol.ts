@@ -42,6 +42,8 @@ export type DownloadRequest = { kind: FileKind; name: string };
 export type DownloadResponse = { status: 'ok'; url: string } | { status: 'not-uploaded' };
 export const FILE_LIMITS: Record<FileKind, number> = { audio: 50 * 1024 * 1024, image: 20 * 1024 * 1024 };
 export const AUDIO_FILE_RE = /^[0-9a-f-]{36}\.webm$/;
+/** The polished (read-aloud) audio of a note: downloaded like audio, but made by the asr function, never uploaded. */
+export const POLISHED_FILE_RE = /^[0-9a-f-]{36}.polished.mp3$/;
 
 export const PUSH_MAX_MUTATIONS = 100;
 /** The largest request body the server reads (UTF-8 bytes); a bigger one is refused with 413. */
