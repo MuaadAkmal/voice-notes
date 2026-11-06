@@ -59,7 +59,7 @@ import { resolveEndpoint } from './transcription/endpoint';
 import { matchFolderCommand, PEEK_SECONDS } from '../shared/folder-command';
 import { transcribe } from './transcription/openai-client';
 import { safeStorageCipher, Secrets } from './transcription/secrets';
-import { TranscriptionService } from './transcription/service';
+import { CLEANUP_TIMEOUT_MS, TranscriptionService } from './transcription/service';
 import { WavBridge } from './transcription/wav-bridge';
 import { createTray } from './tray';
 import { AccountService } from './account/account';
@@ -1204,8 +1204,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     onTranscribed: (id) => void auto.transcribed(id),
     cleanup: {
       enabled: () => settings.voiceNoteCleanup,
-      // Background jobs, so no dictation-style budget; a stalled call still can't hold the queue.
-      polish: (text) => commandsClient.polish(text, { signal: new AbortController().signal, timeoutMs: 30_000 }).then((r) => r.text),
+      // Background jobs, so no dictation-style budget; the service gives up after CLEANUP_TIMEOUT_MS.
+      polish: (text, signal) => commandsClient.polish(text, { signal, timeoutMs: CLEANUP_TIMEOUT_MS }).then((r) => r.text),
     },
     fetchAudio: (id) => fileSync.fetchAudio(id),
     onStatus: (status) => {

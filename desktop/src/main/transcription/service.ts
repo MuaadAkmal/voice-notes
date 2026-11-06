@@ -36,7 +36,7 @@ export type ServiceDeps = {
   /** A note's transcript was saved. */
   onTranscribed?: (id: string) => void;
   /** Cloud voice notes cleaned up before they are saved: `enabled` read per job; `polish` answers null to keep the text. */
-  cleanup?: { enabled(): boolean; polish(text: string): Promise<string | null> };
+  cleanup?: { enabled(): boolean; polish(text: string, signal: AbortSignal): Promise<string | null> };
 };
 
 /** Only set for the cloud, so requests to a server keep their exact shape. */
@@ -47,6 +47,8 @@ type Request = Parameters<typeof realTranscribe>[0] & { cloud?: boolean; keyterm
 const MISSING = 'Audio file is missing';
 const LOCAL_MIN_TIMEOUT_MS = 10 * 60_000;
 const CLEANUP_MIN_WORDS = 6; // as dictation: a few words have nothing to tidy
+/** How long a note waits for its cleanup: jobs run one at a time, so a stalled call can't hold the rest. */
+export const CLEANUP_TIMEOUT_MS = 30_000;
 
 /** Voice note → WAV → the user's server → transcript on the note, one note at a time. */
 export class TranscriptionService {
@@ -189,11 +191,21 @@ export class TranscriptionService {
   /** The text polished, or as it is when there's nothing to tidy or polish can't: a transcript is never lost to it. */
   private async tidy(text: string): Promise<string> {
     if (text.split(/\s+/).filter(Boolean).length < CLEANUP_MIN_WORDS) return text;
+    const stop = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        stop.abort();
+        reject(new Error('cleanup timed out'));
+      }, CLEANUP_TIMEOUT_MS);
+    });
     try {
-      return (await this.d.cleanup!.polish(text)) ?? text;
+      return (await Promise.race([this.d.cleanup!.polish(text, stop.signal), timedOut])) ?? text;
     } catch (err) {
       log.info('[transcription] saved without cleanup:', err instanceof Error ? err.message : String(err));
       return text;
+    } finally {
+      clearTimeout(timer);
     }
   }
 

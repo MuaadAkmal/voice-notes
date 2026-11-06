@@ -10,7 +10,7 @@ import { CommandsCore } from './_shared/commands/core.ts';
 import { groqChat } from './_shared/commands/groq.ts';
 import { handleCommands } from './_shared/commands/handler.ts';
 import { RestUsageStore } from './_shared/commands/pg-store.ts';
-import { PolishCore } from './_shared/commands/polish.ts';
+import { POLISH_MAX_TOKENS, POLISH_TIMEOUT_MS, PolishCore } from './_shared/commands/polish.ts';
 import { TitleCore } from './_shared/commands/title.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -37,8 +37,8 @@ const core = missing.length
 const polish = missing.length
   ? null
   : new PolishCore({
-      // A 5-minute dictation is about 1000 words, plus the model's reasoning. The app gives up sooner than this.
-      chat: groqChat({ apiKey, model: Deno.env.get('GROQ_POLISH_MODEL') || Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-20b', fetch, timeoutMs: 8_000, maxTokens: 5000 }),
+      // Room for a 5-minute voice note written back (POLISH_MAX_TOKENS); dictation gives up much sooner.
+      chat: groqChat({ apiKey, model: Deno.env.get('GROQ_POLISH_MODEL') || Deno.env.get('GROQ_MODEL') || 'openai/gpt-oss-20b', fetch, timeoutMs: POLISH_TIMEOUT_MS, maxTokens: POLISH_MAX_TOKENS }),
       usage: new RestUsageStore({ url: SUPABASE_URL, serviceKey, fetch, rpc: 'count_polish' }),
       dailyLimit: Number(Deno.env.get('POLISH_DAILY_LIMIT')) || 1000,
       now: Date.now,

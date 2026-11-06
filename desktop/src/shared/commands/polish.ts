@@ -7,6 +7,13 @@ import type { UsageStore } from './store';
 // is kept, so a model that answers a dictated question instead of tidying it can't reach the paste.
 
 export const MAX_POLISH_TEXT = 20_000;
+/**
+ * The model's room for one cleanup: a 5-minute voice note is about 1000 words written back, plus its
+ * reasoning. Dictation gives up within 4 s whatever this is; a voice note waits up to 30 s
+ * (CLEANUP_TIMEOUT_MS in the app), so the server answers or gives up first.
+ */
+export const POLISH_MAX_TOKENS = 8000;
+export const POLISH_TIMEOUT_MS = 25_000;
 
 export const POLISH_PROMPT = `You clean up dictated text so it reads as the speaker would have typed it.
 You get the transcript as JSON. Reply with JSON only: {"text": <the cleaned text>}

@@ -6,9 +6,11 @@ import {
   TranscriptionFailed,
 } from '../../src/main/transcription/openai-client';
 import {
+  CLEANUP_TIMEOUT_MS,
   type ServiceDeps,
   TranscriptionService,
 } from '../../src/main/transcription/service';
+import { POLISH_MAX_TOKENS, POLISH_TIMEOUT_MS } from '../../src/shared/commands/polish';
 import { resolveEndpoint } from '../../src/main/transcription/endpoint';
 import { QuotaExceeded } from '../../src/main/transcription/cloud-client';
 import { silentWav } from '../../src/shared/wav';
@@ -387,7 +389,7 @@ it('tells who wants to know once a transcript is saved', async () => {
 
 describe('cleanup of Cloud voice notes', () => {
   const SAID = 'um so the plan is uh to ship friday';
-  function cloudSetup(o: { text?: string; polish?: (t: string) => Promise<string | null>; enabled?: () => boolean } = {}) {
+  function cloudSetup(o: { text?: string; polish?: (t: string, signal: AbortSignal) => Promise<string | null>; enabled?: () => boolean } = {}) {
     const cloud = { transcribe: vi.fn(async () => ({ text: o.text ?? SAID, language: 'en' })) };
     const cleanup = { enabled: vi.fn(o.enabled ?? (() => true)), polish: vi.fn(o.polish ?? (async () => 'The plan is to ship Friday.')) };
     const s = setup({ cloud, cleanup });
@@ -400,7 +402,7 @@ describe('cleanup of Cloud voice notes', () => {
     service.enqueue([ID], 'auto');
     await service.idle();
     expect(cloud.transcribe).toHaveBeenCalledWith(new Uint8Array([9]), null, undefined, true, []);
-    expect(cleanup.polish).toHaveBeenCalledWith(SAID);
+    expect(cleanup.polish).toHaveBeenCalledWith(SAID, expect.any(AbortSignal));
     expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, 'The plan is to ship Friday.', 'en');
   });
 
@@ -447,6 +449,28 @@ describe('cleanup of Cloud voice notes', () => {
     expect(await service.peek(ID, 4)).toBe(SAID);
     expect((cloud.transcribe.mock.calls[0] as unknown[])[3]).toBe(false);
     expect(cleanup.polish).not.toHaveBeenCalled();
+  });
+
+  it("a cleanup that never answers is given up after 30 s, and the note keeps Scribe's text", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const { service, deps } = cloudSetup({ polish: (_t, signal) => (signals.push(signal), new Promise(() => undefined)) });
+      service.enqueue([ID], 'auto');
+      await vi.advanceTimersByTimeAsync(CLEANUP_TIMEOUT_MS - 1);
+      expect(deps.store.setTranscript).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await service.idle();
+      expect(deps.store.setTranscript).toHaveBeenCalledWith(ID, SAID, 'en');
+      expect(signals[0].aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the server answers a long cleanup before the app gives up on it', () => {
+    expect(POLISH_TIMEOUT_MS).toBeLessThan(CLEANUP_TIMEOUT_MS);
+    expect(POLISH_MAX_TOKENS).toBeGreaterThanOrEqual(8000);
   });
 
   it('reads the setting when the job starts', async () => {
