@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { NoteStore, toRow } from '../../src/main/store/note-store';
 import { applyPull } from '../../src/main/sync/apply';
 import type { PullResponse, ServerRow } from '../../src/main/sync/engine';
@@ -79,6 +79,40 @@ it('a pulled note keeps its polishedAt; a row without one stores null', () => {
   ] as never), () => undefined);
   expect(store.get(withIt.id)!.polishedAt).toBe(99);
   expect(store.get(without.id)!.polishedAt).toBeNull();
+});
+
+describe('a polished reading changed on another PC', () => {
+  const id = '71111111-1111-4111-8111-111111111111';
+  const data = (polishedAt: number | null) => ({
+    id, title: 'P', durationMs: 2000, sizeBytes: 9, mimeType: 'audio/webm', createdAt: 5, updatedAt: 6, folderId: null,
+    source: 'mic' as const, kind: 'note' as const, windowTitle: null, show: null, starred: false, transcript: null,
+    transcriptLang: null, transcribedAt: null, polishedAt,
+  });
+  const polishedFile = () => path.join(store.recordingsDir, `${id}.polished.mp3`);
+  const pullNote = (version: number, polishedAt: number | null, deleted = false) =>
+    applyPull(store, pull([{ entity: 'note', id, version, deleted, data: data(polishedAt) }] as never), () => undefined);
+  beforeEach(() => {
+    pullNote(1, 5);
+    fs.writeFileSync(polishedFile(), 'old');
+  });
+
+  it('replaces our copy when polishedAt changes', () => {
+    pullNote(2, 9);
+    expect(fs.existsSync(polishedFile())).toBe(false);
+    expect(store.get(id)!.polishedAt).toBe(9);
+  });
+  it('removes our copy when polishedAt is cleared', () => {
+    pullNote(2, null);
+    expect(fs.existsSync(polishedFile())).toBe(false);
+  });
+  it('removes our copy when the note is deleted', () => {
+    pullNote(2, 5, true);
+    expect(fs.existsSync(polishedFile())).toBe(false);
+  });
+  it('keeps our copy when polishedAt is unchanged', () => {
+    pullNote(2, 5);
+    expect(fs.existsSync(polishedFile())).toBe(true);
+  });
 });
 
 it('a pulled delete hides the note, removes its audio and drops our waiting changes', async () => {

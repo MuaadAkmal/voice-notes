@@ -59,7 +59,10 @@ export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: 
         const local = sqlite.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(row.id) as Record<string, unknown> | undefined;
         if (local && local.deleted_at == null) {
           sqlite.prepare(`UPDATE ${table} SET deleted_at = ?, version = ? WHERE id = ?`).run(now, row.version, row.id);
-          if (row.entity === 'note') goneFiles.push(path.join(rootDir, local.file_path as string));
+          if (row.entity === 'note') {
+            goneFiles.push(path.join(rootDir, local.file_path as string));
+            goneFiles.push(path.join(rootDir, `recordings/${row.id}.polished.mp3`));
+          }
           if (row.entity === 'page') for (const f of imageRefs(local.body as string)) goneImages.add(f);
         }
         sqlite.prepare('DELETE FROM outbox WHERE entity_id = ? AND in_flight = 0').run(row.id);
@@ -72,7 +75,7 @@ export function applyPull(store: NoteStore, res: PullResponse, onPrefs: (prefs: 
         .filter((op) => !op.op.endsWith('.create'));
       const merged = pending.reduce<Record<string, unknown> | undefined>((r, op) => applyOp(r, op), { ...row.data });
       if (!merged) continue; // deleted here, delete not pushed yet: it will win on the server
-      write(sqlite, row, merged, rootDir);
+      write(sqlite, row, merged, rootDir, goneFiles);
     }
     res.prefs.length && onPrefs(res.prefs);
     store.sync.state.setCursor(res.cursor);
@@ -95,13 +98,17 @@ function removeQuietly(file: string): void {
   }
 }
 
-function write(sqlite: ReturnType<NoteStore['syncAccess']>['sqlite'], row: ServerRow, data: Record<string, unknown>, rootDir: string): void {
+function write(sqlite: ReturnType<NoteStore['syncAccess']>['sqlite'], row: ServerRow, data: Record<string, unknown>, rootDir: string, goneFiles: string[]): void {
   const version = row.version;
   if (row.entity === 'note') {
     const n = data as NoteRow;
     const filePath = `recordings/${n.id}.webm`;
     // A note from another PC: its audio downloads on first play (sync/files.ts).
     const status = fs.existsSync(path.join(rootDir, filePath)) ? 'ok' : 'remote';
+    // The polished reading was made, replaced or removed on another PC: our copy is the old one.
+    // The server's file keeps one path, so only polishedAt tells; the next play downloads the new one.
+    const before = sqlite.prepare('SELECT polished_at FROM notes WHERE id = ?').get(n.id) as { polished_at: number | null } | undefined;
+    if (before && before.polished_at !== (n.polishedAt ?? null)) goneFiles.push(path.join(rootDir, `recordings/${n.id}.polished.mp3`));
     // pageId, polishedAt: absent from rows older apps sent (a named parameter must be there).
     sqlite.prepare(UPSERT.note).run({ pageId: null, ...n, polishedAt: n.polishedAt ?? null, filePath, status, starred: n.starred ? 1 : 0, version });
   } else if (row.entity === 'page') {
