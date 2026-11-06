@@ -22,6 +22,8 @@ import {
   type PomodoroSession,
   type FetchAudioResult,
   type CloudUsageResult,
+  type CloneResult,
+  type MakeResult,
   type Settings,
   type StatusMap,
   type TestResult,
@@ -30,6 +32,7 @@ import {
   type UpdateStatus,
 } from '../shared/channels';
 import { chunk } from '../shared/format';
+import type { VoiceState } from '../shared/asr/protocol';
 import type { Pomodoro } from '../shared/pomodoro';
 import type { ImageExt } from '../shared/page-images';
 import type { ModelId, TranscribeLanguage } from '../shared/transcription';
@@ -115,6 +118,12 @@ const dashboardApi = {
   testTranscription: (baseUrl: string, model: string): Promise<TestResult> =>
     ipcRenderer.invoke(Ch.TranscriptionTest, { baseUrl, model }),
   cloudUsage: (): Promise<CloudUsageResult> => ipcRenderer.invoke(Ch.TranscriptionCloudUsage),
+  makePolished: (id: string): Promise<MakeResult> => ipcRenderer.invoke(Ch.PolishedMake, id),
+  removePolished: (id: string): Promise<void> => ipcRenderer.invoke(Ch.PolishedRemove, id),
+  getVoiceState: (): Promise<VoiceState | { signedOut: true }> => ipcRenderer.invoke(Ch.VoiceState),
+  voiceSample: (voiceId: string): Promise<string | null> => ipcRenderer.invoke(Ch.VoiceSample, voiceId),
+  cloneVoice: (): Promise<CloneResult> => ipcRenderer.invoke(Ch.VoiceClone),
+  removeVoice: (): Promise<VoiceState> => ipcRenderer.invoke(Ch.VoiceRemove),
   getKeyInfo: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionKeyInfo),
   setKey: (key: string): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionSetKey, { key }),
   removeKey: (): Promise<KeyInfo> => ipcRenderer.invoke(Ch.TranscriptionRemoveKey),

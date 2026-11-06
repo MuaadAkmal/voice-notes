@@ -42,6 +42,7 @@ import {
   LocalRemoveSchema,
   TranscriptionEnqueueSchema,
   TranscriptionTestSchema,
+  VoiceIdSchema,
   WavReplySchema,
   UndoSchema,
   SaveAudioSchema,
@@ -71,6 +72,7 @@ import type { OverlayMouse } from './overlay-mouse';
 import type { RecorderController } from './recorder/controller';
 import type { AccountService } from './account/account';
 import type { ConnectorsService } from './connectors/service';
+import type { PolishedAudio } from './polished/service';
 import type { SyncController } from './sync/controller';
 import { type FileSync, fetchFailure } from './sync/files';
 import type { LocalWhisper } from './local-whisper';
@@ -234,6 +236,7 @@ type DashboardDeps = {
   /** Test hook: URLs the OpenExternal handler would have opened. */
   openedExternal: string[];
   transcription: TranscriptionService;
+  polished: Pick<PolishedAudio, 'make' | 'remove' | 'voiceState' | 'sample' | 'clone' | 'removeVoice'>;
   cloud: Pick<CloudAsrClient, 'usage'>;
   secrets: Secrets;
   wavBridge: WavBridge;
@@ -424,6 +427,12 @@ export function registerDashboardIpc(d: DashboardDeps): void {
     return d.secrets.info('server');
   });
   handle(Ch.TranscriptionWav, WavReplySchema, (reply) => d.wavBridge.settle(reply.requestId, reply));
+  handle(Ch.PolishedMake, IdSchema, (id) => d.polished.make(id));
+  handle(Ch.PolishedRemove, IdSchema, (id) => d.polished.remove(id));
+  handle(Ch.VoiceState, none, () => d.polished.voiceState());
+  handle(Ch.VoiceSample, VoiceIdSchema, (id) => d.polished.sample(id));
+  handle(Ch.VoiceClone, none, () => d.polished.clone());
+  handle(Ch.VoiceRemove, none, () => d.polished.removeVoice());
   handle(Ch.LocalStatus, none, () => d.localWhisper.status());
   handle(Ch.LocalInstall, LocalInstallSchema, ({ modelId }) => d.localWhisper.install(modelId));
   handle(Ch.LocalCancel, none, () => d.localWhisper.cancel());

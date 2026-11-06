@@ -1,6 +1,10 @@
 import { expect, it, vi } from 'vitest';
 import {
+  CloneUnavailable,
+  CloneUnavailableNow,
   CloudAsrClient,
+  NeedsPaidPlan,
+  StorageFull,
   ProviderFailed,
   QuotaExceeded,
   TooLarge,
@@ -104,6 +108,61 @@ it('reads usage', async () => {
   expect(await client.usage()).toEqual(u);
   expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/usage');
   expect((f.mock.calls[0][1]!.headers as Record<string, string>).apikey).toBe('pk');
+});
+
+const VOICE = { stock: [], clone: 'none', canClone: false, plan: 'free' };
+const SPOKEN = { seconds: 3, used: 10, limit: 60, resetsAt: '2026-11-01T00:00:00.000Z' };
+
+it('speak posts JSON and returns the usage', async () => {
+  const { client, f } = make(async () => ok(SPOKEN));
+  expect(await client.speak({ noteId: 'n', text: 'hello', voice: 'v' })).toEqual(SPOKEN);
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/speak');
+  const init = f.mock.calls[0][1]!;
+  expect((init.headers as Record<string, string>)['content-type']).toBe('application/json');
+  expect(JSON.parse(init.body as string)).toEqual({ noteId: 'n', text: 'hello', voice: 'v' });
+});
+
+it.each([
+  [429, { error: 'quota_exceeded', resetsAt: 'r' }, QuotaExceeded],
+  [413, { error: 'storage_full' }, StorageFull],
+  [413, { error: 'too_large' }, TooLarge],
+  [403, { error: 'clone_unavailable' }, CloneUnavailable],
+  [502, { error: 'provider' }, ProviderFailed],
+  [404, { error: 'not_found' }, ProviderFailed],
+])('speak maps %s %j', async (status, body, Err) => {
+  const { client } = make(async () => ok(body, status));
+  await expect(client.speak({ noteId: 'n', text: 't', voice: 'v' })).rejects.toBeInstanceOf(Err);
+});
+
+it('voice reads the state', async () => {
+  const { client, f } = make(async () => ok(VOICE));
+  expect(await client.voice()).toEqual(VOICE);
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice');
+  expect(f.mock.calls[0][1]!.method).toBe('GET');
+});
+
+it('clone sends the WAV with consent', async () => {
+  const { client, f } = make(async () => ok(VOICE));
+  await client.clone(silentWav(1));
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice/clone?consent=1');
+  expect((f.mock.calls[0][1]!.headers as Record<string, string>)['content-type']).toBe('audio/wav');
+});
+
+it.each([
+  [409, { error: 'unavailable' }, CloneUnavailableNow],
+  [403, { error: 'needs_paid_plan' }, NeedsPaidPlan],
+  [403, { error: 'clone_unavailable' }, CloneUnavailable],
+  [502, {}, ProviderFailed],
+])('clone maps %s %j', async (status, body, Err) => {
+  const { client } = make(async () => ok(body, status));
+  await expect(client.clone(silentWav(1))).rejects.toBeInstanceOf(Err);
+});
+
+it('removeClone posts to voice/remove', async () => {
+  const { client, f } = make(async () => ok(VOICE));
+  await client.removeClone();
+  expect(f.mock.calls[0][0]).toBe('https://x.supabase.co/functions/v1/asr/voice/remove');
+  expect(f.mock.calls[0][1]!.method).toBe('POST');
 });
 
 it('says what to do in its messages', () => {

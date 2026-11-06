@@ -38,6 +38,7 @@ import { HttpSyncServer } from './sync/http-server';
 import { ConnectorsClient } from './connectors/client';
 import type { Capture } from './commands/capture';
 import { CommandsClient } from './commands/client';
+import { PolishedAudio } from './polished/service';
 import { ListCommands } from './commands/service';
 import { describeCapture } from './commands/describe';
 import { readBrowserUrl } from './commands/browser-url';
@@ -906,6 +907,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
 
   const syncHolder: { controller?: SyncController } = {}; // set below; the account callback needs it
   const connectorsHolder: { service?: ConnectorsService } = {};
+  const polishedHolder: { service?: PolishedAudio } = {};
   const { sessionStore, supabase } = auth;
   const account = makeAccount(auth, (info) => {
     if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.AccountChanged, info);
@@ -923,6 +925,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     }
     syncHolder.controller?.onAccountChanged();
     connectorsHolder.service?.onAccountChanged();
+    polishedHolder.service?.accountChanged();
     // Boot (session restored) and every sign-in: Cloud becomes the provider if none is set up.
     const patch = bootTestSession ? null : applyCloudDefault(settings, info.state === 'signed-in');
     if (patch) updateSettings(patch, { record: false });
@@ -1179,25 +1182,26 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   onDashboardFocus = () => connectors.onFocus();
   void connectors.refresh();
   const wavBridge = new WavBridge();
+  const toWav = (bytes: Uint8Array, mimeType: string) =>
+    wavBridge.request(
+      (requestId) => {
+        if (!dashboard || dashboard.isDestroyed()) return false;
+        dashboard.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
+        return true;
+      },
+      // Started hidden at login, with no dashboard yet: the pill decodes too (it does for dictation).
+      (requestId) => {
+        if (overlay.isDestroyed()) return false;
+        overlay.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
+        return true;
+      },
+    );
   const transcription = new TranscriptionService({
     store,
     endpoint,
     cloud: cloudAsr,
     secrets,
-    toWav: (bytes, mimeType) =>
-      wavBridge.request(
-        (requestId) => {
-          if (!dashboard || dashboard.isDestroyed()) return false;
-          dashboard.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
-          return true;
-        },
-        // Started hidden at login, with no dashboard yet: the pill decodes too (it does for dictation).
-        (requestId) => {
-          if (overlay.isDestroyed()) return false;
-          overlay.webContents.send(Ch.TranscriptionNeedWav, { requestId, bytes, mimeType });
-          return true;
-        },
-      ),
+    toWav,
     notesChanged: () => toDashboard(Ch.NotesChanged),
     words: () => settings.customWords,
     onUsage: usageSeen,
@@ -1213,6 +1217,26 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       if (dashboard && !dashboard.isDestroyed()) dashboard.webContents.send(Ch.TranscriptionStatus, status);
     },
   });
+  // Polished audio and the user's voice clone, through the same Cloud client and WAV conversion.
+  const polished = new PolishedAudio({
+    store,
+    files: fileSync,
+    client: {
+      speak: (req) => cloudClient.speak(req),
+      voice: () => cloudClient.voice(),
+      clone: (wav) => cloudClient.clone(wav),
+      removeClone: () => cloudClient.removeClone(),
+    },
+    polish: (text) => commandsClient.polish(text, { signal: new AbortController().signal, timeoutMs: 30_000 }).then((r) => r.text),
+    settings: () => settings,
+    now: Date.now,
+    onUsage: usageSeen,
+    notesChanged: () => toDashboard(Ch.NotesChanged),
+    toWav: async (note) => toWav(await fs.promises.readFile(store.absolutePath(note)), note.mimeType),
+    fetchSample,
+    log: (...a) => log.info(...a),
+  });
+  polishedHolder.service = polished;
 
   // Voice to folders: "Pixie, movie lines …" at the start of a mic note files it into that folder.
   const fileByVoice = async (note: Note) => {
@@ -1261,6 +1285,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     dictationsChanged: () => toDashboard(Ch.DictationsChanged),
     openedExternal,
     transcription,
+    polished,
     cloud: cloudAsr,
     secrets,
     wavBridge,
@@ -1396,6 +1421,22 @@ if (!app.requestSingleInstanceLock()) {
     log.error('[boot] failed', err);
     app.quit();
   });
+}
+
+const SAMPLE_MAX_BYTES = 2 * 1024 * 1024;
+
+/** A voice preview as a data: URL (the dashboard's CSP stays closed to the web), or null. */
+async function fetchSample(url: string): Promise<string | null> {
+  try {
+    const res = await net.fetch(url, { signal: AbortSignal.timeout(8000) });
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !type.startsWith('audio/')) return null;
+    const bytes = Buffer.from(await res.arrayBuffer());
+    if (bytes.length > SAMPLE_MAX_BYTES) return null;
+    return `data:audio/mpeg;base64,${bytes.toString('base64')}`;
+  } catch {
+    return null;
+  }
 }
 
 const AVATAR_MAX_BYTES = 1024 * 1024;

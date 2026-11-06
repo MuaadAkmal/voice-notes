@@ -1,4 +1,4 @@
-import type { TranscribeResponse, UsageResponse } from '../../shared/asr/protocol';
+import type { SpeakRequest, SpeakResponse, TranscribeResponse, UsageResponse, VoiceState } from '../../shared/asr/protocol';
 import { MAX_SECONDS } from '../../shared/asr/protocol';
 import { transcriptionError } from '../../shared/transcription-errors';
 import { trimWav } from '../../shared/wav';
@@ -27,6 +27,29 @@ export class TooLarge extends Error {
 export class ProviderFailed extends Error {
   constructor() {
     super(transcriptionError({ kind: 'provider-failed' }));
+  }
+}
+/** The account's Cloud storage has no room for the polished file. */
+export class StorageFull extends Error {
+  constructor() {
+    super('Storage full');
+  }
+}
+/** The server has cloning switched off, or the account's copies are all used. */
+export class CloneUnavailable extends Error {
+  constructor() {
+    super('Not available right now');
+  }
+}
+/** A clone can't be made at this moment (the provider is busy); try later. */
+export class CloneUnavailableNow extends Error {
+  constructor() {
+    super('Not available right now');
+  }
+}
+export class NeedsPaidPlan extends Error {
+  constructor() {
+    super('Cloning your voice needs a paid plan');
   }
 }
 
@@ -59,6 +82,27 @@ type Deps = {
   timeoutMs?: number;
 };
 
+type CallOptions = {
+  method: string;
+  body?: Uint8Array | string;
+  contentType?: string;
+  signal?: AbortSignal;
+  /** The error for a refused request, by status and the reply's `error` code; undefined: the default. */
+  mapError?: (status: number, code: string) => Error | undefined;
+};
+
+function speakError(status: number, code: string): Error | undefined {
+  if (status === 413) return code === 'storage_full' ? new StorageFull() : new TooLarge();
+  if (status === 403 && code === 'clone_unavailable') return new CloneUnavailable();
+  return undefined;
+}
+
+function cloneError(status: number, code: string): Error | undefined {
+  if (status === 409) return new CloneUnavailableNow();
+  if (status === 403) return code === 'needs_paid_plan' ? new NeedsPaidPlan() : new CloneUnavailable();
+  return undefined;
+}
+
 export class CloudAsrClient {
   constructor(private readonly d: Deps) {}
 
@@ -87,7 +131,25 @@ export class CloudAsrClient {
     return this.call<UsageResponse>('/usage', { method: 'GET' });
   }
 
-  private async call<T>(path: string, o: { method: string; body?: Uint8Array; contentType?: string; signal?: AbortSignal }): Promise<T> {
+  /** Reads a note aloud; the function stores the MP3 beside the recording. */
+  speak(req: SpeakRequest): Promise<SpeakResponse> {
+    return this.call<SpeakResponse>('/speak', { method: 'POST', body: JSON.stringify(req), contentType: 'application/json', mapError: speakError });
+  }
+
+  voice(): Promise<VoiceState> {
+    return this.call<VoiceState>('/voice', { method: 'GET' });
+  }
+
+  /** `wav`: 30-180 s of the user's own voice; callers ask for the consent first (`consent=1`). */
+  clone(wav: Uint8Array): Promise<VoiceState> {
+    return this.call<VoiceState>('/voice/clone?consent=1', { method: 'POST', body: wav, contentType: 'audio/wav', mapError: cloneError });
+  }
+
+  removeClone(): Promise<VoiceState> {
+    return this.call<VoiceState>('/voice/remove', { method: 'POST' });
+  }
+
+  private async call<T>(path: string, o: CallOptions): Promise<T> {
     let res = await this.send(path, o);
     if (res.status === 401) {
       await this.d.refresh().catch(() => undefined);
@@ -98,8 +160,10 @@ export class CloudAsrClient {
       const j = (await res.json().catch(() => ({}))) as { resetsAt?: unknown };
       throw new QuotaExceeded(typeof j.resetsAt === 'string' ? j.resetsAt : '');
     }
-    if (res.status === 413) throw new TooLarge();
-    if (!res.ok) throw new ProviderFailed();
+    if (!res.ok) {
+      const code = o.mapError ? (((await res.json().catch(() => ({}))) as { error?: unknown }).error ?? '') : '';
+      throw o.mapError?.(res.status, String(code)) ?? (res.status === 413 ? new TooLarge() : new ProviderFailed());
+    }
     try {
       return (await res.json()) as T;
     } catch {
@@ -107,7 +171,7 @@ export class CloudAsrClient {
     }
   }
 
-  private async send(path: string, o: { method: string; body?: Uint8Array; contentType?: string; signal?: AbortSignal }): Promise<Response> {
+  private async send(path: string, o: CallOptions): Promise<Response> {
     const token = await this.d.token();
     if (!token) throw new CloudNotSignedIn();
     const timeout = AbortSignal.timeout(this.d.timeoutMs ?? 120_000);
