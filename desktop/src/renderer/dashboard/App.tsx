@@ -13,6 +13,7 @@ import { RemindersPage } from './RemindersPage';
 import { ConnectorsPage } from './ConnectorsPage';
 import { SettingsPage } from './SettingsPage';
 import { Sidebar } from './Sidebar';
+import { VoicePage } from './VoicePage';
 import { TranscriptionPage } from './TranscriptionPage';
 import { AccountPage } from './AccountPage';
 import { ToastProvider, useToast } from './Toast';
@@ -24,6 +25,7 @@ export type View =
   | { kind: 'home' }
   | { kind: 'dictation' }
   | { kind: 'pomodoro' }
+  | { kind: 'voice' }
   | { kind: 'inbox' }
   | { kind: 'all' }
   | { kind: 'starred' }
@@ -53,7 +55,7 @@ export function App() {
   const [folders, setFolders] = useState<Folder[]>([]);
   // Where Back from a page goes, and the page just created (its title starts selected).
   const [backTo, setBackTo] = useState<
-    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' } | { kind: 'reminders' }>
+    Exclude<View, { kind: 'page' } | { kind: 'settings' } | { kind: 'transcription' } | { kind: 'dictation' } | { kind: 'pomodoro' } | { kind: 'voice' } | { kind: 'account' } | { kind: 'connectors' } | { kind: 'calendar' } | { kind: 'reminders' }>
   >({ kind: 'inbox' });
   const [freshPageId, setFreshPageId] = useState<string | null>(null);
 
@@ -92,7 +94,7 @@ export function App() {
   }, [folders, pages, view]);
 
   const openPage = (id: string, fresh = false) => {
-    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar' && view.kind !== 'reminders')
+    if (view.kind !== 'page' && view.kind !== 'settings' && view.kind !== 'transcription' && view.kind !== 'dictation' && view.kind !== 'pomodoro' && view.kind !== 'voice' && view.kind !== 'account' && view.kind !== 'connectors' && view.kind !== 'calendar' && view.kind !== 'reminders')
       setBackTo(view);
     setFreshPageId(fresh ? id : null);
     setView({ kind: 'page', id });
@@ -149,6 +151,8 @@ export function App() {
               <DictationPage />
             ) : view.kind === 'pomodoro' ? (
               <PomodoroPage />
+            ) : view.kind === 'voice' ? (
+              <VoicePage />
             ) : view.kind === 'settings' ? (
               <SettingsPage />
             ) : view.kind === 'transcription' ? (

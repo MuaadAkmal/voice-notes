@@ -1,4 +1,5 @@
 // Types and channel names only: safe to import from sandboxed preloads (no zod).
+import type { VoiceState } from './asr/protocol.ts';
 import type { ModelId, TranscribeLanguage, TranscriptionSettings } from './transcription.ts';
 export type Note = {
   id: string;
@@ -264,6 +265,12 @@ export const Ch = {
   TranscriptionSetKey: 'transcription:set-key', // { key } → KeyInfo
   TranscriptionRemoveKey: 'transcription:remove-key', // → KeyInfo
   TranscriptionWav: 'transcription:wav', // { requestId, bytes } | { requestId, error }
+  PolishedMake: 'polished:make', // id → MakeResult
+  PolishedRemove: 'polished:remove', // id
+  VoiceState: 'voice:state', // → VoiceState | { signedOut: true }
+  VoiceSample: 'voice:sample', // voiceId → data: URL | null
+  VoiceClone: 'voice:clone', // { consent: true } → → VoiceState | { error }
+  VoiceRemove: 'voice:remove', // → VoiceState
   DictationsList: 'dictations:list', // → Dictation[]
   DictationsCopy: 'dictations:copy', // { id } main writes the clipboard
   DictationsClear: 'dictations:clear',
@@ -410,3 +417,10 @@ export type LocalStatus = {
 };
 
 export type TestResult = { ok: true; ms: number; language: string | null } | { ok: false; error: string };
+
+/** Making a note's polished audio: why not, when it did not work. */
+export type MakeResult =
+  | { ok: true }
+  | { ok: false; reason: 'no-transcript' | 'signed-out' | 'offline' | 'quota' | 'storage-full' | 'failed'; resetsAt?: string };
+/** Cloning the user's voice from their own notes on this PC. */
+export type CloneResult = VoiceState | { error: 'few-notes' | 'unavailable' | 'needs-paid-plan' | 'failed' };

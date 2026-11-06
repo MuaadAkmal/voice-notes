@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AudioLines, ChevronDown, Clapperboard, Cloud, Copy, History, Loader2, MoreHorizontal, Star, Volume2 } from 'lucide-react';
+import { AudioLines, ChevronDown, Clapperboard, Cloud, Copy, History, Loader2, MoreHorizontal, Sparkles, Star, Volume2 } from 'lucide-react';
 import type { JobStatus, Note } from '../../shared/channels';
+import { polishedCostText } from '../../shared/cloud-usage';
 import { formatDuration, isDefaultTitle } from '../../shared/format';
 import { matchRanges } from '../../shared/search';
 import { TRANSCRIBE_LANGUAGES, type TranscribeLanguage } from '../../shared/transcription';
@@ -26,6 +27,12 @@ type Props = {
   loading?: boolean;
   positionMs: number;
   onTogglePlay: () => void;
+  /** Which recording plays, when there is polished audio to choose. */
+  version: 'original' | 'polished';
+  onSwitchVersion: (v: 'original' | 'polished') => void;
+  makingPolished: boolean;
+  onMakePolished: () => void;
+  onRemovePolished: () => void;
   onRename: (title: string) => void;
   onReveal: () => void;
   onDelete: () => void;
@@ -62,6 +69,7 @@ export function NoteRow(props: Props) {
   const input = useRef<HTMLInputElement>(null);
   const showInput = useRef<HTMLInputElement>(null);
   const missing = note.status === 'missing';
+  const text = note.transcript?.trim() ?? '';
   const remote = note.status === 'remote';
   // MediaRecorder WebM has no duration header (<audio>.duration is Infinity), so progress uses the stored length.
   const progress = note.durationMs > 0 ? Math.min(1, Math.max(0, positionMs / note.durationMs)) : 0;
@@ -156,6 +164,22 @@ export function NoteRow(props: Props) {
         )}
         {textFirst && transcript}
         <div className={`${textFirst ? 'mt-2' : 'mt-1.5'} flex items-center gap-3`}>
+          {note.polishedAt && (
+            <div role="radiogroup" aria-label="Version" className="flex shrink-0 rounded-md border p-0.5 text-[11px]">
+              {(['original', 'polished'] as const).map((v) => (
+                <button
+                  key={v}
+                  role="radio"
+                  aria-checked={props.version === v}
+                  onClick={() => props.onSwitchVersion(v)}
+                  disabled={missing && v === 'original'}
+                  className={`rounded px-2 py-0.5 ${props.version === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {v === 'original' ? 'Original' : 'Polished'}
+                </button>
+              ))}
+            </div>
+          )}
           {note.transcriptLang && (
             <span
               title={`Transcript language: ${LANGUAGE_NAMES[note.transcriptLang] ?? note.transcriptLang}`}
@@ -225,6 +249,27 @@ export function NoteRow(props: Props) {
           )}
         </div>
         {!textFirst && transcript}
+        {text && (props.makingPolished || !note.polishedAt) && (
+          <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+            {props.makingPolished ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="size-3 animate-spin" />
+                Making polished audio…
+              </span>
+            ) : (
+              <>
+                <button
+                  onClick={props.onMakePolished}
+                  className="flex items-center gap-1.5 rounded-md border px-2 py-1 font-medium text-foreground hover:bg-accent"
+                >
+                  <Sparkles className="size-3.5" />
+                  Make polished audio
+                </button>
+                <span>{polishedCostText(text.length)}</span>
+              </>
+            )}
+          </div>
+        )}
         {transcription && <JobLine status={transcription} onRetry={() => onTranscribe()} />}
       </div>
 
@@ -318,6 +363,18 @@ export function NoteRow(props: Props) {
             ) : (
               <DropdownMenuItem onSelect={onSetupTranscription}>Set up transcription</DropdownMenuItem>
             ))}
+          {text ? (
+            note.polishedAt && (
+              <>
+                <DropdownMenuItem disabled={props.makingPolished} onSelect={props.onMakePolished}>
+                  Regenerate
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={props.onRemovePolished}>Delete polished audio</DropdownMenuItem>
+              </>
+            )
+          ) : (
+            <DropdownMenuItem disabled>Transcribe first</DropdownMenuItem>
+          )}
           {note.status === 'ok' && <DropdownMenuItem onSelect={onReveal}>Show in folder</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={onDelete}>

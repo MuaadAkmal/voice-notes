@@ -1,3 +1,5 @@
+import { MAX_SPEAK_CHARS } from './asr/protocol';
+
 /** Where an account's plan is bought, changed or cancelled (the web app; paid through Razorpay). */
 export const PLAN_PAGE_URL = 'https://app.voicenote.cloud/account/';
 
@@ -36,4 +38,10 @@ export function quotaState(u: { used: number; limit: number }): 'ok' | 'low' | '
   if (!Number.isFinite(u.used) || !Number.isFinite(u.limit) || u.limit <= 0) return 'ok';
   if (u.used >= u.limit) return 'out';
   return u.used >= u.limit * 0.8 ? 'low' : 'ok';
+}
+
+/** What making polished audio of a transcript of `chars` characters costs, as the server reserves it: 12 characters a second, at most 5000 characters read. */
+export function polishedCostText(chars: number): string {
+  const seconds = Math.ceil(Math.min(chars, MAX_SPEAK_CHARS) / 12);
+  return `Uses about ${Math.max(1, Math.ceil(seconds / 60))} min of Cloud minutes`;
 }

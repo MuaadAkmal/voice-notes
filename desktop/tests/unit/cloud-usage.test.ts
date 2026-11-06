@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planName, quotaState, storageText, usageText } from '../../src/shared/cloud-usage';
+import { planName, polishedCostText, quotaState, storageText, usageText } from '../../src/shared/cloud-usage';
 
 describe('storageText', () => {
   const MB = 1024 * 1024;
@@ -43,5 +43,17 @@ describe('quotaState', () => {
     expect(quotaState({ used: 5, limit: 0 })).toBe('ok');
     expect(quotaState({ used: Number.NaN, limit: 1800 })).toBe('ok');
     expect(quotaState({ used: 5, limit: Number.POSITIVE_INFINITY })).toBe('ok');
+  });
+});
+
+describe('polishedCostText', () => {
+  it('rounds the estimate up to whole minutes, at least one', () => {
+    expect(polishedCostText(1)).toBe('Uses about 1 min of Cloud minutes');
+    expect(polishedCostText(720)).toBe('Uses about 1 min of Cloud minutes'); // 60 s exactly
+    expect(polishedCostText(721)).toBe('Uses about 2 min of Cloud minutes');
+    expect(polishedCostText(2400)).toBe('Uses about 4 min of Cloud minutes');
+  });
+  it('reads at most 5000 characters', () => {
+    expect(polishedCostText(50_000)).toBe('Uses about 7 min of Cloud minutes'); // ceil(5000 / 12) = 417 s
   });
 });

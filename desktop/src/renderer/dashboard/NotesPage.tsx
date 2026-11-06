@@ -5,6 +5,8 @@ import { distinctShows, filterItems, isFiltering, NO_FILTER, type NoteFilter, ty
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { folderPath, selectRange } from '../../shared/folders';
 import { cleanIpcError, groupByDay } from '../../shared/format';
+import { PLAN_PAGE_URL } from '../../shared/cloud-usage';
+import { transcriptionError } from '../../shared/transcription-errors';
 import { builtInPageId, canAdd, isPinned } from '../../shared/home-widgets';
 import { type Item, itemFolderId, itemId, itemStarred, itemTime, mergeItems, untranscribedIds } from '../../shared/items';
 import type { View } from './App';
@@ -65,6 +67,9 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   const [hotkeyLabel, setHotkeyLabel] = useState('your hotkey');
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  // Which version of a note plays; only this window remembers it, and Original is the default.
+  const [versions, setVersions] = useState<Record<string, 'original' | 'polished'>>({});
+  const [making, setMaking] = useState<Set<string>>(new Set());
   const [positionMs, setPositionMs] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
@@ -171,15 +176,26 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
   };
 
   // One shared <audio>: starting a note stops whatever was playing.
+  const versionOf = (note: Note) => (note.polishedAt ? (versions[note.id] ?? 'original') : 'original');
+
   const togglePlay = async (note: Note) => {
-    const el = audio.current;
-    if (!el) return;
     if (playingId === note.id) {
-      el.pause();
+      audio.current?.pause();
       setPlayingId(null);
       return;
     }
-    if (note.status === 'remote') {
+    await startPlay(note, versionOf(note));
+  };
+
+  const switchVersion = (note: Note, version: 'original' | 'polished') => {
+    setVersions((v) => ({ ...v, [note.id]: version }));
+    return startPlay(note, version);
+  };
+
+  const startPlay = async (note: Note, version: 'original' | 'polished') => {
+    const el = audio.current;
+    if (!el) return;
+    if (note.status === 'remote' && version === 'original') {
       // Recorded on another PC: bring its audio here first.
       setLoadingId(note.id);
       const res = await api.fetchAudio(note.id);
@@ -189,10 +205,41 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
         return;
       }
     }
-    el.src = `note://${note.id}`;
+    // The version in the address stops the media cache replaying an old reading after Regenerate.
+    el.src = version === 'polished' && note.polishedAt ? `note://${note.id}?polished=1&v=${note.polishedAt}` : `note://${note.id}`;
     setPositionMs(0);
     setPlayingId(note.id);
     el.play().catch(() => setPlayingId(null));
+  };
+
+  const makePolished = async (note: Note) => {
+    setMaking((s) => new Set(s).add(note.id));
+    try {
+      const r = await api.makePolished(note.id);
+      if (r.ok) return;
+      const upgrade = { label: 'Upgrade', onClick: () => void api.openExternal(PLAN_PAGE_URL).catch(() => undefined) };
+      if (r.reason === 'quota') toast(transcriptionError({ kind: 'quota', resetsAt: r.resetsAt ?? '' }), upgrade);
+      else if (r.reason === 'storage-full') toast('Storage full', upgrade);
+      else if (r.reason === 'no-transcript') toast('Transcribe first');
+      else if (r.reason === 'signed-out') toast('Sign in to use Cloud');
+      else if (r.reason === 'offline') toast("Can't reach Voice Notes Cloud");
+      else toast("Couldn't make polished audio");
+    } catch (e) {
+      toast(cleanIpcError(e));
+    } finally {
+      setMaking((s) => {
+        const next = new Set(s);
+        next.delete(note.id);
+        return next;
+      });
+    }
+  };
+
+  const removePolished = async (note: Note) => {
+    const ok = await confirm({ title: 'Delete the polished audio?', description: 'The original recording stays.', confirmLabel: 'Delete' });
+    if (!ok) return;
+    if (playingId === note.id && versionOf(note) === 'polished') stopIfPlaying([note.id]);
+    api.removePolished(note.id).catch((e) => toast(cleanIpcError(e)));
   };
 
   const remove = async (all: string[]) => {
@@ -417,6 +464,11 @@ export function NotesPage({ view, filter, setFilter, notes, pages, folders, onNa
               loading={loadingId === note.id}
                     positionMs={playingId === note.id ? positionMs : 0}
                     onTogglePlay={() => togglePlay(note)}
+                    version={versionOf(note)}
+                    onSwitchVersion={(v) => switchVersion(note, v)}
+                    makingPolished={making.has(note.id)}
+                    onMakePolished={() => makePolished(note)}
+                    onRemovePolished={() => removePolished(note)}
                     onRename={(t) => api.renameNote(note.id, t).catch((e) => toast(cleanIpcError(e)))}
                     onReveal={() => api.revealNote(note.id)}
                     onToggleStar={() => api.starNotes([note.id], !note.starred).catch((e) => toast(cleanIpcError(e)))}
