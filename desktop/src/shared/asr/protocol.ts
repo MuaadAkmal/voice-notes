@@ -33,3 +33,16 @@ export const STOCK_VOICES: readonly { id: string; name: string }[] = [
 /** `voice` is a STOCK_VOICES id or 'clone'. */
 export type SpeakRequest = { noteId: string; text: string; voice: string };
 export type SpeakResponse = { seconds: number; used: number; limit: number; resetsAt: string };
+
+/** Seconds of the user's own voice a clone is made from. */
+export const CLONE_MIN_SECONDS = 30;
+export const CLONE_MAX_SECONDS = 180;
+
+/** `unusable`: a clone kept after dropping to Free (not deleted, not usable). */
+export type VoiceState = {
+  stock: { id: string; name: string; previewUrl: string | null }[];
+  clone: 'none' | 'ready' | 'unusable';
+  /** Paid plan and room under the limit (or a clone to replace). */
+  canClone: boolean;
+  plan: string;
+};

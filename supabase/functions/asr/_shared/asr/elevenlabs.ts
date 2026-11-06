@@ -1,5 +1,6 @@
 import type { Transcriber } from './core.ts';
 import type { Speaker } from './speak.ts';
+import { CloneRefused, type VoiceApi } from './voice.ts';
 
 // ElevenLabs Scribe speech-to-text. The key stays in the Edge Function.
 
@@ -50,5 +51,56 @@ export function elevenLabsSpeaker(apiKey: string, fetchFn: typeof globalThis.fet
     });
     if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
     return new Uint8Array(await res.arrayBuffer());
+  };
+}
+
+const VOICES_URL = 'https://api.elevenlabs.io/v1/voices';
+const VOICES_TIMEOUT_MS = 60_000;
+
+export function elevenLabsVoices(apiKey: string, fetchFn: typeof globalThis.fetch): VoiceApi {
+  const previews = new Map<string, string | null>(); // stock previews don't change
+  const fail = async (res: Response) => `ElevenLabs ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`;
+  return {
+    async create(name, wav) {
+      const form = new FormData();
+      form.set('name', name);
+      form.set('remove_background_noise', 'true');
+      form.append('files', new Blob([wav as BlobPart], { type: 'audio/wav' }), 'sample.wav');
+      const res = await fetchFn(`${VOICES_URL}/add`, {
+        method: 'POST',
+        headers: { 'xi-api-key': apiKey },
+        body: form,
+        signal: AbortSignal.timeout(VOICES_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        const msg = await fail(res);
+        // Out of slots or quota, or the sample was refused: not a fault of ours, so the user sees "not available".
+        if ([400, 402, 403, 409, 422].includes(res.status) || /limit|quota/i.test(msg)) throw new CloneRefused(msg);
+        throw new Error(msg);
+      }
+      const j = (await res.json()) as { voice_id?: unknown };
+      if (typeof j.voice_id !== 'string' || !j.voice_id) throw new Error('ElevenLabs returned no voice id');
+      return j.voice_id;
+    },
+    async remove(voiceId) {
+      const res = await fetchFn(`${VOICES_URL}/${encodeURIComponent(voiceId)}`, {
+        method: 'DELETE',
+        headers: { 'xi-api-key': apiKey },
+        signal: AbortSignal.timeout(VOICES_TIMEOUT_MS),
+      });
+      if (!res.ok && res.status !== 404) throw new Error(await fail(res));
+    },
+    async preview(voiceId) {
+      if (previews.has(voiceId)) return previews.get(voiceId) ?? null;
+      const res = await fetchFn(`${VOICES_URL}/${encodeURIComponent(voiceId)}`, {
+        headers: { 'xi-api-key': apiKey },
+        signal: AbortSignal.timeout(VOICES_TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(await fail(res));
+      const j = (await res.json()) as { preview_url?: unknown };
+      const url = typeof j.preview_url === 'string' ? j.preview_url : null;
+      previews.set(voiceId, url);
+      return url;
+    },
   };
 }

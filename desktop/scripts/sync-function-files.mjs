@@ -53,6 +53,7 @@ const FUNCTIONS = {
     'asr/core.ts',
     'asr/elevenlabs.ts',
     'asr/speak.ts',
+    'asr/voice.ts',
     'asr/handler.ts',
   ],
   billing: [
