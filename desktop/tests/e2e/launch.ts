@@ -23,6 +23,8 @@ export type Hooks = {
   openedExternal: string[];
   transcription: { idle(): Promise<void> };
   dictationGesture: { toggle(): void };
+  typing: { active(): boolean };
+  controller: { state: string };
   pasted: string[];
   account: { setTestSession(info: unknown): void };
   relaunches: (string | null)[];

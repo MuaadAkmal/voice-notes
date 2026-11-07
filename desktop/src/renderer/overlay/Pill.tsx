@@ -8,6 +8,7 @@ import { LATER_PAGE_TITLE } from '../../shared/later';
 import { normalize } from '../../shared/search';
 import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
+import { TypePill, type TypeCan } from './TypePill';
 
 const BARS = 28;
 const BAR_W = 2.5;
@@ -97,9 +98,10 @@ function DoneText({ message }: { message: string }) {
 const PICKER_ROWS = 6;
 
 /** "Added · milk → Groceries" with Undo and Move to…; the picker lists other pages to move it to. */
-function UndoPill({ message, undo, shell, hover }: { message: string; undo: UndoOffer; shell: string; hover: Hover }) {
+function UndoPill({ message, undo, pick, shell, hover }: { message: string; undo: UndoOffer; pick: boolean; shell: string; hover: Hover }) {
   const api = window.overlayApi;
-  const [picking, setPicking] = useState(false);
+  // pick: "Move last to…" from the typing input, where main has already opened the picker.
+  const [picking, setPicking] = useState(pick);
   const [query, setQuery] = useState('');
   const input = useRef<HTMLInputElement>(null);
 
@@ -311,8 +313,8 @@ function IdleBar({ visible, film, pomo, hover, onSave }: IdleBarProps) {
         {(visible || running) && (
           <button
             data-morph
-            onClick={() => api.click()}
-            title="Click or hold your hotkey to record"
+            onClick={() => api.typeOpen()}
+            title="Click to type · hold your hotkey to speak"
             className={`relative cursor-pointer overflow-hidden rounded-full border border-white/20 transition-all duration-200 ${
               big ? 'h-3 w-14 bg-neutral-800' : 'h-2 w-10 bg-neutral-900/70'
             } ${pomo.ended ? 'pomo-burst' : ''}`}
@@ -359,6 +361,13 @@ export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
 export function Pill({ state, analyser, pomo, onSave }: PillProps) {
   const api = window.overlayApi;
   const [silent, setSilent] = useState(false);
+  // The typing input main let open (null: the plain idle bar), and its draft, kept across opens.
+  const [typing, setTyping] = useState<TypeCan | null>(null);
+  const [draft, setDraft] = useState('');
+  useEffect(() => api.onTypeShown(setTyping), [api]);
+  useEffect(() => {
+    if (state.kind !== 'idle') setTyping(null);
+  }, [state.kind]);
   const recording = state.kind === 'recording';
   // Each recording starts out assumed audible.
   useEffect(() => {
@@ -372,6 +381,7 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
 
   switch (state.kind) {
     case 'idle':
+      if (typing) return <TypePill draft={draft} setDraft={setDraft} can={typing} onClose={() => setTyping(null)} shell={shell} hover={hover} />;
       return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} onSave={onSave} />;
     case 'busy':
       return (
@@ -431,7 +441,7 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
         <div data-morph className={`${shell} h-10 bg-red-600/95 px-5 text-sm`}>{state.message}</div>
       );
     case 'done':
-      if (state.undo) return <UndoPill message={state.message} undo={state.undo} shell={shell} hover={hover} />;
+      if (state.undo) return <UndoPill key={state.undo.id} message={state.message} undo={state.undo} pick={!!state.pick} shell={shell} hover={hover} />;
       return (
         <div data-morph className={`${shell} h-10 max-w-full bg-emerald-600/95 px-5 text-sm`}>
           <DoneText message={state.message} />

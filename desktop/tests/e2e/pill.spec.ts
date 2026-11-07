@@ -54,10 +54,14 @@ test('dragging the pill moves the window and remembers it, without recording', a
   await expect.poll(async () => (await boundsOf()).x).toBe(before.x);
 });
 
-test('a plain click on the pill still toggles hands-free recording', async () => {
+test('clicking the idle pill opens typing, not a recording; clicking the recording pill stops it', async () => {
   t = await launch();
   const pill = await overlay(t);
   await pill.getByTestId('pill').click();
+  await expect(pill.getByRole('textbox', { name: 'Type a note' })).toBeVisible();
+  expect(await t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('idle');
+  await pill.keyboard.press('Escape');
+  await t.hooks((h) => h.gesture.toggle());
   await expect.poll(() => t.app.evaluate(() => (globalThis as any).__voiceNotes.controller.state)).toBe('recording');
   await pill.waitForTimeout(1500); // a press of 1 s or less is dropped as a mis-click
   await pill.getByTestId('pill').click();
