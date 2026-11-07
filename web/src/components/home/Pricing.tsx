@@ -52,7 +52,12 @@ const PLANS: Plan[] = [
       monthly: { now: "₹299", was: "₹349", unit: "/month" },
       annual: { now: "₹2,999", was: "₹3,499", unit: "/year", note: "About ₹250 a month", save: "Save 16%" },
     },
-    features: ["10 hours of Cloud transcription every month", "20 GB storage", ...SHARED],
+    features: [
+      "10 hours of Cloud transcription every month",
+      "20 GB storage",
+      "Hear your notes in your own voice: clone it once, and every polished note sounds like you",
+      ...SHARED,
+    ],
     cta: "Get Pro",
   },
 ];
