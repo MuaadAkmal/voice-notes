@@ -48,7 +48,7 @@ import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
-import { foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
+import { focusWindow, foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
 import { polishDictation } from './dictation/polish';
 import { cleanupOn } from '../shared/transcription';
 import { MonitorFollower } from './overlay-position';
@@ -393,11 +393,24 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   let typing = false;
   let beforeTyping: Electron.Rectangle | null = null;
   const TYPE_EXTRA = 60;
-  const closeTyping = () => {
+  // The window in front when the input opened: focus goes back to it, so a dictation that follows
+  // pastes there and a voice note is labelled with it. Under test only recorded.
+  let returnTo: number | null = null;
+  const refocused: number[] = [];
+  const focusBack = (hwnd: number) => (process.env.VOICE_NOTES_TEST === '1' ? refocused.push(hwnd) : focusWindow(hwnd));
+  /** Typing is over: the flag and the window's size, focus left as it is. */
+  const endTyping = () => {
     typing = false;
-    releaseOverlayFocus();
+    returnTo = null;
     if (beforeTyping && !overlay.isDestroyed()) overlay.setBounds(beforeTyping);
     beforeTyping = null;
+  };
+  /** refocus: hand focus back to the app the user was in (not when they clicked away themselves). */
+  const closeTyping = (refocus = true) => {
+    const back = returnTo;
+    endTyping();
+    releaseOverlayFocus();
+    if (refocus && back) focusBack(back);
   };
   const setOverlayState = (s: OverlayState) => {
     // Anything else taking the pill (a recording, a flash, a notice) ends typing and gives focus back.
@@ -536,9 +549,10 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   };
   gesture.onEvent((e) => {
     if (e === 'start' && !dictation.active) {
-      releaseOverlayFocus(); // a new recording abandons an open title input
+      // First, so focus goes back to the app before anything else lets it go: the note is labelled with that app.
+      if (typing) closeTyping(); // a new recording abandons an open typing input (the overlay keeps its draft)
+      releaseOverlayFocus(); // or title input
       if (picking) closePicker(); // or Move to… picker
-      if (typing) closeTyping(); // or typing input (the overlay keeps its draft)
       dictation.dismissFlash();
     }
     controller.handleGesture(e);
@@ -658,14 +672,17 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
   dictationGesture.onEvent((e) => {
     if (e === 'start' && controller.state === 'idle') {
-      releaseOverlayFocus(); // a dictation abandons an open title input, picker or typing input, like a new recording
+      if (typing) closeTyping(); // first: the dictation pastes into the app focus goes back to
+      releaseOverlayFocus(); // a dictation abandons an open title input or picker, like a new recording
       if (picking) closePicker();
-      if (typing) closeTyping();
       controller.dismissFlash();
     }
     dictation.handleGesture(e);
   });
+  // The user clicked another window: typing ends there, focus stays where they put it.
+  overlay.on('blur', () => typing && closeTyping(false));
   overlay.webContents.on('did-finish-load', () => {
+    if (typing) closeTyping(false); // a reloaded pill has no input open
     setOverlayState(idleState());
     send(Ch.FilmMode, { on: settings.filmMode }); // a reloaded overlay restarts the buffer
     send(Ch.PomodoroConfig, settings.pomodoro);
@@ -764,6 +781,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         // Only on the resting pill: never over a recording, a flash, Add title or the picker.
         if (typing || picking || overlayState.kind !== 'idle' || controller.state !== 'idle' || dictation.active) return;
         typing = true;
+        const fg = foreground();
+        returnTo = fg && fg.pid !== process.pid && fg.hwnd ? fg.hwnd : null; // read before the pill takes focus
         beforeTyping = overlay.getBounds();
         overlay.setBounds({ ...beforeTyping, y: beforeTyping.y - TYPE_EXTRA, height: beforeTyping.height + TYPE_EXTRA });
         overlay.setFocusable(true);
@@ -785,10 +804,14 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       },
       moveLast: () => {
         if (!typing) return;
-        closeTyping();
         const id = listUndo.latest();
         const offer = id ? listUndo.offer(id) : null;
-        if (!offer?.pages.length) return dictation.showResult('Already changed');
+        if (!offer?.pages.length) {
+          closeTyping();
+          return dictation.showResult('Already changed');
+        }
+        // The picker takes over the focus the input had: no hand-back to the app in between.
+        endTyping();
         dictation.offerMove('Move last item to…', offer);
         openPicker();
       },
@@ -1416,7 +1439,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
       transcription, // idle(): wait for queued transcriptions
       dictationGesture, // what Ctrl+Win does
-      typing: { active: () => typing }, // the pill's typing input is open
+      typing: { active: () => typing, refocused }, // the pill's typing input is open; windows focus was handed back to
       dictation,
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine

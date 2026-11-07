@@ -24,6 +24,7 @@ type Bindings = {
   GetAsyncKeyState: (vk: number) => number;
   GetWindowRect: (hwnd: number, rect: Int32Array) => boolean;
   IsIconic: (hwnd: number) => boolean;
+  SetForegroundWindow: (hwnd: number) => boolean;
   /** A pointer's numeric value (window handles fit in 32 bits, so the number is exact). */
   address: (p: unknown) => number;
 };
@@ -51,6 +52,7 @@ function bind(): Bindings | null {
       GetAsyncKeyState: user32.func('int16_t __stdcall GetAsyncKeyState(int vKey)'),
       GetWindowRect: user32.func('bool __stdcall GetWindowRect(uintptr_t hWnd, int32_t* rect)'),
       IsIconic: user32.func('bool __stdcall IsIconic(uintptr_t hWnd)'),
+      SetForegroundWindow: user32.func('bool __stdcall SetForegroundWindow(uintptr_t hWnd)'),
       address: (p) => Number(koffi.address(p)),
     };
   } catch (err) {
@@ -93,6 +95,21 @@ export function foregroundWindow(): ForegroundWindow | null {
   } catch (err) {
     log.warn('[win32] foreground window lookup failed', err);
     return null;
+  }
+}
+
+/**
+ * Brings a window back to the front (the app the user was in before the pill took focus). Windows
+ * allows it because this process holds the foreground at that moment. False if it refused.
+ */
+export function focusWindow(hwnd: number): boolean {
+  const b = bind();
+  if (!b || !hwnd) return false;
+  try {
+    return b.SetForegroundWindow(hwnd);
+  } catch (err) {
+    log.warn('[win32] focus window failed', err);
+    return false;
   }
 }
 

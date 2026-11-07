@@ -16,14 +16,14 @@ export type Hooks = {
     pages: { list(): TextPage[]; deleteMany(ids: string[]): Promise<void> };
   };
   rewind(): void;
-  setForeground(fn: () => { title: string; processName: string; pid: number } | null): void;
+  setForeground(fn: () => { title: string; processName: string; pid: number; hwnd?: number } | null): void;
   mediaPresses(): number;
   updates: { downloaded(version: string): void; installs(): number };
   pagesChanged(): void;
   openedExternal: string[];
   transcription: { idle(): Promise<void> };
   dictationGesture: { toggle(): void };
-  typing: { active(): boolean };
+  typing: { active(): boolean; refocused: number[] };
   controller: { state: string };
   pasted: string[];
   account: { setTestSession(info: unknown): void };

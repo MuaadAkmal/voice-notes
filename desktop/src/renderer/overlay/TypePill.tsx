@@ -21,6 +21,15 @@ export function TypePill({ draft, setDraft, can, onClose, shell, hover }: { draf
     window.addEventListener('focus', focus);
     return () => window.removeEventListener('focus', focus);
   }, []);
+  // Taken off screen some other way (a drop swaps the pill out): main must still end typing.
+  useEffect(
+    () => () => {
+      if (closed.current) return;
+      closed.current = true;
+      api.typeCancel();
+    },
+    [api],
+  );
 
   const close = (send: () => void) => {
     if (closed.current) return;
