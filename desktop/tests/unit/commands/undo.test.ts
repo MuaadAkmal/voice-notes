@@ -124,3 +124,16 @@ it('offers at most 50 pages', () => {
   for (let i = 0; i < 60; i++) pages.set(`p${i}`, page(`p${i}`, `P${i}`, '', 10 + i));
   expect(undo.offer(undo.remember('g', ['milk']))!.pages).toHaveLength(50);
 });
+
+it('latest: the newest live action, null when none or expired', () => {
+  const { undo, later } = setup();
+  expect(undo.latest()).toBeNull();
+  const a = undo.remember('g', ['milk']);
+  const b = undo.remember('t', ['vanakkam']);
+  expect(undo.latest()).toBe(b);
+  undo.undo(b);
+  expect(undo.latest()).toBe(a);
+  later(2 * 60_000 + 1);
+  expect(undo.latest()).toBeNull();
+  expect(undo.undo(a)).toBe('Already changed');
+});

@@ -65,6 +65,11 @@ export class ListCommands {
     return this.save(fallback, r.action === 'none' || d ? filled : [text], undefined, shown);
   }
 
+  /** Typed text that is no command: straight to Quick notes, no server call. */
+  note(text: string): ListResult {
+    return this.save(this.d.quickNotes(), [text]);
+  }
+
   /** The spoken text, with the window's line after it when it says "this". */
   private async withLine(text: string, described: Promise<Described | null>): Promise<string> {
     const d = MEANS_THIS.test(text) ? await described : null;

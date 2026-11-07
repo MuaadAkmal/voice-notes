@@ -36,6 +36,11 @@ export class ListUndo {
     return id;
   }
 
+  /** The newest action that can still be taken back (the pill's Undo last / Move last to…). */
+  latest(): string | null {
+    return this.live().at(-1)?.id ?? null;
+  }
+
   /** What the pill shows for the action: the pages it may be moved to. Null once gone. */
   offer(id: string): UndoOffer | null {
     const a = this.find(id);

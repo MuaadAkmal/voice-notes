@@ -221,3 +221,13 @@ it('a page deleted meanwhile: the line goes to Quick notes, the screenshot with 
   expect(saveImage).toHaveBeenCalledOnce();
   expect(appended).toEqual([['q', 'Dark (VLC) ![Dark](vn-image://u.jpg)']]);
 });
+
+it('note: writes the text to Quick notes without asking the server, with an undo id', () => {
+  const remember = vi.fn(() => 'u1');
+  const { svc, appended, sent, pagesChanged } = setup(new Error('never asked'), PAGES, undefined, { remember });
+  expect(svc.note('idea: dark mode')).toEqual({ ok: true, message: 'Added · idea: dark mode → Quick notes', undo: 'u1' });
+  expect(sent).toEqual([]);
+  expect(appended).toEqual([['q', 'idea: dark mode']]);
+  expect(remember).toHaveBeenCalledWith('q', ['idea: dark mode']);
+  expect(pagesChanged).toHaveBeenCalledOnce();
+});
