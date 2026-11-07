@@ -46,6 +46,7 @@ import {
   CloneVoiceSchema,
   WavReplySchema,
   UndoSchema,
+  TypeSchema,
   SaveAudioSchema,
   MicTestSchema,
   MicLevelSchema,
@@ -98,6 +99,8 @@ type OverlayDeps = {
   titles: { start(): void; submit(noteId: string, title: string): void; cancel(): void };
   /** Undo / Move to… on a voice-to-lists flash. */
   lists: { undo(id: string): void; move(id: string, pageId: string): void; openPicker(): void; cancelPicker(): void; picking(): boolean };
+  /** The typing input the idle pill opens on a click. */
+  typing: { open(): void; submit(text: string): void; cancel(): void; undoLast(): void; moveLast(): void; active(): boolean };
   onFilmError: (message: string) => void;
   onProbeResult: (id: number, playing: boolean) => void;
   onDrop: (payload: DropPayload) => DropResult; // throws when saving fails
@@ -126,7 +129,7 @@ function from<S extends z.ZodType>(win: BrowserWindow, schema: S, handler: (payl
 }
 
 export function registerOverlayIpc(deps: OverlayDeps): void {
-  const { overlay, gesture, controller, dictation, dictationGesture, onDevices, onDragEnd, titles, lists } = deps;
+  const { overlay, gesture, controller, dictation, dictationGesture, onDevices, onDragEnd, titles, lists, typing } = deps;
   ipcMain.on(Ch.FilmError, from(overlay, ErrorSchema, ({ message }) => deps.onFilmError(message)));
   ipcMain.on(
     Ch.FilmAudio,
@@ -146,6 +149,11 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(Ch.OverlayMove, from(overlay, MoveSchema, ({ id, pageId }) => lists.move(id, pageId)));
   ipcMain.on(Ch.OverlayMoveOpen, (e) => isFrom(overlay, e.sender) && lists.openPicker());
   ipcMain.on(Ch.OverlayMoveCancel, (e) => isFrom(overlay, e.sender) && lists.cancelPicker());
+  ipcMain.on(Ch.OverlayTypeOpen, (e) => isFrom(overlay, e.sender) && typing.open());
+  ipcMain.on(Ch.OverlayTypeSubmit, from(overlay, TypeSchema, ({ text }) => typing.submit(text)));
+  ipcMain.on(Ch.OverlayTypeCancel, (e) => isFrom(overlay, e.sender) && typing.cancel());
+  ipcMain.on(Ch.OverlayTypeUndoLast, (e) => isFrom(overlay, e.sender) && typing.undoLast());
+  ipcMain.on(Ch.OverlayTypeMoveLast, (e) => isFrom(overlay, e.sender) && typing.moveLast());
   // The hands-free × discards whichever is recording (only one can be).
   ipcMain.on(Ch.OverlayDiscard, (e) => {
     if (!isFrom(overlay, e.sender)) return;
@@ -155,12 +163,12 @@ export function registerOverlayIpc(deps: OverlayDeps): void {
   ipcMain.on(
     Ch.OverlayDrag,
     from(overlay, DragSchema, ({ dx, dy }) => {
-      if (lists.picking()) return; // the window is taller for the picker: a position saved now would be wrong
+      if (lists.picking() || typing.active()) return; // the window is taller for the picker or input: a position saved now would be wrong
       const [x, y] = overlay.getPosition();
       overlay.setPosition(x + dx, y + dy);
     }),
   );
-  ipcMain.on(Ch.OverlayDragEnd, (e) => isFrom(overlay, e.sender) && !lists.picking() && onDragEnd());
+  ipcMain.on(Ch.OverlayDragEnd, (e) => isFrom(overlay, e.sender) && !lists.picking() && !typing.active() && onDragEnd());
   ipcMain.on(Ch.OverlayDevices, from(overlay, DevicesSchema, onDevices));
   ipcMain.on(
     Ch.RecorderAudio,

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { isSiteHost } from './later-routes';
 import { MAX_BATCH, REWIND_SECONDS, type Settings } from './channels';
 import { normalizeWords } from './custom-words';
+import { LIMITS } from './commands/protocol';
 
 import { MAX_HOME_WIDGETS, MAX_SPAN } from './home-widgets';
 import { MAX_DROP_FIELD } from './later';
@@ -128,6 +129,8 @@ export const RenameSchema = z.object({ id: IdSchema, title: z.string().trim().mi
 export const PointerSchema = z.object({ over: z.boolean() });
 export const OverlayTitleSchema = z.object({ noteId: z.uuid(), title: z.string().trim().min(1).max(200) });
 export const UndoSchema = z.object({ id: z.string().min(1).max(64) });
+/** Text typed into the pill; as long as a spoken command may be. */
+export const TypeSchema = z.object({ text: z.string().trim().min(1).max(LIMITS.text) });
 export const SaveAudioSchema = z.object({
   pageId: z.uuid(),
   bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 50 * 1024 * 1024, 'Audio too large'),

@@ -188,6 +188,7 @@ export const Ch = {
   RecorderStart: 'recorder:start', // { deviceId: string | null; source: RecordingSource; ping?: boolean; dictation?: { ping: boolean } }
   RecorderStop: 'recorder:stop',
   RecorderCancel: 'recorder:cancel',
+  OverlayTypeShown: 'overlay:type-shown', // { undo: boolean; move: boolean }: the typing input may open, and which buttons work
   OverlayState: 'overlay:state', // OverlayState
   // overlay → main
   RecorderAudio: 'recorder:audio', // AudioPayload
@@ -201,6 +202,11 @@ export const Ch = {
   OverlayMove: 'overlay:move', // { id, pageId }: put it on that page instead
   OverlayMoveOpen: 'overlay:move-open', // the Move to… picker opened: the pill takes keyboard focus
   OverlayMoveCancel: 'overlay:move-cancel',
+  OverlayTypeOpen: 'overlay:type-open', // the idle pill was clicked: open the typing input (main takes keyboard focus)
+  OverlayTypeSubmit: 'overlay:type-submit', // { text }: run it like a spoken command, else Quick notes
+  OverlayTypeCancel: 'overlay:type-cancel',
+  OverlayTypeUndoLast: 'overlay:type-undo-last', // take back the newest list write still held
+  OverlayTypeMoveLast: 'overlay:type-move-last', // show that write's Move to… picker
   OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
   OverlayDragEnd: 'overlay:drag-end',
   OverlayTitleStart: 'overlay:title-start',

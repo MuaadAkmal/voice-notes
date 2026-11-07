@@ -389,7 +389,19 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     settings.filmMode ? { kind: 'idle', visible: settings.showIdlePill, film: true } : { kind: 'idle', visible: settings.showIdlePill };
   // The last state sent to the pill: drops are only taken while it is visibly idle or showing "Saved".
   let overlayState = idleState();
+  // The typing input is open on the idle pill (it has keyboard focus; the window is taller).
+  let typing = false;
+  let beforeTyping: Electron.Rectangle | null = null;
+  const TYPE_EXTRA = 60;
+  const closeTyping = () => {
+    typing = false;
+    releaseOverlayFocus();
+    if (beforeTyping && !overlay.isDestroyed()) overlay.setBounds(beforeTyping);
+    beforeTyping = null;
+  };
   const setOverlayState = (s: OverlayState) => {
+    // Anything else taking the pill (a recording, a flash, a notice) ends typing and gives focus back.
+    if (typing && s.kind !== 'idle') closeTyping();
     overlayState = s;
     send(Ch.OverlayState, s);
   };
@@ -526,6 +538,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     if (e === 'start' && !dictation.active) {
       releaseOverlayFocus(); // a new recording abandons an open title input
       if (picking) closePicker(); // or Move to… picker
+      if (typing) closeTyping(); // or typing input (the overlay keeps its draft)
       dictation.dismissFlash();
     }
     controller.handleGesture(e);
@@ -634,14 +647,20 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         return { ok: r.ok, message: r.message, ...(undo ? { undo } : {}) };
       },
     },
+    note: async (text) => {
+      const r = listCommands.note(text);
+      const undo = r.undo ? listUndo.offer(r.undo) : null;
+      return { ok: r.ok, message: r.message, ...(undo ? { undo } : {}) };
+    },
     onIdle: () => dictationGesture.reset(),
     onCaptureStart: () => autoPause.start('mic'),
     onCaptureEnd: () => autoPause.end(),
   });
   dictationGesture.onEvent((e) => {
     if (e === 'start' && controller.state === 'idle') {
-      releaseOverlayFocus(); // a dictation abandons an open title input or picker, like a new recording
+      releaseOverlayFocus(); // a dictation abandons an open title input, picker or typing input, like a new recording
       if (picking) closePicker();
+      if (typing) closeTyping();
       controller.dismissFlash();
     }
     dictation.handleGesture(e);
@@ -667,6 +686,15 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     releaseOverlayFocus();
     if (beforePicker && !overlay.isDestroyed()) overlay.setBounds(beforePicker);
     beforePicker = null;
+  };
+  const openPicker = () => {
+    if (picking || overlayState.kind !== 'done' || !overlayState.undo) return;
+    picking = true;
+    dictation.holdFlash();
+    beforePicker = overlay.getBounds();
+    overlay.setBounds({ ...beforePicker, y: beforePicker.y - PICKER_EXTRA, height: beforePicker.height + PICKER_EXTRA });
+    overlay.setFocusable(true);
+    overlay.focus();
   };
   // The overlay's pomodoro, as it last reported it (the dashboard's Pomodoro page shows it).
   let pomodoro: Pomodoro = POMODORO_OFF;
@@ -723,21 +751,48 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
         closePicker();
         dictation.showResult(listUndo.move(id, pageId));
       },
-      openPicker: () => {
-        if (picking || overlayState.kind !== 'done' || !overlayState.undo) return;
-        picking = true;
-        dictation.holdFlash();
-        beforePicker = overlay.getBounds();
-        overlay.setBounds({ ...beforePicker, y: beforePicker.y - PICKER_EXTRA, height: beforePicker.height + PICKER_EXTRA });
-        overlay.setFocusable(true);
-        overlay.focus();
-      },
+      openPicker,
       cancelPicker: () => {
         if (!picking) return;
         closePicker();
         dictation.releaseFlash();
       },
       picking: () => picking,
+    },
+    typing: {
+      open: () => {
+        // Only on the resting pill: never over a recording, a flash, Add title or the picker.
+        if (typing || picking || overlayState.kind !== 'idle' || controller.state !== 'idle' || dictation.active) return;
+        typing = true;
+        beforeTyping = overlay.getBounds();
+        overlay.setBounds({ ...beforeTyping, y: beforeTyping.y - TYPE_EXTRA, height: beforeTyping.height + TYPE_EXTRA });
+        overlay.setFocusable(true);
+        overlay.focus();
+        const id = listUndo.latest();
+        send(Ch.OverlayTypeShown, { undo: !!id, move: !!id && (listUndo.offer(id)?.pages.length ?? 0) > 0 });
+      },
+      submit: (text) => {
+        if (!typing) return;
+        closeTyping();
+        dictation.runTyped(text).catch((err) => log.error('[typing] failed', err));
+      },
+      cancel: () => typing && closeTyping(),
+      undoLast: () => {
+        if (!typing) return;
+        closeTyping();
+        const id = listUndo.latest();
+        dictation.showResult(id ? listUndo.undo(id) : 'Already changed');
+      },
+      moveLast: () => {
+        if (!typing) return;
+        closeTyping();
+        const id = listUndo.latest();
+        const offer = id ? listUndo.offer(id) : null;
+        if (!offer?.pages.length) return dictation.showResult('Already changed');
+        dictation.offerMove('Move last item to…', offer);
+        openPicker();
+      },
+      active: () => typing,
     },
     onFilmError: (message) => {
       log.warn('[film] buffer stopped:', message);
@@ -794,8 +849,9 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
   });
 
   const rewind = () => {
-    // The pill is taken over: an open Move to… picker closes and the Undo flash is dropped.
+    // The pill is taken over: an open Move to… picker or typing input closes and the Undo flash is dropped.
     if (picking) closePicker();
+    if (typing) closeTyping();
     dictation.dismissFlash();
     if (!settings.filmMode) {
       controller.notify('Turn on film mode to rewind');
@@ -1360,6 +1416,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
       transcription, // idle(): wait for queued transcriptions
       dictationGesture, // what Ctrl+Win does
+      typing: { active: () => typing }, // the pill's typing input is open
       dictation,
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine

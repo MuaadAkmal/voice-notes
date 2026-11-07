@@ -36,6 +36,12 @@ const overlayApi = {
   move: (id: string, pageId: string) => ipcRenderer.send(Ch.OverlayMove, { id, pageId }),
   openMove: () => ipcRenderer.send(Ch.OverlayMoveOpen),
   cancelMove: () => ipcRenderer.send(Ch.OverlayMoveCancel),
+  typeOpen: () => ipcRenderer.send(Ch.OverlayTypeOpen),
+  onTypeShown: (cb: (p: { undo: boolean; move: boolean }) => void) => on(Ch.OverlayTypeShown, cb),
+  typeSubmit: (text: string) => ipcRenderer.send(Ch.OverlayTypeSubmit, { text }),
+  typeCancel: () => ipcRenderer.send(Ch.OverlayTypeCancel),
+  typeUndoLast: () => ipcRenderer.send(Ch.OverlayTypeUndoLast),
+  typeMoveLast: () => ipcRenderer.send(Ch.OverlayTypeMoveLast),
   onMicTest: (cb: (p: { deviceId: string | null }) => void) => {
     const listener = (_e: unknown, p: { deviceId: string | null }) => cb(p);
     ipcRenderer.on(Ch.MicTestStart, listener);

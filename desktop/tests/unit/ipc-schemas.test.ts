@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DropPayloadSchema,
+  TypeSchema,
   SettingsPatchSchema,
   AppendEntrySchema,
   CreatePageSchema,
@@ -208,4 +209,11 @@ describe('VoiceIdSchema', () => {
     expect(VoiceIdSchema.safeParse('').success).toBe(false);
     expect(VoiceIdSchema.safeParse('x'.repeat(101)).success).toBe(false);
   });
+});
+
+it('TypeSchema trims and bounds text typed into the pill', () => {
+  expect(TypeSchema.parse({ text: '  milk ' })).toEqual({ text: 'milk' });
+  expect(TypeSchema.safeParse({ text: '   ' }).success).toBe(false);
+  expect(TypeSchema.safeParse({ text: 'x'.repeat(501) }).success).toBe(false);
+  expect(TypeSchema.safeParse({ text: 'x'.repeat(500) }).success).toBe(true);
 });
