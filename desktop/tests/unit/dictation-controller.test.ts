@@ -546,3 +546,71 @@ for (const mode of ['hold', 'handsfree'] as const) {
     expect(c2.state).toBe('listening');
   });
 }
+
+describe('typed text', () => {
+  const UNDO = { id: 'u1', pages: [] };
+  beforeEach(() => {
+    ports.note = async (text) => {
+      log.push(`note:${text}`);
+      return { ok: true, message: `Added · ${text} → Quick notes`, undo: UNDO };
+    };
+    ctl = new DictationController(ports);
+  });
+
+  it('plain text goes to Quick notes with Undo, never pasted or saved to the panel', async () => {
+    await ctl.runTyped('milk');
+    expect(log).toEqual(['note:milk']);
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Added · milk → Quick notes', undo: UNDO });
+    expect(ctl.state).toBe('idle');
+  });
+
+  it('a reminder is set, shown busy first', async () => {
+    reminderOn = true;
+    await ctl.runTyped('remind me to call mom at 5');
+    expect(states[0]).toEqual({ kind: 'busy', message: 'Setting reminder…' });
+    expect(log.filter((l) => l !== 'idle')).toEqual(['remind:remind me to call mom at 5']);
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Reminder · call mom · 5:40 PM' });
+  });
+
+  it('a Pixie command goes to the list with no window capture, even one left from a dictation', async () => {
+    listOn = true;
+    capture = { hwnd: 1, title: 'x', processName: 'x.exe', pid: 1 };
+    ctl.handleGesture('start');
+    ctl.handleGesture('cancel');
+    let seen: Capture | null | undefined;
+    listAdd = async (text, c) => {
+      seen = c;
+      log.push(`list:${text}`);
+      return { ok: true, message: 'Added · milk → Groceries' };
+    };
+    log = [];
+    await ctl.runTyped('Pixie, add milk to my grocery list');
+    expect(log.filter((l) => l !== 'idle')).toEqual(['list:add milk to my grocery list']);
+    expect(seen).toBeNull();
+  });
+
+  it('a failed calendar add saves the text to Quick notes instead of pasting', async () => {
+    calendarOn = true;
+    calendarAdd = async () => ({ ok: false, message: 'Reconnect Google Calendar' });
+    await ctl.runTyped('calendar lunch tomorrow 1pm');
+    expect(log.filter((l) => l !== 'idle')).toEqual(['note:calendar lunch tomorrow 1pm']);
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Reconnect Google Calendar · saved to Quick notes', undo: UNDO });
+  });
+
+  it('is refused while a dictation is running', async () => {
+    ctl.handleGesture('start');
+    await ctl.runTyped('milk');
+    expect(log).not.toContain('note:milk');
+  });
+
+  it('offerMove shows the flash with the picker open and holds it until released', async () => {
+    const undo = { id: 'u1', pages: [{ id: 'p', title: 'Tamil' }] };
+    ctl.offerMove('Move last item to…', undo);
+    expect(states.at(-1)).toEqual({ kind: 'done', message: 'Move last item to…', undo, pick: true });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(states.at(-1)?.kind).toBe('done');
+    ctl.releaseFlash();
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(states.at(-1)).toEqual(IDLE);
+  });
+});

@@ -122,7 +122,8 @@ export type OverlayState =
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean }
   // a short success, e.g. a dictation added to the calendar; undo: Undo / Move to… for what a voice-to-lists command wrote
-  | { kind: 'done'; message: string; undo?: { id: string; pages: { id: string; title: string }[] } }
+  // pick: open with the Move to… picker showing ("Move last to…" from the typing input)
+  | { kind: 'done'; message: string; undo?: { id: string; pages: { id: string; title: string }[] }; pick?: true }
   | { kind: 'notice'; message: string; action: 'upgrade' }; // Cloud minutes running low or used up, with an Upgrade button
 
 /** The onboarding mic check, every 100 ms: level 0..1; heard = above the silence threshold. */

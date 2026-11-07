@@ -54,6 +54,8 @@ export type DictationPorts = {
     /** Gets the text from "remind me" on; the message is fit for the pill ("Reminder · call mom · 5:40 PM"). */
     add(text: string): Promise<{ ok: boolean; message: string }>;
   };
+  /** Typed text that is no command: saved to Quick notes; undo as for a list command. */
+  note?(text: string): Promise<{ ok: boolean; message: string; undo?: UndoOffer }>;
   /** Back to idle (keep the gesture in step). */
   onIdle?(): void;
   onCaptureStart?(): void;
@@ -183,7 +185,7 @@ export class DictationController {
       this.fail('No speech heard');
       return;
     }
-    const command = this.command(text);
+    const command = this.command(text, this.capture);
     // Commands keep the words as said: they're read for triggers and items, not pasted as prose.
     if (!command && this.p.polish) {
       text = await this.p.polish(text, request.signal);
@@ -219,7 +221,10 @@ export class DictationController {
   }
 
   /** What the transcript asks for instead of a paste, if anything. A reminder, then the calendar trigger, then lists. */
-  private command(text: string): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string; undo?: UndoOffer }> } | null {
+  private command(
+    text: string,
+    capture: Capture | null,
+  ): { mark: string; busy: string; failed: string; add(): Promise<{ ok: boolean; message: string; undo?: UndoOffer }> } | null {
     const { calendar, list, reminder } = this.p;
     const listCommand = () => parseNoteCommand(text, list?.wakeWords() ?? [], { pageTitles: list?.pageTitles?.() ?? [] });
     if (reminder?.enabled()) {
@@ -231,7 +236,7 @@ export class DictationController {
     const event = calendar?.enabled() ? parseCalendarCommand(text) : null;
     if (event && calendar) return { mark: '📅', busy: 'Adding to calendar…', failed: "Couldn't add the event.", add: () => calendar.add(event.text) };
     const items = list?.enabled() ? listCommand() : null;
-    if (items && list) return { mark: '📝', busy: 'Saving note…', failed: "Couldn't save the note", add: () => list.add(items.text, this.capture) };
+    if (items && list) return { mark: '📝', busy: 'Saving note…', failed: "Couldn't save the note", add: () => list.add(items.text, capture) };
     return null;
   }
 
@@ -257,6 +262,44 @@ export class DictationController {
     if (!this.undoShown || !this.held) return;
     this.held = false;
     this.flashFor(UNDO_FLASH_MS);
+  }
+
+  /**
+   * Text typed into the pill: the same commands as speech, anything else to Quick notes. Never
+   * pasted and not kept in the Dictation panel; a failed command lands in Quick notes too.
+   */
+  async runTyped(text: string): Promise<void> {
+    if (this._state !== 'idle') return;
+    const command = this.command(text, null);
+    if (!command) {
+      const n = await this.p.note?.(text);
+      if (n) this.show(n);
+      return;
+    }
+    this._state = 'adding';
+    this.p.overlay.setState({ kind: 'busy', message: command.busy });
+    const r = await command.add().catch(() => ({ ok: false, message: command.failed }));
+    this.toIdle();
+    if (r.ok) return this.show(r);
+    const n = await this.p.note?.(text);
+    if (n?.ok) this.show({ ...n, message: `${r.message} · saved to Quick notes` });
+    else this.flash(r.message);
+  }
+
+  /** "Move last to…": the flash for that action with its picker open, held until the picker closes. */
+  offerMove(message: string, undo: UndoOffer): void {
+    this.clearFlash();
+    this.undoShown = { kind: 'done', message, undo, pick: true };
+    this.flashed = this.undoShown;
+    this.held = true;
+    this.p.overlay.setState(this.undoShown);
+  }
+
+  /** A command's result: with Undo / Move to… when it wrote list lines. */
+  private show(r: { ok: boolean; message: string; undo?: UndoOffer }): void {
+    if (!r.ok) this.flash(r.message);
+    else if (r.undo) this.flashUndo(r.message, r.undo);
+    else this.flash(r.message, 'done');
   }
 
   /** What an Undo or Move to… did ("Undone", "Moved → Tamil"), shown briefly. */
