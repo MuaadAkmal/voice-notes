@@ -11,7 +11,7 @@ import { handleAsr } from './_shared/asr/handler.ts';
 import { RestAsrStore, RestCloneStore, RestSpeakFiles } from './_shared/asr/pg-store.ts';
 import { SampleCore } from './_shared/asr/samples.ts';
 import { SpeakCore } from './_shared/asr/speak.ts';
-import { VoiceCore } from './_shared/asr/voice.ts';
+import { VoiceCore, cloneLimitFor } from './_shared/asr/voice.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const apiKey = Deno.env.get('ELEVENLABS_API_KEY') ?? '';
@@ -31,7 +31,7 @@ const core = missing.length
       now: Date.now,
     });
 
-// Polished audio and voice cloning. Cloning stays off until VOICE_CLONE_LIMIT (slots we pay for) is set.
+// Polished audio and voice cloning. Cloning stays off until ELEVENLABS_VOICE_SLOTS (the custom voice slots the ElevenLabs plan has) is set; one stays spare.
 const rest = { url: SUPABASE_URL, serviceKey, fetch };
 const storage = missing.length ? null : createClient(SUPABASE_URL, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } }).storage;
 const speakFiles = new RestSpeakFiles(rest);
@@ -41,7 +41,7 @@ const voice = missing.length
       store,
       clones: new RestCloneStore(rest),
       api: elevenLabsVoices(apiKey, fetch),
-      limit: Number(Deno.env.get('VOICE_CLONE_LIMIT')) || 0,
+      limit: cloneLimitFor(Number(Deno.env.get('ELEVENLABS_VOICE_SLOTS'))),
       now: Date.now,
     });
 const speak =

@@ -12,12 +12,12 @@ const api = window.dashboardApi;
 
 const CLONE_ERRORS = {
   'few-notes': 'Record a few more notes first',
-  unavailable: 'Not available right now',
-  'needs-paid-plan': 'Cloning needs a paid plan',
+  unavailable: "Voice cloning is full right now. We're adding room, so try again soon.",
+  'needs-paid-plan': 'Voice cloning is on Pro',
   failed: "Couldn't clone your voice",
 } as const;
 
-/** The voice polished audio is read in: six stock voices, and the user's own copy on a paid plan. */
+/** The voice polished audio is read in: six stock voices, and the user's own copy on Pro. */
 export function VoicePage() {
   const toast = useToast();
   const { voice, setVoice } = useVoice();
@@ -180,7 +180,7 @@ function CloneCard({ voice, onChange }: { voice: VoiceState; onChange: (v: Voice
   if (voice.clone === 'unusable') {
     body = (
       <>
-        <p className="text-sm text-muted-foreground">Your voice is saved; it's used again when you upgrade.</p>
+        <p className="text-sm text-muted-foreground">Your voice is saved. It's used again when you're back on Pro.</p>
         <Button size="sm" className="mt-3" onClick={upgrade}>
           Upgrade
         </Button>
@@ -197,22 +197,22 @@ function CloneCard({ voice, onChange }: { voice: VoiceState; onChange: (v: Voice
     );
   } else if (voice.canClone) {
     body = form;
-  } else if (voice.plan === 'free') {
+  } else if (voice.plan !== 'pro') {
     body = (
       <>
-        <p className="text-sm text-muted-foreground">Have notes read in your own voice. Cloning is on the paid plans.</p>
+        <p className="text-sm text-muted-foreground">Clone your voice and every polished note is read back as you. On Pro.</p>
         <Button size="sm" className="mt-3" onClick={upgrade}>
           Upgrade
         </Button>
       </>
     );
   } else {
-    body = <p className="text-sm text-muted-foreground">Not available right now</p>;
+    body = <p className="text-sm text-muted-foreground">Voice cloning is full right now. We're adding room, so try again soon.</p>;
   }
 
   return (
     <div className="mt-6 rounded-2xl border bg-card px-5 py-4">
-      <h2 className="mb-2 text-sm font-medium">Your own voice</h2>
+      <h2 className="mb-2 text-sm font-medium">{voice.plan === 'pro' ? 'Your own voice' : 'Hear your notes in your own voice'}</h2>
       {body}
     </div>
   );

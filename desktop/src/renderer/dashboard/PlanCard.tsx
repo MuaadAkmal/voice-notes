@@ -34,6 +34,7 @@ const PAID = [
     benefits: [
       '10 hours of Cloud transcription every month',
       '20 GB storage',
+      'Hear your notes in your own voice: clone it once, and every polished note sounds like you',
       ...SHARED,
     ],
   },

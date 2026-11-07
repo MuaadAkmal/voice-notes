@@ -1,9 +1,9 @@
 import { ProviderFailed, periodOf } from './core';
 import { CLONE_MAX_SECONDS, CLONE_MIN_SECONDS, STOCK_VOICES, type VoiceState } from './protocol';
-import { FREE_PLAN, type AsrStore } from './store';
+import type { AsrStore } from './store';
 import { wavInfo } from './wav-info';
 
-// The rules of cloning the user's own voice (paid plans only). One clone per account.
+// The rules of cloning the user's own voice (Pro only). One clone per account.
 
 export class NeedsPaidPlan extends Error {}
 export class NoConsent extends Error {}
@@ -28,12 +28,20 @@ export type VoiceApi = {
   remove(voiceId: string): Promise<void>;
 };
 
+/** The only plan that may clone; Standard is treated like Free for this. */
+export const CLONE_PLAN = 'pro';
+
+/** Clones allowed for an ElevenLabs plan with this many custom voice slots: one slot stays spare. Junk means off. */
+export function cloneLimitFor(slots: number): number {
+  return Number.isFinite(slots) ? Math.max(0, Math.floor(slots) - 1) : 0;
+}
+
 export class VoiceCore {
   constructor(private readonly d: { store: AsrStore; clones: CloneStore; api: VoiceApi; limit: number; now: () => number }) {}
 
   private async paid(user: string) {
     const { plan } = await this.d.store.usage(user, periodOf(this.d.now()).period);
-    return { plan, paid: plan !== FREE_PLAN };
+    return { plan, paid: plan === CLONE_PLAN };
   }
 
   async state(user: string): Promise<VoiceState> {
@@ -49,19 +57,28 @@ export class VoiceCore {
 
   async clone(user: string, wav: Uint8Array, consent: boolean): Promise<VoiceState> {
     if (!consent) throw new NoConsent('consent required');
-    if (!(await this.paid(user)).paid) throw new NeedsPaidPlan('cloning needs a paid plan');
+    if (!(await this.paid(user)).paid) throw new NeedsPaidPlan('cloning needs the Pro plan');
     const info = wavInfo(wav);
     if (!info || info.seconds < CLONE_MIN_SECONDS || info.seconds > CLONE_MAX_SECONDS) {
       throw new BadSamples(`samples must be ${CLONE_MIN_SECONDS} to ${CLONE_MAX_SECONDS} seconds of audio`);
     }
     const replacing = (await this.d.clones.get(user)) !== null;
-    if (!replacing && (await this.d.clones.count()) >= this.d.limit) throw new CloneUnavailableNow('no clone slots');
+    if (!replacing) {
+      const count = await this.d.clones.count();
+      if (count >= this.d.limit) {
+        this.slotsFull(count);
+        throw new CloneUnavailableNow('no clone slots');
+      }
+    }
 
     let voiceId: string;
     try {
       voiceId = await this.d.api.create(`voice-notes-${user}`, wav);
     } catch (e) {
-      if (e instanceof CloneRefused) throw new CloneUnavailableNow(e.message);
+      if (e instanceof CloneRefused) {
+        this.slotsFull(await this.d.clones.count().catch(() => -1));
+        throw new CloneUnavailableNow(e.message);
+      }
       throw new ProviderFailed(e instanceof Error ? e.message : 'provider failed');
     }
     let old: string | null;
@@ -73,6 +90,11 @@ export class VoiceCore {
     }
     if (old && old !== voiceId) await this.d.api.remove(old).catch((e) => console.error('[asr] remove replaced clone', e));
     return this.state(user);
+  }
+
+  /** For the owner to read in the asr logs: time to buy more ElevenLabs slots. */
+  private slotsFull(count: number) {
+    console.warn('[voice] clone slots full', { count, limit: this.d.limit });
   }
 
   async remove(user: string): Promise<VoiceState> {
@@ -89,7 +111,7 @@ export class VoiceCore {
     return this.state(user);
   }
 
-  /** The voice id `SpeakCore` may use: a paid plan and a row. */
+  /** The voice id `SpeakCore` may use: Pro and a row. */
   usableClone = async (user: string): Promise<string | null> => {
     const id = await this.d.clones.get(user);
     return id && (await this.paid(user)).paid ? id : null;

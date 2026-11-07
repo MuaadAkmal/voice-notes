@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ProviderFailed } from '../../../src/shared/asr/core';
 import { STOCK_VOICES } from '../../../src/shared/asr/protocol';
 import { MemoryAsrStore } from '../../../src/shared/asr/store';
-import { BadSamples, CloneRefused, CloneUnavailableNow, NeedsPaidPlan, NoConsent, VoiceCore, type CloneStore, type VoiceApi } from '../../../src/shared/asr/voice';
+import { BadSamples, CloneRefused, CloneUnavailableNow, NeedsPaidPlan, NoConsent, VoiceCore, cloneLimitFor, type CloneStore, type VoiceApi } from '../../../src/shared/asr/voice';
 import { silentWav } from '../../../src/shared/wav';
 
 const A = '11111111-1111-4111-8111-111111111111';
@@ -29,9 +29,9 @@ class MemoryClones implements CloneStore {
   }
 }
 
-function setup(opts: { limit?: number; paid?: boolean } = {}) {
+function setup(opts: { limit?: number; paid?: boolean; plan?: string } = {}) {
   const store = new MemoryAsrStore();
-  if (opts.paid ?? true) store.setPlan(A, 'plus', 7200);
+  if (opts.paid ?? true) store.setPlan(A, opts.plan ?? 'pro', 7200);
   const clones = new MemoryClones();
   const api = {
     create: vi.fn(async (_n: string, _w: Uint8Array) => 'new-voice'),
@@ -55,7 +55,7 @@ describe('VoiceCore.state', () => {
   });
   it('paid with room can clone', async () => {
     const { core } = setup();
-    expect(await core.state(A)).toMatchObject({ canClone: true, clone: 'none', plan: 'plus' });
+    expect(await core.state(A)).toMatchObject({ canClone: true, clone: 'none', plan: 'pro' });
   });
   it('paid at the limit cannot clone, unless it already has a clone', async () => {
     const { core, clones } = setup({ limit: 1 });
@@ -72,6 +72,48 @@ describe('VoiceCore.state', () => {
     const { core, clones } = setup({ paid: false });
     clones.rows.set(A, 'mine');
     expect(await core.state(A)).toMatchObject({ clone: 'unusable', canClone: false });
+  });
+});
+
+describe('cloneLimitFor', () => {
+  it('keeps one slot spare and treats junk as off', () => {
+    expect(cloneLimitFor(10)).toBe(9);
+    expect(cloneLimitFor(1)).toBe(0);
+    expect(cloneLimitFor(0)).toBe(0);
+    expect(cloneLimitFor(Number.NaN)).toBe(0);
+    expect(cloneLimitFor(160)).toBe(159);
+    expect(cloneLimitFor(-4)).toBe(0);
+    expect(cloneLimitFor(2.7)).toBe(1);
+  });
+});
+
+describe('Pro only', () => {
+  it('Standard cannot clone, and a clone it holds is unusable', async () => {
+    const { core, clones, api } = setup({ plan: 'standard' });
+    expect(await core.state(A)).toMatchObject({ canClone: false, clone: 'none', plan: 'standard' });
+    await expect(core.clone(A, good, true)).rejects.toBeInstanceOf(NeedsPaidPlan);
+    expect(api.create).not.toHaveBeenCalled();
+    clones.rows.set(A, 'mine');
+    expect(await core.state(A)).toMatchObject({ clone: 'unusable', canClone: false });
+    expect(await core.usableClone(A)).toBeNull();
+  });
+  it('Pro can clone', async () => {
+    const { core } = setup();
+    expect((await core.state(A)).canClone).toBe(true);
+    expect((await core.clone(A, good, true)).clone).toBe('ready');
+  });
+  it('logs when the slots are full', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const full = setup({ limit: 1 });
+    full.clones.rows.set(B, 'other');
+    await expect(full.core.clone(A, good, true)).rejects.toBeInstanceOf(CloneUnavailableNow);
+    expect(warn).toHaveBeenCalledWith('[voice] clone slots full', { count: 1, limit: 1 });
+    warn.mockClear();
+    const refused = setup();
+    refused.api.create.mockRejectedValueOnce(new CloneRefused('voice limit reached'));
+    await expect(refused.core.clone(A, good, true)).rejects.toBeInstanceOf(CloneUnavailableNow);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 

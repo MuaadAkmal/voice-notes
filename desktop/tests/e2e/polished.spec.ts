@@ -80,8 +80,18 @@ test('the Voice tab lists six voices and saves the pick; Free is offered Upgrade
   await expect.poll(() => t.hooks((h) => h.openedExternal)).toContain('https://app.voicenote.cloud/account/');
 });
 
-test('on a paid plan cloning waits for consent, and too few notes says so', async () => {
+test('Standard is offered Upgrade for cloning, like Free', async () => {
   asr.setPlan('standard', 18000);
+  const page = await signedIn();
+  await page.getByRole('button', { name: 'Voice', exact: true }).click();
+  await expect(page.getByText('Hear your notes in your own voice')).toBeVisible();
+  await expect(page.getByText('Clone your voice and every polished note is read back as you. On Pro.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Upgrade' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Clone my voice' })).toHaveCount(0);
+});
+
+test('on Pro cloning waits for consent, and too few notes says so', async () => {
+  asr.setPlan('pro', 36000);
   const page = await signedIn();
   await page.getByRole('button', { name: 'Voice', exact: true }).click();
   const clone = page.getByRole('button', { name: 'Clone my voice' });
