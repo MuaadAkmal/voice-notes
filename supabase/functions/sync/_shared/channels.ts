@@ -122,7 +122,8 @@ export type OverlayState =
   | { kind: 'saved'; noteId: string; micOnly?: true; titled?: true }
   | { kind: 'error'; message: string; retry: boolean }
   // a short success, e.g. a dictation added to the calendar; undo: Undo / Move to… for what a voice-to-lists command wrote
-  | { kind: 'done'; message: string; undo?: { id: string; pages: { id: string; title: string }[] } }
+  // pick: open with the Move to… picker showing ("Move last to…" from the typing input)
+  | { kind: 'done'; message: string; undo?: { id: string; pages: { id: string; title: string }[] }; pick?: true }
   | { kind: 'notice'; message: string; action: 'upgrade' }; // Cloud minutes running low or used up, with an Upgrade button
 
 /** The onboarding mic check, every 100 ms: level 0..1; heard = above the silence threshold. */
@@ -187,6 +188,7 @@ export const Ch = {
   RecorderStart: 'recorder:start', // { deviceId: string | null; source: RecordingSource; ping?: boolean; dictation?: { ping: boolean } }
   RecorderStop: 'recorder:stop',
   RecorderCancel: 'recorder:cancel',
+  OverlayTypeShown: 'overlay:type-shown', // { undo: boolean; move: boolean }: the typing input may open, and which buttons work
   OverlayState: 'overlay:state', // OverlayState
   // overlay → main
   RecorderAudio: 'recorder:audio', // AudioPayload
@@ -200,6 +202,11 @@ export const Ch = {
   OverlayMove: 'overlay:move', // { id, pageId }: put it on that page instead
   OverlayMoveOpen: 'overlay:move-open', // the Move to… picker opened: the pill takes keyboard focus
   OverlayMoveCancel: 'overlay:move-cancel',
+  OverlayTypeOpen: 'overlay:type-open', // the idle pill was clicked: open the typing input (main takes keyboard focus)
+  OverlayTypeSubmit: 'overlay:type-submit', // { text }: run it like a spoken command, else Quick notes
+  OverlayTypeCancel: 'overlay:type-cancel',
+  OverlayTypeUndoLast: 'overlay:type-undo-last', // take back the newest list write still held
+  OverlayTypeMoveLast: 'overlay:type-move-last', // show that write's Move to… picker
   OverlayDrag: 'overlay:drag', // { dx: number; dy: number } screen px since the last move
   OverlayDragEnd: 'overlay:drag-end',
   OverlayTitleStart: 'overlay:title-start',
