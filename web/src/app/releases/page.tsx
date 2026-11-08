@@ -9,6 +9,18 @@ export const metadata: Metadata = {
 /** Newest first. Installed apps update on their own within the hour, so each entry is what people already have. */
 const RELEASES: { version: string; date: string; items: string[] }[] = [
   {
+    version: "3.9.0",
+    date: "8 November 2026",
+    items: [
+      "Click the pill to type instead of speaking: a note, “remind me to…”, a calendar event, or a Pixie command. Anything else goes straight into Quick notes.",
+      "Under the box, Undo last and Move last to… fix your latest command even after its message has gone.",
+      "With Cloud, voice notes are cleaned up as they are transcribed: fillers and false starts go, your words stay.",
+      "Polished audio: hear a note read back clearly in one of six voices, and switch between it and the original.",
+      "On Pro, clone your own voice once and every polished note sounds like you.",
+      "Clicking the pill no longer starts a recording; hold your hotkey to speak.",
+    ],
+  },
+  {
     version: "3.8.3",
     date: "5 November 2026",
     items: [

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function Privacy() {
   return (
-    <Prose title="Privacy" updated="3 November 2026">
+    <Prose title="Privacy" updated="8 November 2026">
       <p>
         Voice Notes needs a Google account. It keeps your recordings, pages and settings on your PC and syncs them to your account. This page says
         what goes where.
@@ -63,6 +63,21 @@ export default function Privacy() {
       <p>
         We don&apos;t store the clip on our server, but we count the seconds you use against your monthly allowance. ElevenLabs handles what it receives
         under <a href="https://elevenlabs.io/privacy-policy">its own privacy policy</a> and may keep it for a time.
+      </p>
+
+      <h2>Clean-up, titles and polished audio</h2>
+      <p>
+        With Cloud, the text of a voice note or dictation can be tidied (fillers and false starts removed), and a new note gets a short title
+        written from what you said. For both, the transcript&apos;s text goes through our server to Groq. You can turn clean-up off on the
+        Transcription page and in Settings.
+      </p>
+      <p>
+        When you ask for polished audio on a note, its text goes through our server to ElevenLabs, which reads it aloud. We keep that reading in your
+        account&apos;s storage beside the recording, and remove it when you delete the note.
+      </p>
+      <p>
+        On Pro you can clone your own voice. Only when you agree to it, about two minutes of your microphone voice notes from that PC go to
+        ElevenLabs, which makes and keeps a voice from them until you remove it on the Voice tab.
       </p>
 
       <h2>Voice commands and reminders</h2>
