@@ -29,7 +29,7 @@ const config: ForgeConfig = {
     icon: 'assets/icon', // Packager appends .ico on Windows
   },
   rebuildConfig: {},
-  makers: [new MakerSquirrel({ setupIcon: 'assets/icon.ico' }), new MakerZIP({}, ['win32'])],
+  makers: [new MakerSquirrel({ setupIcon: 'assets/icon.ico', loadingGif: 'assets/install.gif' /* scripts/make-install-gif.py */ }), new MakerZIP({}, ['win32'])],
   plugins: [
     new AutoUnpackNativesPlugin({}),
     new VitePlugin({
