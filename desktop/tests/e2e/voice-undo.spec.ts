@@ -4,6 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { startCommandsServer } from './fixtures/commands-server';
 import { launch, type TestApp } from './launch';
 
+// The page name is its own element (spaced by margin, not a space), hence \s* before the arrow.
 // Undo / Move to… on the pill after "Pixie, add milk": the item goes to Quick notes (no page fits),
 // and the pill takes it back or puts it on another page.
 
@@ -72,7 +73,7 @@ const body = async (title: string) =>
 test('Undo takes the item back off the page', async () => {
   const pill = await ready();
   await dictate();
-  await expect(pill.getByTestId('pill')).toContainText('Added · milk → Quick notes', { timeout: 15_000 });
+  await expect(pill.getByTestId('pill')).toContainText(/Added · milk\s*→ Quick notes/, { timeout: 15_000 });
   expect(await body('Quick notes')).toContain('- milk');
   await pill.screenshot({ path: '.superpowers/shots/undo-flash.png' });
   await pill.getByRole('button', { name: 'Undo' }).click();
@@ -83,12 +84,12 @@ test('Undo takes the item back off the page', async () => {
 test('Move to… puts it on the page picked on the pill', async () => {
   const pill = await ready();
   await dictate();
-  await expect(pill.getByTestId('pill')).toContainText('Added · milk → Quick notes', { timeout: 15_000 });
+  await expect(pill.getByTestId('pill')).toContainText(/Added · milk\s*→ Quick notes/, { timeout: 15_000 });
   await pill.getByRole('button', { name: 'Move to…' }).click();
   await pill.getByLabel('Page to move to').fill('groc');
   await pill.screenshot({ path: '.superpowers/shots/undo-picker.png' });
   await pill.getByRole('button', { name: 'Groceries' }).dispatchEvent('mousedown');
-  await expect(pill.getByTestId('pill')).toContainText('Moved → Groceries');
+  await expect(pill.getByTestId('pill')).toContainText(/Moved\s*→ Groceries/);
   expect(await body('Groceries')).toContain('- milk');
   expect(await body('Quick notes')).not.toContain('- milk');
 });
