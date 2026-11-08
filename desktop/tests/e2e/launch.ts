@@ -24,6 +24,7 @@ export type Hooks = {
   transcription: { idle(): Promise<void> };
   dictationGesture: { toggle(): void };
   typing: { active(): boolean; refocused: number[] };
+  overlayMouse: { engaged: boolean };
   controller: { state: string };
   pasted: string[];
   account: { setTestSession(info: unknown): void };

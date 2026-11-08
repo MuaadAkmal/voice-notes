@@ -609,8 +609,17 @@ describe('typed text', () => {
     expect(states.at(-1)).toEqual({ kind: 'done', message: 'Move last item to…', undo, pick: true });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(states.at(-1)?.kind).toBe('done');
-    ctl.releaseFlash();
-    await vi.advanceTimersByTimeAsync(6000);
+    ctl.releaseFlash(); // the picker was cancelled: nothing left to offer, back to the idle pill at once
     expect(states.at(-1)).toEqual(IDLE);
+  });
+
+  it('a Quick notes write that throws says so instead of failing silently', async () => {
+    ports.note = async () => {
+      throw new Error('disk full');
+    };
+    ctl = new DictationController(ports);
+    await ctl.runTyped('milk');
+    expect(states.at(-1)).toEqual({ kind: 'error', message: "Couldn't save the note", retry: false });
+    expect(ctl.state).toBe('idle');
   });
 });

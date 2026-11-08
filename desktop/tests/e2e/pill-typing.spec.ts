@@ -116,3 +116,37 @@ test('Move last to… opens the picker for the newest write and moves it', async
   expect(bodies.find((p) => p.title === 'Quick notes')?.body).not.toContain('- milk');
   expect(await overlayFocusable()).toBe(false);
 });
+test('the draft survives the pill being swapped out by a drop', async () => {
+  t = await launch();
+  const pill = await overlay();
+  await pill.getByTitle('Click to type · hold your hotkey to speak').dispatchEvent('click');
+  await pill.getByRole('textbox', { name: 'Type a note' }).fill('half');
+  await pill.keyboard.press('Escape');
+  await expect.poll(typing).toBe(false);
+  await pill.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'https://example.com/a');
+    dt.setData('text/uri-list', 'https://example.com/a');
+    const fire = (type: string) => window.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+    fire('dragenter');
+    fire('dragover');
+    fire('drop');
+  });
+  await expect(pill.getByText(/Saved/)).toBeVisible();
+  await expect(pill.getByTitle('Click to type · hold your hotkey to speak')).toBeVisible({ timeout: 10_000 });
+  await pill.getByTitle('Click to type · hold your hotkey to speak').dispatchEvent('click');
+  await expect(pill.getByRole('textbox', { name: 'Type a note' })).toHaveValue('half');
+});
+
+test('Esc with the pointer over the box does not leave the pill marked as hovered', async () => {
+  t = await launch();
+  const pill = await overlay();
+  await pill.getByTitle('Click to type · hold your hotkey to speak').dispatchEvent('click');
+  const box = pill.getByRole('textbox', { name: 'Type a note' });
+  await expect(box).toBeFocused();
+  const r = (await box.boundingBox())!;
+  await pill.mouse.move(r.x + r.width / 2, r.y + 2); // the top of the box: above the bar once the window shrinks
+  await expect.poll(() => t.hooks((h) => h.overlayMouse.engaged)).toBe(true);
+  await pill.keyboard.press('Escape');
+  await expect.poll(() => t.hooks((h) => h.overlayMouse.engaged)).toBe(false);
+});

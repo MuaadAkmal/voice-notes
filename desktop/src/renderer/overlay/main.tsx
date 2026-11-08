@@ -14,6 +14,7 @@ import { useMorph } from './useMorph';
 import { usePomodoro } from './usePomodoro';
 import { useRecorder } from './useRecorder';
 import { useSaveLater } from './useSaveLater';
+import { useTyping } from './useTyping';
 import './overlay.css';
 
 function Overlay() {
@@ -25,6 +26,7 @@ function Overlay() {
   const pomo = usePomodoro(state.kind === 'recording');
   const drop = useDropLater(acceptsDrops(state));
   const later = useSaveLater();
+  const typing = useTyping(state.kind);
   const pill = useRef<HTMLDivElement>(null);
   useMorph(pill);
   // A finished focus phase gets a burst of confetti.
@@ -52,7 +54,9 @@ function Overlay() {
   // again until the new pill reports mouseenter, so a vanished pill can't leave a dead click zone.
   // Undo → its result is done → done: count that as a change too, or the pill stays solid under the pointer.
   const undoing = state.kind === 'done' && !!state.undo;
-  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, undoing, drop, later.phase.kind]);
+  // The typing input opening or closing resizes the window under the pointer: the same.
+  const typingOpen = typing.can !== null;
+  useEffect(() => window.overlayApi.setPointerOver(false), [state.kind, undoing, drop, later.phase.kind, typingOpen]);
 
   return (
     <div className="flex h-screen w-screen items-end justify-center px-2 pb-2">
@@ -64,7 +68,7 @@ function Overlay() {
         ) : later.phase.kind !== 'none' && state.kind === 'idle' ? (
           <SaveLaterPill phase={later.phase} />
         ) : (
-          <Pill state={state} analyser={analyser} pomo={pomo} onSave={later.save} />
+          <Pill state={state} analyser={analyser} pomo={pomo} onSave={later.save} typing={typing} />
         )}
       </div>
     </div>

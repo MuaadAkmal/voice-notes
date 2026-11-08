@@ -37,7 +37,11 @@ const overlayApi = {
   openMove: () => ipcRenderer.send(Ch.OverlayMoveOpen),
   cancelMove: () => ipcRenderer.send(Ch.OverlayMoveCancel),
   typeOpen: () => ipcRenderer.send(Ch.OverlayTypeOpen),
-  onTypeShown: (cb: (p: { undo: boolean; move: boolean }) => void) => on(Ch.OverlayTypeShown, cb),
+  onTypeShown: (cb: (p: { undo: boolean; move: boolean }) => void) => {
+    const listener = (_e: unknown, p: { undo: boolean; move: boolean }) => cb(p);
+    ipcRenderer.on(Ch.OverlayTypeShown, listener);
+    return () => void ipcRenderer.removeListener(Ch.OverlayTypeShown, listener);
+  },
   typeSubmit: (text: string) => ipcRenderer.send(Ch.OverlayTypeSubmit, { text }),
   typeCancel: () => ipcRenderer.send(Ch.OverlayTypeCancel),
   typeUndoLast: () => ipcRenderer.send(Ch.OverlayTypeUndoLast),

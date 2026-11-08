@@ -48,6 +48,7 @@ import { ensureNotesPage } from './commands/notes-page';
 import { GoogleCalendar } from './connectors/google-calendar';
 import { ConnectorsService } from './connectors/service';
 import type { PullRequest, PushRequest } from '../shared/sync/protocol';
+import { canOpenTyping } from './overlay-typing';
 import { focusWindow, foregroundWindow, modifiersHeld, pressPlayPause, sendCtrlV, windowRect } from './win32';
 import { polishDictation } from './dictation/polish';
 import { cleanupOn } from '../shared/transcription';
@@ -778,8 +779,7 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
     },
     typing: {
       open: () => {
-        // Only on the resting pill: never over a recording, a flash, Add title or the picker.
-        if (typing || picking || overlayState.kind !== 'idle' || controller.state !== 'idle' || dictation.active) return;
+        if (!canOpenTyping({ typing, picking, pill: overlayState.kind, recorder: controller.state, dictating: dictation.active })) return;
         typing = true;
         const fg = foreground();
         returnTo = fg && fg.pid !== process.pid && fg.hwnd ? fg.hwnd : null; // read before the pill takes focus
@@ -1439,7 +1439,8 @@ async function boot(root: string, profile: { userId: string; dir: string }, auth
       pagesChanged: () => toDashboard(Ch.PagesChanged), // after editing pages through `store` directly
       transcription, // idle(): wait for queued transcriptions
       dictationGesture, // what Ctrl+Win does
-      typing: { active: () => typing, refocused }, // the pill's typing input is open; windows focus was handed back to
+      typing: { active: () => typing, refocused },
+      overlayMouse, // engaged: the pointer (or a drag) is on the pill // the pill's typing input is open; windows focus was handed back to
       dictation,
       pasted, // texts a dictation would have pasted
       localWhisper, // setTestOverrides({ catalog, spawn }): fake downloads and engine

@@ -261,6 +261,12 @@ export class DictationController {
   releaseFlash(): void {
     if (!this.undoShown || !this.held) return;
     this.held = false;
+    // "Move last to…" was only ever the picker: once it closes there is nothing left to show.
+    if (this.undoShown.kind === 'done' && this.undoShown.pick) {
+      this.undoShown = null;
+      this.p.overlay.setState(this.p.idleState());
+      return;
+    }
     this.flashFor(UNDO_FLASH_MS);
   }
 
@@ -272,8 +278,8 @@ export class DictationController {
     if (this._state !== 'idle') return;
     const command = this.command(text, null);
     if (!command) {
-      const n = await this.p.note?.(text);
-      if (n) this.show(n);
+      const n = await this.p.note?.(text).catch(() => null);
+      this.show(n ?? { ok: false, message: "Couldn't save the note" });
       return;
     }
     this._state = 'adding';
@@ -281,7 +287,7 @@ export class DictationController {
     const r = await command.add().catch(() => ({ ok: false, message: command.failed }));
     this.toIdle();
     if (r.ok) return this.show(r);
-    const n = await this.p.note?.(text);
+    const n = await this.p.note?.(text).catch(() => null);
     if (n?.ok) this.show({ ...n, message: `${r.message} · saved to Quick notes` });
     else this.flash(r.message);
   }

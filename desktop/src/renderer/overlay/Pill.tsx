@@ -8,7 +8,8 @@ import { LATER_PAGE_TITLE } from '../../shared/later';
 import { normalize } from '../../shared/search';
 import type { DropPhase } from './useDropLater';
 import type { PomodoroControls } from './usePomodoro';
-import { TypePill, type TypeCan } from './TypePill';
+import { TypePill } from './TypePill';
+import type { Typing } from './useTyping';
 
 const BARS = 28;
 const BAR_W = 2.5;
@@ -335,7 +336,7 @@ function IdleBar({ visible, film, pomo, hover, onSave }: IdleBarProps) {
   );
 }
 
-type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls; onSave: () => void };
+type PillProps = { state: OverlayState; analyser: AnalyserNode | null; pomo: PomodoroControls; onSave: () => void; typing: Typing };
 
 const SHELL =
   'flex items-center justify-center rounded-full border border-white/15 bg-neutral-900/95 text-white shadow-lg shadow-black/30 select-none';
@@ -358,16 +359,9 @@ export function DropPill({ phase }: { phase: Exclude<DropPhase, 'none'> }) {
   return <div data-morph className={`${SHELL} h-9 bg-red-600/95 px-4 text-sm`}>Couldn't save</div>;
 }
 
-export function Pill({ state, analyser, pomo, onSave }: PillProps) {
+export function Pill({ state, analyser, pomo, onSave, typing }: PillProps) {
   const api = window.overlayApi;
   const [silent, setSilent] = useState(false);
-  // The typing input main let open (null: the plain idle bar), and its draft, kept across opens.
-  const [typing, setTyping] = useState<TypeCan | null>(null);
-  const [draft, setDraft] = useState('');
-  useEffect(() => api.onTypeShown(setTyping), [api]);
-  useEffect(() => {
-    if (state.kind !== 'idle') setTyping(null);
-  }, [state.kind]);
   const recording = state.kind === 'recording';
   // Each recording starts out assumed audible.
   useEffect(() => {
@@ -381,7 +375,7 @@ export function Pill({ state, analyser, pomo, onSave }: PillProps) {
 
   switch (state.kind) {
     case 'idle':
-      if (typing) return <TypePill draft={draft} setDraft={setDraft} can={typing} onClose={() => setTyping(null)} shell={shell} hover={hover} />;
+      if (typing.can) return <TypePill draft={typing.draft} setDraft={typing.setDraft} can={typing.can} onClose={typing.close} shell={shell} hover={hover} />;
       return <IdleBar visible={state.visible} film={!!state.film} pomo={pomo} hover={hover} onSave={onSave} />;
     case 'busy':
       return (
